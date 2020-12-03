@@ -1,8 +1,9 @@
 """
     SQL Execution classes and functions
 """
-from typing import Any, Callable, Iterable, Optional, List
+from typing import Any, Callable, Dict, IO, Iterable, List, Optional 
 import mysql.connector
+from .cursor import CursorABC
 
 _IS_DEBUG = True
 
@@ -16,21 +17,55 @@ def _fo(objname:str) -> str:
 class SQLExecutor:
     """ SQL実行クラス """
 
-    def __init__(self, cursor:mysql.connector.cursor.MySQLCursor):
+    def __init__(self, cursor:CursorABC):
         """ Initialize a instance with a cursor to the Database """
-        # if not isinstance(con, mysql.connector.cursor.MySQLCursor):
-        #     raise RuntimeError('Invalid mysql cursor in argument.')
+        if not isinstance(cursor, CursorABC):
+            raise TypeError('Invalid type of cursor.')
         if cursor is None:
             raise RuntimeError('Cursor is None.')
         self.cursor = cursor
 
     def __enter__(self):
         return self
+
+    def drop_database(self, name:str) -> None:
+        self.execute(f'DROP DATABASE IF EXISTS {_fo(name)}')
+
+    def drop_user(self, name:str) -> None:
+        self.execute(f'DROP USER IF EXISTS {_fo(name)}')
+
+    def drop_table(self, name:str) -> None:
+        self.execute(f'DROP TABLE IF EXISTS {_fo(name)}')
+
+    def create_database(self, name:str) -> None:
+        self.execute(f'CREATE DATABASE {_fo(name)}')
+
+    def use_database(self, name:str) -> None:
+        self.execute(f'USE {_fo(name)}')
+
+    def create_user(self, name:str, password:str, grants:List[str]) -> None:
+        self.execute(f'CREATE USER {_fo(name)} IDENTIFIED BY "{password}"')
+        self.execute('GRANT ' + ', '.join(grants) + f' ON * TO {_fo(name)}')
+
+    def create_table(self, name:str, colname_types:Dict[str, str]) -> None:
+        self.execute(f'CREATE TABLE {_fo(name)}(' + ', '.join(f'{_fo(cn)} {ct}' for cn, ct in colname_types.items()) + ')')
+
+    def recreate_database(self, name:str, *args, **kwargs) -> None:
+        self.drop_database(name)
+        self.create_database(name, *args, **kwargs)
+
+    def recreate_user(self, name:str, password:str, grants:List[str], *args, **kwargs) -> None:
+        self.drop_user(name)
+        self.create_user(name, password, grants, *args, **kwargs)
+
+    def recreate_table(self, name:str, colname_types:Dict[str, str], *args, **kwargs) -> None:
+        self.drop_table(name)
+        self.create_table(name, colname_types, *args, **kwargs)
     
     def insert(self, tablename:str, **kwargs:Any) -> int:
         """ Execute insert query """
         self.execute(
-            'INSERT INTO ' + _fo(tablename) + '(' + ', '.join(map(_fo, kwargs)) + ')'
+            f'INSERT INTO {_fo(tablename)}(' + ', '.join(map(_fo, kwargs)) + ')'
              + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
             list(kwargs.values())
         )
@@ -67,9 +102,7 @@ class SQLExecutor:
     def update(self, tablename:str, _id_colname:str='id', *, id:int, **kwargs:Any):
         """ Execute update query """
         self.execute(
-            'UPDATE ' + _fo(tablename)
-             + ' SET ' + ', '.join(_fo(k) + ' = %s' for k in kwargs)
-             + ' WHERE ' + _fo(_id_colname) + ' = %s',
+            f'UPDATE {_fo(tablename)} SET ' + ', '.join(_fo(k) + ' = %s' for k in kwargs) + f' WHERE {_fo(_id_colname)} = %s',
              [*kwargs.values(), id]
         )
 
@@ -77,8 +110,7 @@ class SQLExecutor:
     def insertmany(self, tablename:str, rows:Iterable[list], _index_start:int=0, **kwargs:Callable) -> int:
         """ Execute insert query many time """
         self.executemany(
-            'INSERT INTO ' + _fo(tablename)
-             + '(' + ', '.join(map(_fo, kwargs)) + ')'
+            f'INSERT INTO {_fo(tablename)}(' + ', '.join(map(_fo, kwargs)) + ')'
              + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
             ([func(i, row) for func in kwargs.values()] for i, row in enumerate(rows, _index_start)),
         )
@@ -87,7 +119,7 @@ class SQLExecutor:
 
     def execproc(self, procname:str, args:list) -> int:
         """ Execute procedure or function defined in the Database """
-        self.execute('SELECT ' + procname + '(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
+        self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
         return self.fetchjustone().id
 
 
@@ -109,6 +141,10 @@ class SQLExecutor:
     def executemany(self, sql:str, params_list:Optional[List[list]]=None):
         """ Execute SQL query many time """
         return self.cursor.executemany(sql, [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
+
+
+    def execute_from(self, f:IO):
+        return self.execute(f.read())
 
 
     def filter_param(self, param):

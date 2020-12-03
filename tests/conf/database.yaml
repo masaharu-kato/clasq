@@ -1,0 +1,14 @@
+server:
+    host: 'localhost'
+    port: '3306'
+    databasename: 'sample_db'
+users:
+    admin:
+        username: 'sample_db_admin'
+        password: 'sampadmpass'
+    loader:
+        username: 'sample_db_loader'
+        password: 'sampladpass'
+    viewer:
+        username: 'sample_db_viewer'
+        password: 'sampviwpass'
