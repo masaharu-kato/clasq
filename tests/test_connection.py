@@ -39,3 +39,23 @@ def test_connection(username):
         assert executor.query('SELECT * FROM users WHERE id = 1') == USERS[:1]
         assert executor.query_one('SELECT * FROM users WHERE id = 1') == USERS[0]
 
+
+def test_dict_connection():
+    cnx = MySQLConnection(
+        host = DBCFG['server']['host'],
+        port = DBCFG['server']['port'],
+        user = DBCFG['users']['viewer']['username'],
+        password = DBCFG['users']['viewer']['password'],
+        database = DBCFG['server']['databasename'],
+        dictionary=True
+    )
+
+    assert cnx
+
+    cursor = cnx.cursor()
+    cursor.execute('SELECT * FROM users ORDER BY id LIMIT 2')
+    assert cursor.fetchall() == USERS
+
+    with cnx.executor() as executor:
+        assert executor.query('SELECT * FROM users WHERE id = 1') == USERS[:1]
+        assert executor.query_one('SELECT * FROM users WHERE id = 1') == USERS[0]

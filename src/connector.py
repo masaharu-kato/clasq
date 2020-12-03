@@ -22,14 +22,20 @@ class DBConnectionABC(metaclass=ABCMeta):
 class MySQLConnection(DBConnectionABC):
     """ MySQL Connection Class """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, dictionary:bool=False, named_tuple:bool=False, **kwargs):
         super().__init__()
         self.cnx = mysql.connector.connect(*args, **kwargs)
+        self.cursor_dict = dictionary
+        self.cursor_ntpl = named_tuple
 
     def commit(self):
         return self.cnx.commit()
 
     def cursor(self, *args, **kwargs):
+        if self.cursor_dict:
+            kwargs['dictionary'] = True
+        if self.cursor_ntpl:
+            kwargs['named_tuple'] = True
         return self.cnx.cursor(*args, **kwargs)
 
     def close(self) -> None:
