@@ -10,11 +10,13 @@ class DBConnectionABC(metaclass=ABCMeta):
     """ SQL Connection Abstract Class """
 
     @abstractmethod
-    def raw_cursor(self):
+    def cursor(self, *args, **kwargs):
+        """ Get database cursor """
         raise NotImplementedError()
 
-    def cursor(self) -> mysql.connector.cursor.MySQLCursor:
-        return SQLExecutor(self.raw_cursor())
+    def executor(self, *args, **kwargs) -> SQLExecutor:
+        """ Get libsql database executor """
+        return SQLExecutor(self.cursor(*args, **kwargs))
 
 
 class MySQLConnection(DBConnectionABC):
@@ -22,10 +24,10 @@ class MySQLConnection(DBConnectionABC):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
-        self.cnx = mysql.connector.MySQLConnection(*args, **kwargs)
+        self.cnx = mysql.connector.connect(*args, **kwargs)
 
-    def raw_cursor(self):
-        return self.cnx.cursor(named_tuple=True)
+    def cursor(self, *args, **kwargs):
+        return self.cnx.cursor(*args, **kwargs)
 
     def close(self) -> None:
         if self.cnx is not None:
@@ -36,47 +38,9 @@ class MySQLConnection(DBConnectionABC):
         self.close()
 
 
-class DebugDBCursor():
-    """ Virtual Database Cursor for Debugging """
+# class DebugSQLConnection(DBConnectionABC):
+#     """ Virtual Database Connection for Debugging """
 
-    def __init__(self, *args, **kwargs):
-        self.logs = []
-        self.closed = False
-
-    def close(self) -> None:
-        self._check_closed()
-        self.closed = True
-
-    def _check_closed(self) -> None:
-        if self.closed:
-            raise RuntimeError('Cursor already closed.')
-
-    def execute(self, sql, params) -> None:
-        self._check_closed()
-        self.logs.append(('s', sql, params))
-
-    def executemany(self, sql, params) -> None:
-        self._check_closed()
-        self.logs.append(('m', sql, params))
-
-    def fetch(self) -> None:
-        return None
-
-    def fetchall(self) -> list:
-        return []
-
-    def lastrowid(self) -> int:
-        return 0
-
-    def lastlog(self) -> Optional[tuple]:
-        if not self.logs:
-            return None
-        return self.logs[-1]
-
-
-class DebugSQLConnection(DBConnectionABC):
-    """ Virtual Database Connection for Debugging """
-
-    def raw_cursor(self):
-        return DebugDBCursor()
+#     def cursor(self, *args, **kwargs):
+#         return DebugDBCursor(*args, **kwargs)
 
