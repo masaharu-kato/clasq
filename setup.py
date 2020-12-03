@@ -13,4 +13,7 @@ setup(
         'pyyaml',
         'mysql-connector-python',
     ],
+    extras_require={
+        'test': ['mypy', 'pytest']
+    }
 )
