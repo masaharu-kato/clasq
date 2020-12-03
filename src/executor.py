@@ -3,7 +3,7 @@
 """
 from typing import Any, Callable, Dict, IO, Iterable, List, Optional 
 import mysql.connector
-from src.cursor import CursorABC
+from .cursor import CursorABC
 
 _IS_DEBUG = True
 

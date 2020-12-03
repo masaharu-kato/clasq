@@ -26,6 +26,9 @@ class MySQLConnection(DBConnectionABC):
         super().__init__()
         self.cnx = mysql.connector.connect(*args, **kwargs)
 
+    def commit(self):
+        return self.cnx.commit()
+
     def cursor(self, *args, **kwargs):
         return self.cnx.cursor(*args, **kwargs)
 
