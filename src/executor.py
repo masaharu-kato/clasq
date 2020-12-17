@@ -2,6 +2,7 @@
     SQL Execution classes and functions
 """
 from typing import Any, Callable, Dict, IO, Iterable, List, Optional 
+import re
 import mysql.connector
 from .cursor import CursorABC
 
@@ -12,6 +13,13 @@ def _fo(objname:str) -> str:
         if '`' in objname:
             raise RuntimeError('Invalid character(s) found in the object name.')
     return '`' + objname + '`'
+
+
+def _type(typename:str) -> str:
+    if _IS_DEBUG:
+        if not re.match(r'\w+(\(\w*\))?', typename):
+            raise RuntimeError('Invalid typename "{}".'.format(typename))
+    return typename
 
 
 class SQLExecutor:
@@ -48,7 +56,10 @@ class SQLExecutor:
         self.execute('GRANT ' + ', '.join(grants) + f' ON * TO {_fo(name)}')
 
     def create_table(self, name:str, colname_types:Dict[str, str]) -> None:
-        self.execute(f'CREATE TABLE {_fo(name)}(' + ', '.join(f'{_fo(cn)} {ct}' for cn, ct in colname_types.items()) + ')')
+        self.execute(f'CREATE TABLE {_fo(name)}(' + ', '.join(f'{_fo(cn)} {_type(ct)}' for cn, ct in colname_types.items()) + ')')
+
+    def create_function(self, name:str, arg_types:Dict[str, str], return_type:str, statements:Iterable[str], *, determinstic:bool=False) -> None:
+        raise NotImplementedError()
 
     def recreate_database(self, name:str, *args, **kwargs) -> None:
         self.drop_database(name)
