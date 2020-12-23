@@ -1,26 +1,15 @@
 """
     SQL Execution classes and functions
 """
-from typing import Any, Callable, Dict, IO, Iterable, List, Optional 
+from typing import Any, Callable, Dict, IO, Iterable, List, Optional, Union
 import re
 import mysql.connector
+from .format import _fo, _fmo, _type, _str
+from .query import SQLQuery
 from .cursor import CursorABC
 
-_IS_DEBUG = True
 
-def _fo(objname:str) -> str:
-    if _IS_DEBUG:
-        if '`' in objname:
-            raise RuntimeError('Invalid character(s) found in the object name.')
-    return '`' + objname + '`'
-
-
-def _type(typename:str) -> str:
-    if _IS_DEBUG:
-        if not re.match(r'\w+(\(\w*\))?', typename):
-            raise RuntimeError('Invalid typename "{}".'.format(typename))
-    return typename
-
+SQLLike = Union[SQLQuery, str]
 
 class SQLExecutor:
     """ SQL実行クラス """
@@ -83,6 +72,12 @@ class SQLExecutor:
         # self.execute('INSERT INTO ' + tablename + ' VALUES(' + ', '.join(['%s'] * len(args)) + ')', args) # In case of using normal list
         return self.cursor.lastrowid
 
+
+    def select(self, *args, **kwargs):
+        # TODO: Implementation
+        raise NotImplementedError()
+
+
     
     def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
         """ Execute select query """
@@ -134,24 +129,31 @@ class SQLExecutor:
         return self.fetchjustone().id
 
 
-    def query(self, sql:str, params:Optional[list]=None) -> Any:
+    def query(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         self.execute(sql, params)
         return self.fetchall()
 
 
-    def query_one(self, sql:str, params:Optional[list]=None) -> Any:
+    def query_one(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         self.execute(sql, params)
         return self.fetchone()
 
 
-    def execute(self, sql:str, params:Optional[list]=None):
+    def execute(self, sql:SQLLike, params:Optional[list]=None):
         """ Execute SQL query """
-        return self.cursor.execute(sql, [self.filter_param(p) for p in params] if params else None)
+        return self.cursor.execute(self._sql_str(sql), [self.filter_param(p) for p in params] if params else None)
 
 
-    def executemany(self, sql:str, params_list:Optional[List[list]]=None):
+    def executemany(self, sql:SQLLike, params_list:Optional[List[list]]=None):
         """ Execute SQL query many time """
-        return self.cursor.executemany(sql, [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
+        return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
+
+
+    @staticmethod
+    def _sql_str(sql:SQLLike) -> str:
+        if isinstance(sql, str):
+            return sql
+        return sql.__sql__()
 
 
     def execute_from(self, f:IO):
