@@ -87,7 +87,7 @@ class SQLQuery:
         extra_columns : List[str],
         where_sql     : Optional[str],
         where_params  : list,
-        groups        : List[Column]],
+        groups        : List[Column],
         orders        : List[Tuple[Column, OrderType]],
         limit         : Optional[int],
         offset        : Optional[int],
