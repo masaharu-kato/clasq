@@ -9,8 +9,9 @@ JOINTYPES = ['INNER', 'RIGHT', 'LEFT']
 ORDERTYPES = ['ASC', 'DESC']
 
 
-def fo(objname:str) -> str:
+def fo(_objname) -> str:
     """ Format single object name """
+    objname = str(_objname)
     if _IS_DEBUG:
         if '`' in objname:
             raise RuntimeError('Invalid character(s) found in the object name.')
