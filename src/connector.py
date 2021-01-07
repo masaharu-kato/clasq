@@ -34,9 +34,11 @@ class MySQLConnection(DBConnectionABC):
         self.cursor_ntpl = named_tuple
 
     def commit(self):
+        """ Commit changes """
         return self.cnx.commit()
 
     def cursor(self, *args, **kwargs) -> 'MySQLCursor':
+        """ Get cursor object """
         if self.cursor_dict:
             kwargs['dictionary'] = True
         if self.cursor_ntpl:
@@ -45,6 +47,7 @@ class MySQLConnection(DBConnectionABC):
         return MySQLCursor(self, self.cnx.cursor(*args, **kwargs))
 
     def close(self) -> None:
+        """ Close cursor """
         if self.cnx is not None:
             self.cnx.close()
             self.cnx = None
@@ -68,4 +71,3 @@ class MySQLCursor:
 
 #     def cursor(self, *args, **kwargs):
 #         return DebugDBCursor(*args, **kwargs)
-

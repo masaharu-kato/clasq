@@ -38,13 +38,13 @@ def strval(text:str) -> str:
 
 def jointype(text:str) -> str:
     """ Format join type """
-    if not str(text).upper() in JOINTYPES:
+    if str(text).upper() not in JOINTYPES:
         raise RuntimeError('Invalid jointype.')
     return text
     
 
 def ordertype(text:str) -> str:
     """ Format order type """
-    if not str(text).upper() in ORDERTYPES:
+    if str(text).upper() not in ORDERTYPES:
         raise RuntimeError('Invalid jointype.')
     return text

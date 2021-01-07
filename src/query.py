@@ -2,7 +2,6 @@
     SQL query module
 """
 
-from itertools import chain
 from typing import Any, Dict, List, Optional, Union, Tuple, NewType
 from . import fmt
 from . import schema
@@ -19,9 +18,9 @@ class QueryMaker:
 
     @staticmethod
     def AUTO_ALIAS_FUNC(tablename:str, colname:str) -> str:
+        """ Automatically aliasing function for columns expressions in SELECT query """
         return tablename[:-1] + '_' + colname
 
-    """ SQL query class """
     def __init__(self, db:schema.Database):
         self.db = db
         

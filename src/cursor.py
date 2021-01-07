@@ -2,10 +2,13 @@
     Original database cursor classes for debugging
 """
 from abc import abstractmethod
-from typing import Dict, List, Tuple, IO, Optional
+from typing import List, Tuple, IO, Optional
 import subprocess
-import mysql.connector
-from .connector import CursorABC, MySQLConnection, MySQLCursor
+from . import connector
+
+CursorABC = connector.CursorABC
+MySQLConnection = connector.MySQLConnection
+MySQLCursor = connector.MySQLCursor
 
 
 class ExecOnlyCursor(CursorABC):
@@ -43,7 +46,8 @@ class ExecOnlyCursor(CursorABC):
 class CommandCursor(ExecOnlyCursor):
     """ Virtual Database Cursor for Debugging """
 
-    def __init__(self, dbcmd:List[str], *, debug_dump:Optional[IO]=None):
+    def __init__(self, dbcmd:List[str], *args, debug_dump:Optional[IO]=None, **kwargs):
+        super().__init__(*args, **kwargs)
         self.dbcmd = dbcmd
         self.execs:List[Tuple[str, list, bool]] = []
         self.debug_dump = debug_dump
@@ -55,24 +59,29 @@ class CommandCursor(ExecOnlyCursor):
         self.execs.append((operation, seq_params, True))
 
     def run(self) -> None:
+        """ Run queued statements """
         dump_sql = self.dumps()
         if dump_sql:
             if self.debug_dump is None:
-                subprocess.run(self.dbcmd, input=dump_sql.encode())
+                subprocess.run(self.dbcmd, input=dump_sql.encode(), check=True)
             else:
                 print(dump_sql, file=self.debug_dump)
 
     def dump(self, f:IO) -> None:
+        """ Dump queued statements to file """
         for execargs in self.execs:
-            print(self.format_exec(execargs), file=f)
+            print(self.format_execargs(execargs), file=f)
 
     def dumps(self) -> str:
+        """ Get queded statements """
         return '\n'.join(map(self.format_execargs, self.execs))
 
     def clear(self) -> None:
+        """ Clear queued statements """
         self.execs = []
 
     def clears(self) -> List[Tuple[str, list, bool]]:
+        """ Get queued statements and clear them """
         execs = self.execs
         self.clear()
         return execs
@@ -81,13 +90,16 @@ class CommandCursor(ExecOnlyCursor):
         return self
 
     def close(self):
-        return self.run()
+        """ Close cursor """
+        self.run()
+        super().close()
 
     def __exit__(self, ex_type, ex_value, trace) -> None:
         return self.close()
 
     @classmethod
     def format_execargs(cls, execargs:Tuple[str, list, bool]) -> str:
+        """ Format arguments in execution """
         _sql, params, multi = execargs
         sql = cls.format_sql(_sql)
         if params:
@@ -99,6 +111,7 @@ class CommandCursor(ExecOnlyCursor):
 
     @classmethod
     def format_sql(cls, _sql:str) -> str:
+        """ Format sql statement """
         if not _sql:
             return _sql
         sql = str(_sql).strip()

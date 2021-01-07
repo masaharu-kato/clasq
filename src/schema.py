@@ -72,6 +72,7 @@ class Table:
 
     @property
     def columns(self) -> Iterator[Column]:
+        """ Iterate all column objects """
         return self._coldict.values()
 
     def resolve_references(self):
@@ -135,6 +136,7 @@ class Database:
 
     @property
     def tables(self) -> Iterator[Table]:
+        """ Iterate all table objects """
         return self._tbldict.values()
 
     def resolve_references(self):
