@@ -3,7 +3,7 @@
 """
 
 from itertools import chain
-from typing import Any, List, Optional, Union, Tuple, NewType
+from typing import Any, Dict, List, Optional, Union, Tuple, NewType
 from . import fmt
 from . import schema
 
@@ -14,7 +14,13 @@ JoinType = NewType('JoinType', str)
 OrderType = NewType('OrderType', str)
 
 
-class SQLQuery:
+class QueryMaker:
+    """ SQL query maker """
+
+    @staticmethod
+    def AUTO_ALIAS_FUNC(tablename:str, colname:str) -> str:
+        return tablename[:-1] + '_' + colname
+
     """ SQL query class """
     def __init__(self, db:schema.Database):
         self.db = db
@@ -25,7 +31,7 @@ class SQLQuery:
         tables        : Optional[List[TableName]]                    = None,
         opt_table     : Optional[TableName]                          = None,
         opt_tables    : Optional[List[TableName]]                    = None,
-        extra_columns : Optional[List[str]]                          = None,
+        extra_columns : Optional[List[Tuple[str, str]]]              = None,
         where_sql     : Optional[str]                                = None,
         where_params  : Optional[list]                               = None,
         where_eq      : Optional[Tuple[ColumnName, Any]]             = None,
@@ -36,6 +42,7 @@ class SQLQuery:
         orders        : Optional[List[Tuple[ColumnName, OrderType]]] = None,
         limit         : Optional[int]                                = None,
         offset        : Optional[int]                                = None,
+        skip_duplicate_columns: bool = True,
     ) -> Tuple[str, list]:
         """
             Calculate SQL SELECT query
@@ -45,20 +52,27 @@ class SQLQuery:
         if not table and not tables:
             raise RuntimeError('No table specified.')
 
-        _join_tables = [*join_tables]
+        _join_tables = [*join_tables] if join_tables else []
+        if not all(isinstance(jt, tuple) and len(jt) == 2 for jt in _join_tables):
+            raise TypeError('Invalid form of join_tables.')
         if tables:
-            _join_tables.extend((table, 'INNER') for table in (tables[1:] if table else tables)) # pylint: disable=superfluous-parens
+            _join_tables.extend((table, 'INNER') for table in (tables if table else tables[1:])) # pylint: disable=superfluous-parens
         if opt_table:
             _join_tables.append((opt_table, 'LEFT'))
         if opt_tables:
             _join_tables.extend((table, 'LEFT') for table in opt_tables)
 
+        if extra_columns and not all(isinstance(ec, tuple) and len(ec) == 2 for ec in extra_columns):
+            raise TypeError('Invalid form of extra columns')
+
         _where_sqls = [where_sql] if where_sql else []
-        _where_params = [*where_params]
+        _where_params = [] if where_params is None else [*where_params]
+
         if where_eq:
             column, value = where_eq
             _where_sqls.append(f'{fmt.fmo(column)} = %s')
             _where_params.append(value)
+
         if where_eqs:
             for column, value in where_eqs:
                 _where_sqls.append(f'{fmt.fmo(column)} = %s')
@@ -67,45 +81,82 @@ class SQLQuery:
         return self._select_query(
             base_table    = table if table else tables[0],
             join_tables   = _join_tables,
-            extra_columns = extra_columns,
+            extra_columns = [] if extra_columns is None else extra_columns,
             where_sql     = ' AND '.join(_where_sqls),
             where_params  = _where_params,
             groups        = [group, *(groups or [])] if group else (groups or []),
             orders        = [order, *(orders or [])] if order else (orders or []),
             limit         = limit,
             offset        = offset,
+            skip_duplicate_columns = skip_duplicate_columns,
         )
 
 
     def _select_query(self, *,
         base_table    : TableName,
         join_tables   : List[Tuple[TableName, JoinType]],
-        extra_columns : List[str],
+        extra_columns : List[Tuple[str, str]],
         where_sql     : Optional[str],
         where_params  : list,
         groups        : List[ColumnName],
         orders        : List[Tuple[ColumnName, OrderType]],
         limit         : Optional[int],
         offset        : Optional[int],
+        skip_duplicate_columns : bool,
     ) -> Tuple[str, list]:
 
-        columns = [*chain.from_iterable(self.db[table] for table in [base_table, *join_tables]), *extra_columns]
+        column_exprs:Dict[str, Union[List[schema.Column, bool], str]] = {}
+        for column in self.db[base_table].columns:
+            column_exprs[column.name] = [column, False] # output table : no
 
-        joins:List[Tuple[JoinType, Tuple[TableName, Tuple[ColumnName, ColumnName]]]] = []
+        for table, _ in join_tables:
+            for column in self.db[table].columns:
+                if not column.name in column_exprs:
+                    column_exprs[column.name] = [column, False]
+                else:
+                    column_exprs[column.name][1] = True  # output table : yes
+                    _alias = self.AUTO_ALIAS_FUNC(column.table.name, column.name)
+                    if _alias in column_exprs:
+                        if not skip_duplicate_columns:
+                            raise RuntimeError('Alias `{}` already used.'.format(_alias))
+                    else:
+                        column_exprs[_alias] = [column, True]
+
+        for column_expr, alias in extra_columns:
+            if alias in column_exprs:
+                raise RuntimeError('Alias `{}` already used.'.format(_alias))
+            column_exprs[alias] = column_expr
+
+        joins:List[Tuple[JoinType, Tuple[ColumnName, ColumnName]]] = []
         _loaded_tables = [base_table]
         for target_table, jointype in join_tables:
-            clink = self.db[target_table].find_tables_links(_loaded_tables)
-            if clink is None:
-                raise RuntimeError('No links found for the specified table.')
-            joins.append((jointype, clink))
+            clink = list(self.db[target_table].find_tables_links(_loaded_tables))
+            if not len(clink) == 1:
+                raise RuntimeError('No links or multiple links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
+            joins.append((jointype, clink[0]))
             _loaded_tables.insert(0, target_table)
 
         params = []
 
-        sql = 'SELECT ' + ', '.join(map(fmt.fmo, columns)) + ' FROM ' + fmt.fmo(base_table) + '\n'
+        col_sqls = []
+        for alias, column_expr in column_exprs.items():
+            if isinstance(column_expr, (tuple, list)):
+                column, f_output_table = column_expr
+                if not f_output_table:
+                    col_sqls.append(fmt.fo(column))
+                else:
+                    _expr = fmt.fo(column.table) + '.' + fmt.fo(column)
+                    if str(column) == alias:
+                        col_sqls.append(_expr)
+                    else:
+                        col_sqls.append(_expr + ' AS ' + fmt.strval(alias))
+            else:
+                col_sqls.append(column_expr + ' AS ' + fmt.strval(alias))
 
-        for jointype, (table, (lcol, rcol)) in joins:
-            sql += f' {fmt.jointype(jointype)} JOIN {fmt.fo(table)} ON {fmt.fmo(lcol)} = {fmt.fmo(rcol)}\n'
+        sql = 'SELECT ' + ', '.join(col_sqls) + ' FROM ' + fmt.fmo(base_table) + '\n'
+
+        for jointype, (lcol, rcol) in joins:
+            sql += f' {fmt.jointype(jointype)} JOIN {fmt.fo(rcol.table)} ON {fmt.fo(lcol.table)}.{fmt.fo(lcol)} = {fmt.fo(rcol.table)}.{fmt.fo(rcol)}\n'
 
         if where_sql:
             sql += ' WHERE ' + where_sql + '\n'
