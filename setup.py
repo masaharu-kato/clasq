@@ -12,6 +12,7 @@ setup(
     install_requires=[
         'pyyaml',
         'mysql-connector-python',
+        'sqlparse',
     ],
     extras_require={
         'test': ['mypy', 'pytest']
