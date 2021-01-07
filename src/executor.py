@@ -2,9 +2,7 @@
     SQL Execution classes and functions
 """
 from typing import Any, Callable, Dict, IO, Iterable, List, Optional, Union
-import re
-import mysql.connector
-from .format import _fo, _fmo, _type, _str
+from . import fmt
 from .query import SQLQuery
 from .cursor import CursorABC
 
@@ -26,46 +24,57 @@ class SQLExecutor:
         return self
 
     def drop_database(self, name:str) -> None:
-        self.execute(f'DROP DATABASE IF EXISTS {_fo(name)}')
+        """ Drop database """
+        self.execute(f'DROP DATABASE IF EXISTS {fmt.fo(name)}')
 
     def drop_user(self, name:str) -> None:
-        self.execute(f'DROP USER IF EXISTS {_fo(name)}')
+        """ Drop user """
+        self.execute(f'DROP USER IF EXISTS {fmt.fo(name)}')
 
     def drop_table(self, name:str) -> None:
-        self.execute(f'DROP TABLE IF EXISTS {_fo(name)}')
+        """ Drop table """
+        self.execute(f'DROP TABLE IF EXISTS {fmt.fo(name)}')
 
     def create_database(self, name:str) -> None:
-        self.execute(f'CREATE DATABASE {_fo(name)}')
+        """ Create database """
+        self.execute(f'CREATE DATABASE {fmt.fo(name)}')
 
     def use_database(self, name:str) -> None:
-        self.execute(f'USE {_fo(name)}')
+        """ Use database """
+        self.execute(f'USE {fmt.fo(name)}')
 
     def create_user(self, name:str, password:str, grants:List[str]) -> None:
-        self.execute(f'CREATE USER {_fo(name)} IDENTIFIED BY "{password}"')
-        self.execute('GRANT ' + ', '.join(grants) + f' ON * TO {_fo(name)}')
+        """ Create user """
+        self.execute(f'CREATE USER {fmt.fo(name)} IDENTIFIED BY "{password}"')
+        self.execute('GRANT ' + ', '.join(grants) + f' ON * TO {fmt.fo(name)}')
 
     def create_table(self, name:str, colname_types:Dict[str, str]) -> None:
-        self.execute(f'CREATE TABLE {_fo(name)}(' + ', '.join(f'{_fo(cn)} {_type(ct)}' for cn, ct in colname_types.items()) + ')')
+        """ Create table """
+        self.execute(f'CREATE TABLE {fmt.fo(name)}(' + ', '.join(f'{fmt.fo(cn)} {fmt.sqltype(ct)}' for cn, ct in colname_types.items()) + ')')
 
     def create_function(self, name:str, arg_types:Dict[str, str], return_type:str, statements:Iterable[str], *, determinstic:bool=False) -> None:
+        """ Create function """
         raise NotImplementedError()
 
     def recreate_database(self, name:str, *args, **kwargs) -> None:
+        """ Recreate (drop and create) database """
         self.drop_database(name)
         self.create_database(name, *args, **kwargs)
 
     def recreate_user(self, name:str, password:str, grants:List[str], *args, **kwargs) -> None:
+        """ Recreate (drop and create) user """
         self.drop_user(name)
         self.create_user(name, password, grants, *args, **kwargs)
 
     def recreate_table(self, name:str, colname_types:Dict[str, str], *args, **kwargs) -> None:
+        """ Recreate (drop and create) table """
         self.drop_table(name)
         self.create_table(name, colname_types, *args, **kwargs)
     
     def insert(self, tablename:str, **kwargs:Any) -> int:
         """ Execute insert query """
         self.execute(
-            f'INSERT INTO {_fo(tablename)}(' + ', '.join(map(_fo, kwargs)) + ')'
+            f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
              + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
             list(kwargs.values())
         )
@@ -74,23 +83,26 @@ class SQLExecutor:
 
 
     def select(self, *args, **kwargs):
-        # TODO: Implementation
-        raise NotImplementedError()
+        """ Execute select query """
+        return self.query(*SQLQuery.select_query(*args, **kwargs))
 
-
+    def select_one(self, *args, **kwargs):
+        """ Execute select query, assuming one result"""
+        return self.query_one(*SQLQuery.select_query(*args, **kwargs))
     
     def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
-        """ Execute select query """
-        sql = 'SELECT ' + (', '.join(map(_fo, colnames)) if colnames else '*') + ' FROM ' + _fo(tablename)
+        """ Execute select query for a single table with equivalence conditions """
+        sql = 'SELECT ' + (', '.join(map(fmt.fo, colnames)) if colnames else '*') + ' FROM ' + fmt.fo(tablename)
         if kwargs:
-            sql += ' WHERE ' + ' AND '.join(_fo(k) + ' = %s' for k in kwargs)
+            sql += ' WHERE ' + ' AND '.join(fmt.fo(k) + ' = %s' for k in kwargs)
         self.execute(sql, list(kwargs.values()))
         return self.fetchall()
 
 
     def select_eq_one(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
+        """ Execute select query for a single table with equivalence conditions, assuming one result """
         _result = self.select_eq(tablename, colnames, **kwargs)
-        if not len(_result):
+        if not _result:
             return None
         if len(_result) != 1:
             raise RuntimeError('Multiple results.')
@@ -98,17 +110,15 @@ class SQLExecutor:
 
 
     def exists(self, tablename:str, **kwargs):
+        """ Check if exists specific record in the table """
         res = self.select_eq_one(tablename, ['COUNT(*) AS n'], **kwargs)
         return res.n != 0
 
-    def existsmany(self):
-        raise NotImplementedError()
 
-
-    def update(self, tablename:str, _id_colname:str='id', *, id:int, **kwargs:Any):
+    def update(self, tablename:str, _id_colname:str='id', *, id:int, **kwargs:Any): # pylint: disable=redefined-builtin
         """ Execute update query """
         self.execute(
-            f'UPDATE {_fo(tablename)} SET ' + ', '.join(_fo(k) + ' = %s' for k in kwargs) + f' WHERE {_fo(_id_colname)} = %s',
+            f'UPDATE {fmt.fo(tablename)} SET ' + ', '.join(fmt.fo(k) + ' = %s' for k in kwargs) + f' WHERE {fmt.fo(_id_colname)} = %s',
              [*kwargs.values(), id]
         )
 
@@ -116,7 +126,7 @@ class SQLExecutor:
     def insertmany(self, tablename:str, rows:Iterable[list], _index_start:int=0, **kwargs:Callable) -> int:
         """ Execute insert query many time """
         self.executemany(
-            f'INSERT INTO {_fo(tablename)}(' + ', '.join(map(_fo, kwargs)) + ')'
+            f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
              + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
             ([func(i, row) for func in kwargs.values()] for i, row in enumerate(rows, _index_start)),
         )
@@ -130,11 +140,13 @@ class SQLExecutor:
 
 
     def query(self, sql:SQLLike, params:Optional[list]=None) -> Any:
+        """ Run sql with parameters """
         self.execute(sql, params)
         return self.fetchall()
 
 
     def query_one(self, sql:SQLLike, params:Optional[list]=None) -> Any:
+        """ Run sql with parameters, assume one result """
         self.execute(sql, params)
         return self.fetchone()
 
@@ -151,22 +163,26 @@ class SQLExecutor:
 
     @staticmethod
     def _sql_str(sql:SQLLike) -> str:
+        """ Convert to SQL string """
         if isinstance(sql, str):
             return sql
         return sql.__sql__()
 
 
     def execute_from(self, f:IO):
+        """ Execute SQL statements from file """
         return self.execute(f.read())
 
 
     def filter_param(self, param):
+        """ filter the parameter value for SQL execution """
         # if isinstance(param, str):
         #     return param.replace('\n', '\\n')
         return param
 
 
     def fetchjustone(self) -> Any:
+        """ Fetch just one record in result (if not, raise exception) """
         if not self.cursor:
             raise RuntimeError('Cursor not opened.')
         result = self.cursor.fetchall()
@@ -176,6 +192,7 @@ class SQLExecutor:
 
 
     def fetchone(self) -> Any:
+        """ Fetch only one record in result (or no result as None) (if multiple, raise exception) """
         if not self.cursor:
             raise RuntimeError('Cursor not opened.')
         result = self.cursor.fetchall()
@@ -187,10 +204,12 @@ class SQLExecutor:
 
 
     def fetchall(self):
+        """ Fetch all records in result """
         return self.cursor.fetchall()
 
 
     def close(self):
+        """ Close cursur if not closed """
         if self.cursor is not None:
             self.cursor.close()
             self.cursor = None
