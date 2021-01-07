@@ -33,18 +33,18 @@ def sqltype(typename:str) -> str:
 
 def strval(text:str) -> str:
     """ Format string as value """
-    return "'" + text.replace("'", "''") + "'"
+    return "'" + str(text).replace("'", "''") + "'"
 
 
 def jointype(text:str) -> str:
     """ Format join type """
-    if not text.upper() in JOINTYPES:
+    if not str(text).upper() in JOINTYPES:
         raise RuntimeError('Invalid jointype.')
     return text
     
 
 def ordertype(text:str) -> str:
     """ Format order type """
-    if not text.upper() in ORDERTYPES:
+    if not str(text).upper() in ORDERTYPES:
         raise RuntimeError('Invalid jointype.')
     return text
