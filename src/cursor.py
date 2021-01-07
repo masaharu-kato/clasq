@@ -5,10 +5,11 @@ from abc import abstractmethod
 from typing import Dict, List, Tuple, IO, Optional
 import subprocess
 import mysql.connector
+from .connector import CursorABC, MySQLConnection, MySQLCursor
 
-CursorABC = mysql.connector.abstracts.MySQLCursorAbstract
 
 class ExecOnlyCursor(CursorABC):
+    """ Execute only cursor """
 
     def callproc(self, procname, args=()):
         raise NotImplementedError()
