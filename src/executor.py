@@ -6,6 +6,7 @@ from . import fmt
 from .query import QueryMaker
 # from .cursor import MySQLCursor
 
+_DUMP_EXECUTES = False
 
 SQLLike = Union[QueryMaker, str]
 
@@ -162,7 +163,8 @@ class SQLExecutor:
 
     def execute(self, sql:SQLLike, params:Optional[list]=None):
         """ Execute SQL query """
-        print('Executor.execute():', sql, params)
+        if _DUMP_EXECUTES:
+            print('Executor.execute():', sql, params)
         return self.cursor.execute(self._sql_str(sql), [self.filter_param(p) for p in params] if params else None)
 
 
