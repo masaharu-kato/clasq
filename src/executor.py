@@ -3,22 +3,27 @@
 """
 from typing import Any, Callable, Dict, IO, Iterable, List, Optional, Union
 from . import fmt
-from .query import SQLQuery
-from .cursor import CursorABC
+from .query import QueryMaker
+# from .cursor import MySQLCursor
 
 
-SQLLike = Union[SQLQuery, str]
+SQLLike = Union[QueryMaker, str]
 
 class SQLExecutor:
     """ SQL実行クラス """
 
-    def __init__(self, cursor:CursorABC):
+    def __init__(self, sqcursor:'MySQLCursor'):
         """ Initialize a instance with a cursor to the Database """
-        if not isinstance(cursor, CursorABC):
-            raise TypeError('Invalid type of cursor.')
-        if cursor is None:
+
+        # if not isinstance(sqcursor, MySQLCursor):
+        #     raise TypeError('Invalid type of cursor.')
+
+        if sqcursor is None:
             raise RuntimeError('Cursor is None.')
-        self.cursor = cursor
+        
+        self.cursor = sqcursor.cursor
+        self.qmaker = QueryMaker(sqcursor.con.db_schema) if sqcursor.con.db_schema else None
+
 
     def __enter__(self):
         return self
@@ -81,14 +86,18 @@ class SQLExecutor:
         # self.execute('INSERT INTO ' + tablename + ' VALUES(' + ', '.join(['%s'] * len(args)) + ')', args) # In case of using normal list
         return self.cursor.lastrowid
 
+    def _select_query(self, *args, **kwargs):
+        if self.qmaker is None:
+            raise RuntimeError('Query maker is not initialized because schema is not specified.')
+        return self.qmaker.select_query(*args, **kwargs)
 
     def select(self, *args, **kwargs):
         """ Execute select query """
-        return self.query(*SQLQuery.select_query(*args, **kwargs))
+        return self.query(*self._select_query(*args, **kwargs))
 
     def select_one(self, *args, **kwargs):
         """ Execute select query, assuming one result"""
-        return self.query_one(*SQLQuery.select_query(*args, **kwargs))
+        return self.query_one(*self._select_query(*args, **kwargs))
     
     def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
         """ Execute select query for a single table with equivalence conditions """
@@ -153,6 +162,7 @@ class SQLExecutor:
 
     def execute(self, sql:SQLLike, params:Optional[list]=None):
         """ Execute SQL query """
+        print('Executor.execute():', sql, params)
         return self.cursor.execute(self._sql_str(sql), [self.filter_param(p) for p in params] if params else None)
 
 
