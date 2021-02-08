@@ -90,15 +90,31 @@ class SQLExecutor:
     def _select_query(self, *args, **kwargs):
         if self.qmaker is None:
             raise RuntimeError('Query maker is not initialized because schema is not specified.')
-        return self.qmaker.select_query(*args, **kwargs)
+        return self.qmaker.select(*args, **kwargs)
 
     def select(self, *args, **kwargs):
-        """ Execute select query """
+        """ Simple select: Execute select query """
         return self.query(*self._select_query(*args, **kwargs))
 
-    def select_one(self, *args, **kwargs):
-        """ Execute select query, assuming one result"""
+    def uselect(self, *args, **kwargs):
+        """ Unique select: Execute select query, assuming one result"""
         return self.query_one(*self._select_query(*args, **kwargs))
+
+    def pselect(self, *args, **kwargs):
+        """ Select with parent(s): Execute select query with parent table(s) """
+        return self.select(*args, parent_tables=True, **kwargs)
+
+    def puselect(self, *args, **kwargs):
+        """ Unique select with parent(s): Execute select query with parent table(s), assuming one result """
+        return self.uselect(*args, parent_tables=True, **kwargs)
+
+    def cselect(self, *args, **kwargs):
+        """ Select with child(ren): Execute select query with child table(s) """
+        return self.select(*args, child_tables=True, **kwargs)
+
+    def pcselect(self, *args, **kwargs):
+        """ Select with parent(s) and child(ren): Execute select query with parent table(s) and child table(s) """
+        return self.select(*args, parent_tables=True, child_tables=True, **kwargs)
     
     def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
         """ Execute select query for a single table with equivalence conditions """

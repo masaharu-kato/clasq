@@ -11,46 +11,54 @@ TableName = schema.TableName
 ColumnAs = Union[ColumnName, Tuple[ColumnName, str]]
 JoinType = NewType('JoinType', str)
 OrderType = NewType('OrderType', str)
+COp = NewType('COp', str) # SQL comparison operator type
+
+COMP_OPS = ['=', 'IS', 'IS NOT', '<', '<=', '<=>', '>', '>=', '!=', '<>', 'BETWEEN', 'NOT BETWEEN', 'IN', 'NOT IN', 'LIKE', 'NOT LIKE', 'AND', 'OR']
+COMP_OP_ALIASES = {'==':'=', 'INSIDE': 'BETWEEN', 'OUTSIDE': 'NOT BETWEEN'}
 
 
 class QueryMaker:
     """ SQL query maker """
 
-    @staticmethod
-    def AUTO_ALIAS_FUNC(tablename:str, colname:str) -> str:
-        """ Automatically aliasing function for columns expressions in SELECT query """
-        return tablename[:-1] + '_' + colname
-
     def __init__(self, db:schema.Database):
         self.db = db
         
-    def select_query(self, *,
-        table         : Optional[TableName]                          = None,
-        join_tables   : List[Tuple[TableName, JoinType]]             = None,
-        tables        : Optional[List[TableName]]                    = None,
-        opt_table     : Optional[TableName]                          = None,
-        opt_tables    : Optional[List[TableName]]                    = None,
-        extra_columns : Optional[List[Tuple[str, str]]]              = None,
-        where_sql     : Optional[str]                                = None,
-        where_params  : Optional[list]                               = None,
-        where_eq      : Optional[Tuple[ColumnName, Any]]             = None,
-        where_eqs     : Optional[List[Tuple[ColumnName, Any]]]       = None,
-        group         : Optional[ColumnName]                         = None,
-        groups        : Optional[List[ColumnName]]                   = None,
-        order         : Optional[Tuple[ColumnName, OrderType]]       = None,
-        orders        : Optional[List[Tuple[ColumnName, OrderType]]] = None,
-        limit         : Optional[int]                                = None,
-        offset        : Optional[int]                                = None,
-        skip_duplicate_columns: bool = True,
-    ) -> Tuple[str, list]:
+
+    def select(self,
+        table         : Optional[TableName]                          = None , # base table name (if `table` is not specified, 1st element of `tables` will be a base table)
+        *,
+        tables        : Optional[List[TableName]]                    = None , # tables for INNER JOIN
+        opt_table     : Optional[TableName]                          = None , # table for LEFT (optional) JOIN
+        opt_tables    : Optional[List[TableName]]                    = None , # tables for LEFT (optional) JOIN
+        join_tables   : List[Tuple[TableName, JoinType]]             = None , # tables for JOIN with JOIN type (INNER, LEFT, RIGHT)
+        extra_columns : Optional[List[Tuple[str, str]]]              = None , # extra column exprs
+        where_sql     : Optional[str]                                = None , # SQL of WHERE part
+        where_params  : Optional[list]                               = None , # Parameters for WHERE part
+        where_eq      : Optional[Tuple[ColumnName, Any]]             = None , # WHERE condition with ColumnName = Any value (if the value is list or tuple, `IN` statement is used)
+        where_eqs     : Optional[List[Tuple[ColumnName, Any]]]       = None , # WHERE AND conditions with ColumnName = value (if the value is list or tuple, `IN` statement is used)
+        where_op      : Optional[Tuple[ColumnName, COp, Any]]        = None , # WHERE condition with ColumnName, Comparison Operator('='/'==', '<', '<=', 'LIKE', etc.), value 
+        where_ops     : Optional[List[Tuple[ColumnName, COp, Any]]]  = None , # WHERE AND conditions with ColumnName, Comparison Operator('='/'==', '<', '<=', 'LIKE', etc.), value 
+        id            : Optional[int]                                = None , # value of base table primary key (for WHERE condition)
+        group         : Optional[ColumnName]                         = None , # column expr for GROUP BY
+        groups        : Optional[List[ColumnName]]                   = None , # column exprs for GROUP BY
+        order         : Optional[Tuple[ColumnName, OrderType]]       = None , # order (column name and order type:DESC or ASC) for ORDER BY
+        orders        : Optional[List[Tuple[ColumnName, OrderType]]] = None , # orders (column name and order type:DESC or ASC) for ORDER BY
+        limit         : Optional[int]                                = None , # LIMIT value
+        offset        : Optional[int]                                = None , # OFFSET value
+        parent_tables : bool                                         = False, # join all parent tables of base table
+        child_tables  : bool                                         = False, # join all child tables of base table
+        skip_duplicate_columns: bool                                 = True , # skip error on duplicate column names
+    ) -> Tuple[str, list]: # (SQL statement string, list of parameter values)
         """
-            Calculate SQL SELECT query
-            returns (SQL statement string, parameter values)    
+            Build SQL SELECT query
         """
 
+        # Set base table
         if not table and not tables:
             raise RuntimeError('No table specified.')
+        base_table = table if table else tables[0]
 
+        # Process table(s) and opt_table(s)
         _join_tables = [*join_tables] if join_tables else []
         if not all(isinstance(jt, tuple) and len(jt) == 2 for jt in _join_tables):
             raise TypeError('Invalid form of join_tables.')
@@ -61,24 +69,60 @@ class QueryMaker:
         if opt_tables:
             _join_tables.extend((table, 'LEFT') for table in opt_tables)
 
+        # Join parent tables or/and child tables
+        if parent_tables:
+            _join_tables.extend((table, 'INNER' if not_null else 'LEFT') for table, not_null in self.db[base_table].get_parent_tables_recursively())
+        if child_tables:
+            _join_tables.extend((table, 'INNER' if not_null else 'LEFT') for table, not_null in self.db[base_table].get_child_tables_recursively())
+
+        # Add extra columns
         if extra_columns and not all(isinstance(ec, tuple) and len(ec) == 2 for ec in extra_columns):
             raise TypeError('Invalid form of extra columns')
 
+        # Process WHERE
         _where_sqls = [where_sql] if where_sql else []
         _where_params = [] if where_params is None else [*where_params]
 
-        if where_eq:
-            column, value = where_eq
-            _where_sqls.append(f'{fmt.fmo(column)} = %s')
-            _where_params.append(value)
+        _where_ops = []
 
-        if where_eqs:
-            for column, value in where_eqs:
-                _where_sqls.append(f'{fmt.fmo(column)} = %s')
+        if id is not None:
+            _where_ops.append((f'{base_table}.id', '=', id)) # Add base table primary key value
+
+        if where_eq is not None:
+            col, val = where_eq # serves as a type check
+            _where_ops.append((col, '=', val))
+
+        for col, val in (where_eqs or []): # serves as a type check
+            _where_ops.append((col, '=', val))
+
+        if where_op is not None:
+            col, op, val = where_op # serves as a type check
+            _where_ops.append((col, op, val))
+
+        for col, op, val in (where_ops or []): # serves as a type check
+            _where_ops.append((col, op, val))
+        
+        for column, _op, value in _where_ops:
+            op = _op.upper()
+            op = COMP_OP_ALIASES.get(op) or op
+            if op not in COMP_OPS:
+                raise RuntimeError('Unknown operator `{}`.'.format(op))
+
+            lval = fmt.fmo(column)
+            if op == 'IN' or (op == '=' and isinstance(value, (list, tuple))):
+                _where_sqls.append(lval + ' IN (' + ', '.join('%s' for _ in range(len(value))) + ')')
+                _where_params.extend(value)
+            elif op in ('BETWEEN', 'NOT BETWEEN'):
+                first, last = value
+                _where_sqls.append(lval + op + ' %s AND %s')
+                _where_params.extend([first, last])
+            else:
+                _where_sqls.append(lval + ' ' + op + ' %s')
                 _where_params.append(value)
-
-        return self._select_query(
-            base_table    = table if table else tables[0],
+            
+        # Build statement
+        return self._select(
+            base_table    = base_table,
             join_tables   = _join_tables,
             extra_columns = [] if extra_columns is None else extra_columns,
             where_sql     = ' AND '.join(_where_sqls),
@@ -91,7 +135,7 @@ class QueryMaker:
         )
 
 
-    def _select_query(self, *,
+    def _select(self, *,
         base_table    : TableName,
         join_tables   : List[Tuple[TableName, JoinType]],
         extra_columns : List[Tuple[str, str]],
@@ -124,7 +168,7 @@ class QueryMaker:
         for column_expr, alias in extra_columns:
             if alias in column_exprs:
                 raise RuntimeError('Alias `{}` already used.'.format(_alias))
-            column_exprs[alias] = column_expr
+            column_exprs[alias] = f'({column_expr})'
 
         joins:List[Tuple[JoinType, Tuple[ColumnName, ColumnName]]] = []
         _loaded_tables = [base_table]
@@ -178,99 +222,19 @@ class QueryMaker:
         return sql, params
 
 
-# class _SQLQuery:
-#     @abstractmethod
-#     def __sql__(self) -> str:
-#         pass
+
+    @staticmethod
+    def AUTO_ALIAS_FUNC(tablename:str, colname:str) -> str:
+        """ Automatically aliasing function for columns expressions in SELECT query """
+        return tablename[:-1] + '_' + colname
 
 
-# class SelectQuery(_SQLQuery):
-#     def __init__(self, table:TableName, columns:List[ColumnAs], *, limit:Optional[int]=None, offset:Optional[int]=None):
-#         self.table   : TableName = table
-#         self.columns : List[ColumnName] = [c for c in columns]
-#         self.joins   : List[Tuple[str, TableName, [ColumnName, ColumnName]]] = []
-#         self._where  : Optional[str] = None
-#         self.groups  : List[ColumnName] = []
-#         self.orders  : List[Tuple[ColumnName, str]] = []
-#         self.limit   : Optional[int] = limit
-#         self.offset  : Optional[int] = offset
-
-#     def join(self, jointype:str, table:TableName, columns:List[ColumnAs]):
-#         self.joins.append((jointype, table, (table + '.id', table + '_id')))
-#         self.columns.extend(columns)
-#         return self
-
-#     def inner_join(self, table:TableName, columns:List[ColumnAs]):
-#         return self.join('INNER', table, columns)
-
-#     def left_join(self, table:TableName, columns:List[ColumnAs]):
-#         return self.join('LEFT', table, columns)
-
-#     def right_join(self, table:TableName, columns:List[ColumnAs]):
-#         return self.join('RIGHT', table, columns)
-
-#     def where(self, cond:str):
-#         if self._where is not None:
-#             raise RuntimeError('where conditions are already set.')
-#         self._where = cond
-#         return self
-
-#     def where_eq(self, column:ColumnName, value:str):
-#         return self.where(fmt.fmo(column) + ' = ' + value)
-
-#     def order_by(self, column:ColumnName, ordertype:str):
-#         self.orders.append((column, ordertype))
-#         return self
-
-#     def order_asc_by(self, column:ColumnName):
-#         return self.order_by(column, 'ASC')
-
-#     def order_desc_by(self, column:ColumnName):
-#         return self.order_by(column, 'DESC')
-
-#     def group_by(self, column:ColumnName):
-#         self.groups.append(column)
-#         return self
-
-#     def _sql_column_as(self, column:ColumnAs) -> str:
-
-#         if isinstance(column, str):
-#             return fmt.fmo(column)
-
-#         if isinstance(column, (list, tuple)):
-#             colname, colalias = column
-#             return fmt.fmo(colname) + ' AS ' + _str(colalias)
-
-#         raise TypeError('Unexpected type of column.')
-
-
-#     def __sql__(self) -> str:
-
-#         sql = 'SELECT ' + ', '.join(map(self._sql_column_as, self.columns)) + ' FROM ' + fmt.fo(self.table) + '\n'
-
-#         for jointype, table, (lcol, rcol) in self.joins:
-#             if not jointype in JOINTYPES:
-#                 raise RuntimeError('Unknown join type `{}`'.format(jointype))
-#             sql += ' ' + jointype + ' JOIN ' + fmt.fo(table) + ' ON ' + fmt.fmo(lcol) + ' = ' + fmt.fmo(rcol) + '\n'
-
-#         if self.where:
-#             sql += ' WHERE ' + self._where + '\n'
-
-#         if self.groups:
-#             sql += ' GROUP BY ' + ', '.join(map(fmt.fmo, self.groups)) + '\n'
-
-#         if self.orders:
-#             _order_sqls = []
-#             for column, ordertype in self.orders:
-#                 if not ordertype in ORDERTYPES:
-#                     raise RuntimeError('Unknown order type `{}`'.format(ordertype))
-#                 _order_sqls.append(fmt.fmo(column) + ' ' + ordertype)
-#             sql += ' ORDER BY ' + ', '.join(_order_sqls) + '\n'
-
-#         if self.limit is not None:
-#             sql += ' LIMIT ' + int(self.limit) + '\n'
-
-#         if self.offset is not None:
-#             sql += ' OFFSET ' + int(self.offset) + '\n'
-
-#         return sql
+    # def assert_type(value, *types):
+    #     """
+    #         Assert type of specified value
+    #         Specify each element of `types` to tuple of types to union type.
+    #         Specify `types` to the types on iterate levels.
+    #         e.g. list/tuple of tuple of 
+    #     """
+    #     if isinstance(, type):
+    #         pass
