@@ -2,12 +2,42 @@
     Database schema module
 """
 from collections import defaultdict
-from typing import Dict, List, NewType, Tuple, Optional, Iterator
+from typing import Any, Dict, List, NewType, Tuple, Optional, Iterator
 import sys
 import re
 
 import sqlparse
 import ddlparse
+
+
+
+def database_from_ddls(ddlstext:str) -> 'Database':
+    """ Create this object by ddl text (CREATE TABLE sql texts) """
+    ddltexts = sqlparse.split('\n'.join(l for l in ddlstext.splitlines() if not re.match(r'^\s*\-\-', l)))
+    dbname = (re.match(r'^\s*USE\s+`?(\w+)`?', ddltexts[0], re.IGNORECASE) or [None, None])[1]
+    tables = []
+
+    for ddltext in ddltexts:
+        if not re.match(r'^\s*CREATE TABLE.*\(', ddltext):
+            continue
+        ddlparser = ddlparse.DdlParse(ddltext)
+        ddl = ddlparser.parse()
+        tables.append(Table(
+            ddl.name, [
+                Column(
+                    dcol.name,
+                    dcol.data_type,
+                    not_null = dcol.not_null,
+                    is_primary = dcol.primary_key,
+                    default = dcol.default,
+                    comment = dcol.comment,
+                    link_column_refs = [ColumnRef(dcol.fk_ref_table, dcol.fk_ref_column)] if dcol.foreign_key else None,
+                ) for dcol in ddl.columns.values()
+            ]
+        ))
+
+    return Database(dbname, tables, final=True)
+
 
 TableName  = NewType('TableName', str)
 ColumnName = NewType('ColumnName', str)
@@ -23,15 +53,26 @@ class ColumnRef:
 
 class Column:
     """ Column schema class """
-    name: str
-    data_type: str
-    link_column_refs: List[ColumnRef]
-    table: 'Table'
-    link_columns: List['Column']
+    name             : str
+    data_type        : str
+    not_null         : bool
+    is_primary       : bool
+    default          : Any
+    comment          : str
+    link_column_refs : List[ColumnRef]
+    table            : 'Table'
+    link_columns     : List['Column']
 
-    def __init__(self, name, data_type, link_column_refs = None):
+    def __init__(self,
+        name:str, data_type:str, *, not_null:bool = False, is_primary:bool = False, default:Any = None,
+        comment:Optional[str] = None, link_column_refs:Optional[List[ColumnRef]] = None
+    ):
         self.name = name
         self.data_type = data_type
+        self.not_null = not_null
+        self.is_primary = is_primary
+        self.default = default
+        self.comment = comment
         self.link_column_refs = [] if link_column_refs is None else link_column_refs
         self.link_columns = []
 
@@ -59,10 +100,12 @@ class Column:
 
 class Table:
     """ Table schema class """
-    db: 'Database'
-    name: str
-    _coldict: Dict[ColumnName, Column]
-    link_tables: Dict[TableName, Tuple[Column, Column]]
+    db: 'Database'                      # parent database object
+    name: str                           # table name
+    _coldict : Dict[ColumnName, Column] # dict of own columns (column name -> column object)
+    parent_tables : Dict[TableName, Column]  # parent table name -> own column object
+    child_tables  : Dict[TableName, Column]  # child table name -> child table's column object
+    
 
     def __init__(self, name:TableName, _coldict:List[Column]):
         assert all(isinstance(c, Column) for c in _coldict)
@@ -101,6 +144,18 @@ class Table:
     def find_tables_links(self, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
         """ Get links (pairs of two table-_coldict) between this table and specific tables """
         return self.db.find_tables_links(self.name, target_tables)
+
+    def get_parent_tables_recursively(self) -> Iterator[Tuple['Table', bool]]: # (table object, the table always exists or not)
+        """ Get parent table(s) recursively with (table object, the table always exists or not) """
+        for table, own_column in self.parent_tables:
+            yield (table, own_column.not_null)
+            yield from table.get_parent_tables_recursively()
+
+    def get_child_tables_recursively(self) -> Iterator[Tuple['Table', bool]]: # (table object, the table always exists or not)
+        """ Get child table(s) recursively with (table object, the table always exists or not) """
+        for table, ct_column in self.child_tables:
+            yield (table, ct_column.not_null)
+            yield from table.get_child_tables_recursively()
 
     def __repr__(self):
         return repr((self.name, list(self.columns)))
@@ -180,30 +235,6 @@ class Database:
         for table in self.tables:
             table.dump()
             print('')
-
-
-def database_from_ddls(ddlstext:str) -> 'Database':
-    """ Create this object by ddl text (CREATE TABLE sql texts) """
-    ddltexts = sqlparse.split('\n'.join(l for l in ddlstext.splitlines() if not re.match(r'^\s*\-\-', l)))
-    dbname = (re.match(r'^\s*USE\s+`?(\w+)`?', ddltexts[0], re.IGNORECASE) or [None, None])[1]
-    tables = []
-
-    for ddltext in ddltexts:
-        if not re.match(r'^\s*CREATE TABLE.*\(', ddltext):
-            continue
-        ddlparser = ddlparse.DdlParse(ddltext)
-        ddl = ddlparser.parse()
-        tables.append(Table(
-            ddl.name, [
-                Column(
-                    dcol.name,
-                    dcol.data_type,
-                    [ColumnRef(dcol.fk_ref_table, dcol.fk_ref_column)] if dcol.foreign_key else None
-                ) for dcol in ddl.columns.values()
-            ]
-        ))
-
-    return Database(dbname, tables, final=True)
 
 
     # def __init__(self,
