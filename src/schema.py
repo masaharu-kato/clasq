@@ -9,6 +9,7 @@ import re
 import sqlparse
 import ddlparse
 
+from .expression import ExprType
 
 
 def database_from_ddls(ddlstext:str) -> 'Database':
@@ -43,7 +44,7 @@ TableName  = NewType('TableName', str)
 ColumnName = NewType('ColumnName', str)
 
 
-class ColumnRef:
+class ColumnRef(ExprType):
     """ Reference of the column in the table """
 
     def __init__(self, table_name:TableName, column_name:ColumnName):
@@ -51,7 +52,7 @@ class ColumnRef:
         self.column_name = column_name
 
 
-class Column:
+class Column(ExprType):
     """ Column schema class """
     name             : str
     data_type        : str
