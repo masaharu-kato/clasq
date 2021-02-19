@@ -1,107 +1,152 @@
 from copy import copy
+from typing import Optional, Sequence
+from abc import abstractmethod
 
-class ExprType:
+class _Unspecified:
+    pass
+_UNSPECIFIED = _Unspecified()
+
+
+class ExprABC:
+
+    def op(self, op, y=_UNSPECIFIED):
+        if isinstance(y, _Unspecified):
+            return self.uop(op)
+        return self.bop(op, y)
+
+    @abstractmethod
+    def uop(self, op):
+        """ Unary operation """
+
+    @abstractmethod
+    def bop(self, op, y):
+        """ Binary operation """
+
+    @abstractmethod
+    def rbop(self, op, y):
+        """ Reversed binary operation """
+
+    @abstractmethod
+    def infunc(self, name, *args):
+        """ In-function operation """
+
+
+class ExprType(ExprABC):
     """ Expression abstract class """
 
+    def uop(self, op):
+        return UnaryExpr(op, self)
+
+    def bop(self, op, y):
+        return BinaryExpr(op, self, y)
+
+    def rbop(self, op, y):
+        return BinaryExpr(op, y, self)
+
+    def infunc(self, name, *args):
+        return FuncExpr(name, self, *args)
+
+
     def __add__(self, y):
-        return BinaryExpr('+', self, y)
+        return self.bop('+', y)
     def __sub__(self, y):
-        return BinaryExpr('-', self, y)
+        return self.bop('-', y)
     def __mul__(self, y):
-        return BinaryExpr('*', self, y)
+        return self.bop('*', y)
     def __truediv__(self, y):
-        return BinaryExpr('/', self, y)
+        return self.bop('/', y)
     def __floordiv__(self, y):
-        return BinaryExpr('//', self, y)
+        return self.bop('//', y)
     def __mod__(self, y):
-        return BinaryExpr('%', self, y)
+        return self.bop('%', y)
     def __divmod__(self, y):
-        return BinaryExpr('divmod', self, y)
+        return self.bop('divmod', y)
     def __pow__(self, y):
-        return BinaryExpr('**', self, y)
+        return self.bop('**', y)
     def __lshift__(self, y):
-        return BinaryExpr('<<', self, y)
+        return self.bop('<<', y)
     def __rshift__(self, y):
-        return BinaryExpr('>>', self, y)
+        return self.bop('>>', y)
     def __and__(self, y):
-        return BinaryExpr('&', self, y)
+        return self.bop('&', y)
     def __xor__(self, y):
-        return BinaryExpr('^', self, y)
+        return self.bop('^', y)
     def __or__(self, y):
-        return BinaryExpr('|', self, y)
-        
-    def __radd__(self, y):
-        return BinaryExpr('+', y, self)
-    def __rsub__(self, y):
-        return BinaryExpr('-', y, self)
-    def __rmul__(self, y):
-        return BinaryExpr('*', y, self)
-    def __rtruediv__(self, y):
-        return BinaryExpr('/', y, self)
-    def __rfloordiv__(self, y):
-        return BinaryExpr('//', y, self)
-    def __rmod__(self, y):
-        return BinaryExpr('%', y, self)
-    def __rdivmod__(self, y):
-        return BinaryExpr('divmod', y, self)
-    def __rpow__(self, y):
-        return BinaryExpr('**', y, self)
-    def __rlshift__(self, y):
-        return BinaryExpr('<<', y, self)
-    def __rrshift__(self, y):
-        return BinaryExpr('>>', y, self)
-    def __rand__(self, y):
-        return BinaryExpr('&', y, self)
-    def __rxor__(self, y):
-        return BinaryExpr('^', y, self)
-    def __ror__(self, y):
-        return BinaryExpr('|', y, self)
-
-    def __neg__(self):
-        return UnaryExpr('-', self)
-    def __pos__(self):
-        return UnaryExpr('+', self)
-    def __abs__(self):
-        return UnaryExpr('abs', self)
-    def __ceil__(self):
-        return UnaryExpr('ceil', self)
-    def __floor__(self):
-        return UnaryExpr('floor', self)
-    def __trunc__(self):
-        return UnaryExpr('trunc', self)
-    def __invert__(self):
-        return UnaryExpr('~', self)
-        
-    def __int__(self):
-        return UnaryExpr('int', self)
-    def __float__(self):
-        return UnaryExpr('float', self)
-    def __round__(self):
-        return UnaryExpr('round', self)
-    def __complex__(self):
-        return UnaryExpr('complex', self)
-
-    # def __bool__(self):
-    #     return UnaryExpr('bool', self)
-    # def __str__(self):
-    #     return UnaryExpr('str', self)
-    # def __bytes__(self):
-    #     return UnaryExpr('bytes', self)
-    # def __len__(self):
-    #     return UnaryExpr('len', self)
+        return self.bop('|', y)
 
     def __eq__(self, y):
-        return BinaryExpr('==', self, y)
+        return self.bop('==', y)
     def __ne__(self, y):
-        return BinaryExpr('!=', self, y)
+        return self.bop('!=', y)
     def __lt__(self, y):
-        return BinaryExpr('<', self, y)
+        return self.bop('<', y)
     def __le__(self, y):
-        return BinaryExpr('<=', self, y)
+        return self.bop('<=', y)
     def __gt__(self, y):
-        return BinaryExpr('>', self, y)
+        return self.bop('>', y)
     def __ge__(self, y):
-        return BinaryExpr('>=', self, y)
+        return self.bop('>=', y)
+        
+    def __radd__(self, y):
+        return self.rbop('+', y)
+    def __rsub__(self, y):
+        return self.rbop('-', y)
+    def __rmul__(self, y):
+        return self.rbop('*', y)
+    def __rtruediv__(self, y):
+        return self.rbop('/', y)
+    def __rfloordiv__(self, y):
+        return self.rbop('//', y)
+    def __rmod__(self, y):
+        return self.rbop('%', y)
+    def __rdivmod__(self, y):
+        return self.rbop('divmod', y)
+    def __rpow__(self, y):
+        return self.rbop('**', y)
+    def __rlshift__(self, y):
+        return self.rbop('<<', y)
+    def __rrshift__(self, y):
+        return self.rbop('>>', y)
+    def __rand__(self, y):
+        return self.rbop('&', y)
+    def __rxor__(self, y):
+        return self.rbop('^', y)
+    def __ror__(self, y):
+        return self.rbop('|', y)
+
+    def __neg__(self):
+        return self.uop('-')
+    def __pos__(self):
+        return self.uop('+')
+    def __invert__(self):
+        return self.uop('~')
+        
+    def __abs__(self):
+        return self.infunc('abs')
+    def __ceil__(self):
+        return self.infunc('ceil')
+    def __floor__(self):
+        return self.infunc('floor')
+    def __trunc__(self):
+        return self.infunc('trunc')
+
+    def __int__(self):
+        return self.infunc('int')
+    def __float__(self):
+        return self.infunc('float')
+    def __round__(self):
+        return self.infunc('round')
+    def __complex__(self):
+        return self.infunc('complex')
+
+    # def __bool__(self):
+    #     return self.self('bool')
+    # def __str__(self):
+    #     return self.self('str')
+    # def __bytes__(self):
+    #     return self.self('bytes')
+    # def __len__(self):
+    #     return self.self('len')
 
 
 class Expr(ExprType):
