@@ -1,10 +1,11 @@
+""" Test of database table creation """
 import argparse
 import os
 import sys
 import subprocess
 from dbconfig import ROOT_DIR, DBCFG
-from src.cursor import CommandCursor
-from src.connector import SQLExecutor
+from libsql.cursor import CommandCursor
+from libsql.connector import SQLExecutor
 
 _DB_USERS_ = ['admin', 'loader', 'viewer']
 
