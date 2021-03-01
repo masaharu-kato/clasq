@@ -59,8 +59,24 @@ class SQLExecutor:
         self.execute(f'CREATE TABLE {fmt.fo(name)}(' + ', '.join(f'{fmt.fo(cn)} {fmt.sqltype(ct)}' for cn, ct in colname_types.items()) + ')')
 
     def create_function(self, name:str, arg_types:Dict[str, str], return_type:str, statements:Iterable[str], *, determinstic:bool=False) -> None:
+        # TODO: Implementation
         """ Create function """
         raise NotImplementedError()
+
+    def create_selsert_function(self, tablename:str, colname_types:Dict[str, str]) -> None:
+        # TODO: Implementation
+        self.execute(f'''
+            DELIMITER //
+            CREATE FUNCTION `selsert_{tablename}`
+            (_itemname VARCHAR(64), _itemname_nonl VARCHAR(64)) RETURNS INT DETERMINISTIC
+            BEGIN
+                IF _itemname IS NULL THEN RETURN NULL; END IF;
+                SET @ret_id = (SELECT `id` FROM `itemnames` WHERE `itemname` = _itemname);
+                IF @ret_id IS NOT NULL THEN RETURN @ret_id; END IF;
+                INSERT INTO `itemnames`(`itemname`, `itemname_nonl`) VALUES(_itemname, _itemname_nonl);
+                RETURN LAST_INSERT_ID();
+            END//
+        ''')
 
     def recreate_database(self, name:str, *args, **kwargs) -> None:
         """ Recreate (drop and create) database """
