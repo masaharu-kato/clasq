@@ -19,14 +19,14 @@ OrderType = NewType('OrderType', str)
 COp = NewType('COp', str) # SQL comparison operator type
 
 
-class DataView:
+class DataView(sqe.SQLExprType):
     """ Data-view class
         e.g. 
         dv = DataView(...)
 
         # basic
         list(dv.new('students')) # list all student records
-        list(dv.new('students').eq(age=18)) # list students whose age is 18
+        list(dv.new('students').eq('students', age=18)) # list students whose age is 18
         dv.new('students').id(123).one() # get a student whose id is 123
 
         # orders
@@ -54,18 +54,21 @@ class DataView:
         self._join_parent_tables = parent
         self._join_child_tables = child
 
+        if table:
+            self.table(table)
+
     def new(self, table:Optional[TableLike]=None):
         """ Generate new view with table """
         return DataView(self.db, table)
 
-    def where(self, expr, *exprs):
+    def table(self, table:TableLike):
+        self._table = self.db.table(table)
+        return self
+
+    def where(self, *exprs):
         """ Append terms """
-        if self._terms is None:
-            self._terms = expr
-        else:
-            self._terms = self._terms & expr
-        if exprs:
-            return self.where(*exprs)
+        for expr in exprs:
+            self._terms = expr if self._terms is None else self._terms & expr
         return self
 
     def column(self, *colexprs):
@@ -92,16 +95,36 @@ class DataView:
         self._offset = offset
         return self
 
+    def join_parents(self):
+        self._join_parent_tables = True
+        return self
+
+    def join_children(self):
+        self._join_child_tables = True
+        return self
+
+
+    def term(self, l, op, r):
+        lexpr = l if isinstance(l, sqe.SQLExprType) else self.db.column(l)
+        return self.where(sqe.BinaryExpr(op, lexpr, r))
+
+    def eq(self, table:TableLike, **kwargs):
+        """ Append equal terms on WHERE clause """
+        table = self.db.table(table)
+        for column_name, value in kwargs.items():
+            self.where(table.column(column_name) == value)
+        return self
+        
     def id(self, idval:int):
-        """ Append `id` equal terms """
-        return self.eq(id=idval)
+        """ Append `id` equal term on WHERE clause """
+        return self.eq(self._table, id=idval)
+
 
     def __getitem__(self, key):
         """ Append various terms """
         if isinstance(key, sqe.SQLExprType):
             return self.where(key)
-        if isinstance(key, schema.Table):
-            return self.new(key)
+
         if isinstance(key, slice):
             if key.start is not None:
                 self.offset(key.start)
@@ -110,27 +133,35 @@ class DataView:
             if key.step is not None:
                 self.limit(key.step)
             return self
+
         if isinstance(key, int): # id value
             return self.id(key)
+
         raise TypeError('Unexpected type.')
 
-    def sql(self) -> str:
-        """ Get SQL on current state """
-        return 
 
     def __iter__(self):
-        pass
+        # TODO: Implementation
+        raise NotImplementedError()
 
     def __len__(self):
-        pass
+        # TODO: Implementation
+        raise NotImplementedError()
 
     def one(self):
-        pass
+        # TODO: Implementation
+        raise NotImplementedError()
 
-    def pages(self) -> List[DataView]:
-        pass
+    def pages(self) -> List['DataView']:
+        # TODO: Implementation
+        raise NotImplementedError()
 
     def __sqlout__(self, swp:sqe.SQLWithParams) -> None:
+
+        print('id(swp)=', id(swp))
+
+        if not self._table:
+            raise RuntimeError('Table is not set.')
 
         # Join parent tables or/and child tables
         joins = []
@@ -139,16 +170,28 @@ class DataView:
         if self._join_child_tables:
             joins.extend(self.db.table(self._table).get_child_table_links())
 
-        swp = sqe.SQLWithParams()
-        swp.append(sqe.clause('SELECT', sqe.joined(sqe.col_opt_as(col, col.unique_alias()) for col in (*chain(table.columns for table, _, _ in joins), *self._colexprs))))
-        swp.append(sqe.clause('FROM', self._table))
-        swp.append(sqe.chain(*(sqe.chain(sqe.clause(('INNER' if lcol.not_null and rcol.not_null else 'LEFT') + ' JOIN', table), sqe.clause('ON', lcol == rcol)) for table, (lcol, rcol) in joins)))
-        swp.append(sqe.opt_clause('WHERE', self._terms))
-        swp.append(sqe.opt_clause('GROUP BY', sqe.opt_joined(self._groups)))
-        swp.append(sqe.opt_clause('ORDER BY', sqe.opt_joined(sqe.ordered_column(order) for order in self._orders)))
-        swp.append(sqe.opt_clause('LIMIT', self._limit))
-        swp.append(sqe.opt_clause('OFFSET', self._offset))
+        swp.append_clause('SELECT', [sqe.col_opt_as(col, col.opt_unique_alias()) for col in (*self._table.columns, *chain.from_iterable(table.columns for table, _ in joins), *self._colexprs)])
+        swp.append_clause('FROM'  , self._table)
 
+        for table, (lcol, rcol) in joins:
+            swp.append_clause(('INNER' if lcol.not_null and rcol.not_null else 'LEFT') + ' JOIN', table, end='')
+            swp.append_clause('ON', lcol == rcol)
+
+        swp.append_clause('WHERE'   , self._terms)
+        swp.append_clause('GROUP BY', self._groups)
+        swp.append_clause('ORDER BY', [sqe.ordered_column(order) for order in self._orders])
+        swp.append_clause('LIMIT'   , self._limit)
+        swp.append_clause('OFFSET'  , self._offset)
+        
+        #print(swp.sql, 'params:', swp.params)
+        #print('')
+
+    def get_sql_with_params(self, default_swp:Optional[sqe.SQLWithParams]=None) -> sqe.SQLWithParams:
+        swp = sqe.SQLWithParams() if default_swp is None else default_swp
+        # print('generated id(swp)=', id(swp))
+        swp.append(self)
+        # print(swp.sql, swp.params)
+        return swp
 
 
 # @staticmethod
