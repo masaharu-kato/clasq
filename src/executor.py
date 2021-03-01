@@ -3,15 +3,70 @@
 """
 from typing import Any, Callable, Dict, IO, Iterable, List, Optional, Union
 from . import fmt
-from .query import QueryMaker
+# from .query import QueryMaker
 # from .cursor import MySQLCursor
 
 _DUMP_EXECUTES = False
 
-SQLLike = Union[QueryMaker, str]
+# SQLLike = Union[QueryMaker, str]
+SQLLike = str
+
+
+class TableInserts:
+    def __init__(self, sqexec:'SQLExecutor', tablename:str, colnames:Optional[List[str]] = None):
+        self.sqexec = sqexec
+        self.tablename = tablename
+        self.colnames = colnames
+        self.records = []
+
+    def reset(self):
+        self.colnames = None
+        self.records = []
+
+    def __enter__(self):
+        self.reset()
+        return self
+
+    def insert(self, *args, **kwargs):
+        """ Prepare a insertion of new record """
+        if self.colnames is None:
+            if args:
+                raise RuntimeError('Positional arguments cannot be used without specifying column names in initialization.')
+            self.colnames = list(kwargs.keys())
+
+        if args and kwargs:
+            raise RuntimeError('Positional arguments and keyword arguments cannot be used at the same time.')
+
+        if args:
+            if len(args) != len(self.colnames):
+                raise RuntimeError('The number of values does not match.')
+            values = args
+        elif kwargs:
+            values = []
+            for colname in self.colnames:
+                if colname not in kwargs:
+                    raise RuntimeError('Key `{}` is not specified.'.format(colname))
+                self.records.append(kwargs[colname])
+
+        self.records.append(args)
+
+    def execute(self) -> int:
+        """ Execute prepared insertions """
+        self.sqexec.executemany(
+            f'INSERT INTO {fmt.fo(self.tablename)}(' + ', '.join(map(fmt.fo, self.colnames)) + ')'
+             + ' VALUES(' + ', '.join(['%s'] * len(self.colnames)) + ')',
+             self.records
+        )
+        self.reset()
+        return self.sqexec.cursor.lastrowid
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.execute()
+
 
 class SQLExecutor:
     """ SQL実行クラス """
+
 
     def __init__(self, sqcursor:'MySQLCursor'):
         """ Initialize a instance with a cursor to the Database """
@@ -23,8 +78,7 @@ class SQLExecutor:
             raise RuntimeError('Cursor is None.')
         
         self.cursor = sqcursor.cursor
-        self.qmaker = QueryMaker(sqcursor.con.db_schema) if sqcursor.con.db_schema else None
-
+        # self.qmaker = QueryMaker(sqcursor.con.db_schema) if sqcursor.con.db_schema else None
 
     def __enter__(self):
         return self
@@ -103,58 +157,61 @@ class SQLExecutor:
         # self.execute('INSERT INTO ' + tablename + ' VALUES(' + ', '.join(['%s'] * len(args)) + ')', args) # In case of using normal list
         return self.cursor.lastrowid
 
-    def _select_query(self, *args, **kwargs):
-        if self.qmaker is None:
-            raise RuntimeError('Query maker is not initialized because schema is not specified.')
-        return self.qmaker.select(*args, **kwargs)
+    def insert_to_table(self, tablename:str, colnames:Optional[List[str]]=None):
+        return TableInserts(self, tablename, colnames)
 
-    def select(self, *args, **kwargs):
-        """ Simple select: Execute select query """
-        return self.query(*self._select_query(*args, **kwargs))
+    # def _select_query(self, *args, **kwargs):
+    #     if self.qmaker is None:
+    #         raise RuntimeError('Query maker is not initialized because schema is not specified.')
+    #     return self.qmaker.select(*args, **kwargs)
 
-    def uselect(self, *args, **kwargs):
-        """ Unique select: Execute select query, assuming one result"""
-        return self.query_one(*self._select_query(*args, **kwargs))
+    # def select(self, *args, **kwargs):
+    #     """ Simple select: Execute select query """
+    #     return self.query(*self._select_query(*args, **kwargs))
 
-    def pselect(self, *args, **kwargs):
-        """ Select with parent(s): Execute select query with parent table(s) """
-        return self.select(*args, parent_tables=True, **kwargs)
+    # def uselect(self, *args, **kwargs):
+    #     """ Unique select: Execute select query, assuming one result"""
+    #     return self.query_one(*self._select_query(*args, **kwargs))
 
-    def puselect(self, *args, **kwargs):
-        """ Unique select with parent(s): Execute select query with parent table(s), assuming one result """
-        return self.uselect(*args, parent_tables=True, **kwargs)
+    # def pselect(self, *args, **kwargs):
+    #     """ Select with parent(s): Execute select query with parent table(s) """
+    #     return self.select(*args, parent_tables=True, **kwargs)
 
-    def cselect(self, *args, **kwargs):
-        """ Select with child(ren): Execute select query with child table(s) """
-        return self.select(*args, child_tables=True, **kwargs)
+    # def puselect(self, *args, **kwargs):
+    #     """ Unique select with parent(s): Execute select query with parent table(s), assuming one result """
+    #     return self.uselect(*args, parent_tables=True, **kwargs)
 
-    def pcselect(self, *args, **kwargs):
-        """ Select with parent(s) and child(ren): Execute select query with parent table(s) and child table(s) """
-        return self.select(*args, parent_tables=True, child_tables=True, **kwargs)
+    # def cselect(self, *args, **kwargs):
+    #     """ Select with child(ren): Execute select query with child table(s) """
+    #     return self.select(*args, child_tables=True, **kwargs)
+
+    # def pcselect(self, *args, **kwargs):
+    #     """ Select with parent(s) and child(ren): Execute select query with parent table(s) and child table(s) """
+    #     return self.select(*args, parent_tables=True, child_tables=True, **kwargs)
     
-    def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
-        """ Execute select query for a single table with equivalence conditions """
-        sql = 'SELECT ' + (', '.join(map(fmt.fo, colnames)) if colnames else '*') + ' FROM ' + fmt.fo(tablename)
-        if kwargs:
-            sql += ' WHERE ' + ' AND '.join(fmt.fo(k) + ' = %s' for k in kwargs)
-        self.execute(sql, list(kwargs.values()))
-        return self.fetchall()
+    # def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
+    #     """ Execute select query for a single table with equivalence conditions """
+    #     sql = 'SELECT ' + (', '.join(map(fmt.fo, colnames)) if colnames else '*') + ' FROM ' + fmt.fo(tablename)
+    #     if kwargs:
+    #         sql += ' WHERE ' + ' AND '.join(fmt.fo(k) + ' = %s' for k in kwargs)
+    #     self.execute(sql, list(kwargs.values()))
+    #     return self.fetchall()
 
 
-    def select_eq_one(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
-        """ Execute select query for a single table with equivalence conditions, assuming one result """
-        _result = self.select_eq(tablename, colnames, **kwargs)
-        if not _result:
-            return None
-        if len(_result) != 1:
-            raise RuntimeError('Multiple results.')
-        return _result[0]
+    # def select_eq_one(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
+    #     """ Execute select query for a single table with equivalence conditions, assuming one result """
+    #     _result = self.select_eq(tablename, colnames, **kwargs)
+    #     if not _result:
+    #         return None
+    #     if len(_result) != 1:
+    #         raise RuntimeError('Multiple results.')
+    #     return _result[0]
 
 
-    def exists(self, tablename:str, **kwargs):
-        """ Check if exists specific record in the table """
-        res = self.select_eq_one(tablename, ['COUNT(*) AS n'], **kwargs)
-        return res.n != 0
+    # def exists(self, tablename:str, **kwargs):
+    #     """ Check if exists specific record in the table """
+    #     res = self.select_eq_one(tablename, ['COUNT(*) AS n'], **kwargs)
+    #     return res.n != 0
 
 
     def update(self, tablename:str, _id_colname:str='id', *, id:int, **kwargs:Any): # pylint: disable=redefined-builtin
