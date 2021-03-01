@@ -2,6 +2,8 @@
     SQL Execution classes and functions
 """
 from typing import Any, Callable, Dict, IO, Iterable, List, Optional, Union
+import warnings
+import mysql.connector.errors as mysql_error
 from . import fmt
 # from .query import QueryMaker
 # from .cursor import MySQLCursor
@@ -46,12 +48,20 @@ class TableInserts:
             for colname in self.colnames:
                 if colname not in kwargs:
                     raise RuntimeError('Key `{}` is not specified.'.format(colname))
-                self.records.append(kwargs[colname])
+                values.append(kwargs[colname])
+        else:
+            raise RuntimeError('No arguments are specified.')
 
-        self.records.append(args)
+        assert(isinstance(values, list))
+        self.records.append(values)
 
-    def execute(self) -> int:
+    def execute(self) -> Optional[int]:
         """ Execute prepared insertions """
+        if not (self.colnames and self.records):
+            warnings.warn('No records inserted to table `{}`'.format(self.tablename))
+            return None
+        assert(isinstance(self.records, list) and all(isinstance(record, list) for record in self.records))
+
         self.sqexec.executemany(
             f'INSERT INTO {fmt.fo(self.tablename)}(' + ', '.join(map(fmt.fo, self.colnames)) + ')'
              + ' VALUES(' + ', '.join(['%s'] * len(self.colnames)) + ')',
@@ -221,7 +231,6 @@ class SQLExecutor:
              [*kwargs.values(), id]
         )
 
-
     def insertmany(self, tablename:str, rows:Iterable[list], _index_start:int=0, **kwargs:Callable) -> int:
         """ Execute insert query many time """
         self.executemany(
@@ -231,24 +240,23 @@ class SQLExecutor:
         )
         return self.cursor.lastrowid
 
-
     def execproc(self, procname:str, args:list) -> int:
         """ Execute procedure or function defined in the Database """
-        self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
-        return self.fetchjustone().id
-
+        try:
+            self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
+            return self.fetchjustone().id
+        except mysql_error.DataError as e:
+            raise RuntimeError('Errors in arguments on the function `{}` (args={})'.format(procname, repr(args))) from e
 
     def query(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         """ Run sql with parameters """
         self.execute(sql, params)
         return self.fetchall()
 
-
     def query_one(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         """ Run sql with parameters, assume one result """
         self.execute(sql, params)
         return self.fetchone()
-
 
     def execute(self, sql:SQLLike, params:Optional[list]=None):
         """ Execute SQL query """
@@ -256,11 +264,9 @@ class SQLExecutor:
             print('Executor.execute():', sql, params)
         return self.cursor.execute(self._sql_str(sql), [self.filter_param(p) for p in params] if params else None)
 
-
     def executemany(self, sql:SQLLike, params_list:Optional[List[list]]=None):
         """ Execute SQL query many time """
         return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
-
 
     @staticmethod
     def _sql_str(sql:SQLLike) -> str:
@@ -269,18 +275,15 @@ class SQLExecutor:
             return sql
         return sql.__sql__()
 
-
     def execute_from(self, f:IO):
         """ Execute SQL statements from file """
         return self.execute(f.read())
-
 
     def filter_param(self, param):
         """ filter the parameter value for SQL execution """
         # if isinstance(param, str):
         #     return param.replace('\n', '\\n')
         return param
-
 
     def fetchjustone(self) -> Any:
         """ Fetch just one record in result (if not, raise exception) """
@@ -290,7 +293,6 @@ class SQLExecutor:
         if len(result) != 1:
             raise RuntimeError('Not just one result.')
         return result[0]
-
 
     def fetchone(self) -> Any:
         """ Fetch only one record in result (or no result as None) (if multiple, raise exception) """
@@ -303,11 +305,9 @@ class SQLExecutor:
             return result[0]
         return None
 
-
     def fetchall(self):
         """ Fetch all records in result """
         return self.cursor.fetchall()
-
 
     def close(self):
         """ Close cursur if not closed """
@@ -315,10 +315,8 @@ class SQLExecutor:
             self.cursor.close()
             self.cursor = None
 
-
     def __exit__(self, ex_type, ex_value, trace):
         self.close()
-
 
     def __del__(self):
         self.close()
