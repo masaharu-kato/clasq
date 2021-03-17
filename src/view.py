@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Sequence, Optional, Union, Tuple, NewType
 from . import fmt
 from . import schema
 from . import sqlexpr as sqe
+from . import executor
 from itertools import chain
 
 
@@ -42,28 +43,55 @@ class DataView(sqe.SQLExprType):
         dv.new('students')[100::50] # list students (offset = 100, limit = 50)
     """
 
-    def __init__(self, db:schema.Database, table:Optional[TableLike]=None, *, parent:bool=True, child:bool=True):
+    # def __init__(self, db:schema.Database, table:Optional[TableLike]=None, *, parent:bool=True, child:bool=True)
+
+    def __init__(self,
+        qe:executor.BasicQueryExecutor,
+        db:schema.Database,
+        table:Optional[TableLike]=None,
+        full:bool=True
+    ):
+        self.qe = qe
         self.db = db
         self._table = None
+        self._joins = []
+        self._join_parents = None
         self._colexprs = []
         self._terms = None
         self._groups = []
         self._orders = []
         self._limit = None
         self._offset = None
-        self._join_parent_tables = parent
-        self._join_child_tables = child
+
+        self._result = None
 
         if table:
-            self.table(table)
+            self.table(table, full=full)
 
-    def new(self, table:Optional[TableLike]=None):
-        """ Generate new view with table """
-        return DataView(self.db, table)
+    def new(self, table:Optional[TableLike]=None, full:bool=True):
+        """ Generate a new view instance with table """
+        return DataView(self.qe, self.db, table, full=full)
 
-    def table(self, table:TableLike):
+    def table(self, table:TableLike, *, full:bool=True):
+        """ Set a base table """
         self._table = self.db.table(table)
+        if full:
+            self.join(*self._table.get_parent_table_links())
         return self
+
+    @property
+    def tables(self):
+        return DataViewTables(self)
+
+    def join(self, *tables:TableLike):
+        """ Join other tables """
+        for table in tables:
+            self._joins.append(self.db.table(table))
+        return self
+
+    def join_new(self, *tables:TableLike):
+        """ Generate a new view instance with table joined with other tables """
+        return self.new(self._table, *self._joins, *tables)
 
     def where(self, *exprs):
         """ Append terms """
@@ -72,6 +100,7 @@ class DataView(sqe.SQLExprType):
         return self
 
     def column(self, *colexprs):
+        """ Add extra column """
         self._colexprs.extend(colexprs)
         return self
 
@@ -95,13 +124,13 @@ class DataView(sqe.SQLExprType):
         self._offset = offset
         return self
 
-    def join_parents(self):
-        self._join_parent_tables = True
-        return self
+    # def join_parents(self):
+    #     self._join_parent_tables = True
+    #     return self
 
-    def join_children(self):
-        self._join_child_tables = True
-        return self
+    # def join_children(self):
+    #     self._join_child_tables = True
+    #     return self
 
 
     def term(self, l, op, r):
@@ -139,18 +168,44 @@ class DataView(sqe.SQLExprType):
 
         raise TypeError('Unexpected type.')
 
+    def execute(self):
+        self._result = self.qe.query(self.sql_with_params)
+        return self
+
+    def prepare(self):
+        if self._result is None:
+            self.execute()
+        return self
+
+    def refresh(self):
+        return self.execute()
+
+    @property
+    def result(self):
+        self.prepare()
+        return self._result
 
     def __iter__(self):
-        # TODO: Implementation
-        raise NotImplementedError()
+        return iter(self.result)
 
     def __len__(self):
-        # TODO: Implementation
-        raise NotImplementedError()
+        return len(self.result)
 
     def one(self):
-        # TODO: Implementation
-        raise NotImplementedError()
+        self.prepare()
+        if len(self._result) != 1:
+            raise RuntimeError('Length of result is not just one.')
+        return self._result[0]
+
+    def one_or_none(self):
+        self.prepare()
+        if self._result:
+            return self.one()
+        return None
+
+    def exists(self):
+        return bool(self.__len__())
+
 
     def pages(self) -> List['DataView']:
         # TODO: Implementation
@@ -163,17 +218,18 @@ class DataView(sqe.SQLExprType):
         if not self._table:
             raise RuntimeError('Table is not set.')
 
-        # Join parent tables or/and child tables
-        joins = []
-        if self._join_parent_tables:
-            joins.extend(self.db.table(self._table).get_parent_table_links())
-        if self._join_child_tables:
-            joins.extend(self.db.table(self._table).get_child_table_links())
+        # clarify target columns
+        target_columns = [*self._table.columns]
+        for table, _ in self._joins:
+            target_columns.extend(table.columns)
+        for colexpr in self._colexprs:
+            target_columns.append(self.db.column(colexpr))
 
-        swp.append_clause('SELECT', [sqe.col_opt_as(col, col.opt_unique_alias()) for col in (*self._table.columns, *chain.from_iterable(table.columns for table, _ in joins), *self._colexprs)])
+        # construct query
+        swp.append_clause('SELECT', [sqe.col_opt_as(col, col.opt_unique_alias()) for col in target_columns])
         swp.append_clause('FROM'  , self._table)
 
-        for table, (lcol, rcol) in joins:
+        for table, (lcol, rcol) in self._joins:
             swp.append_clause(('INNER' if lcol.not_null and rcol.not_null else 'LEFT') + ' JOIN', table, end='')
             swp.append_clause('ON', lcol == rcol)
 
@@ -186,7 +242,8 @@ class DataView(sqe.SQLExprType):
         #print(swp.sql, 'params:', swp.params)
         #print('')
 
-    def get_sql_with_params(self, default_swp:Optional[sqe.SQLWithParams]=None) -> sqe.SQLWithParams:
+    @property
+    def sql_with_params(self, default_swp:Optional[sqe.SQLWithParams]=None) -> sqe.SQLWithParams:
         swp = sqe.SQLWithParams() if default_swp is None else default_swp
         # print('generated id(swp)=', id(swp))
         swp.append(self)
@@ -209,3 +266,11 @@ class DataView(sqe.SQLExprType):
 #     """
 #     if isinstance(, type):
 #         pass
+
+
+class DataViewTables:
+    def __init__(self, dv:DataView):
+        self.dv = dv
+
+    def __getattr__(self, tablename:str):
+        return self.dv.table(tablename)

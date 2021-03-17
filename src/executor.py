@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, IO, Iterable, List, Optional, Union
 import warnings
 import mysql.connector.errors as mysql_error
 from . import fmt
+from . import sqlexpr as sqe
 # from .query import QueryMaker
 # from .cursor import MySQLCursor
 
@@ -74,9 +75,8 @@ class TableInserts:
         self.execute()
 
 
-class SQLExecutor:
+class BasicQueryExecutor:
     """ SQL実行クラス """
-
 
     def __init__(self, sqcursor:'MySQLCursor'):
         """ Initialize a instance with a cursor to the Database """
@@ -92,6 +92,102 @@ class SQLExecutor:
 
     def __enter__(self):
         return self
+
+    def execproc(self, procname:str, args:list) -> int:
+        """ Execute procedure or function defined in the Database """
+        try:
+            self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
+            return self.fetchjustone().id
+        except mysql_error.DataError as e:
+            raise RuntimeError('Errors in arguments on the function `{}` (args={})'.format(procname, repr(args))) from e
+
+    def query(self, sql:Union[SQLLike, sqe.SQLWithParams], params:Optional[list]=None) -> Any:
+        """ Run sql with parameters """
+        self.execute(sql, params)
+        return self.fetchall()
+
+    def query_one(self, sql:Union[SQLLike, sqe.SQLWithParams], params:Optional[list]=None) -> Any:
+        """ Run sql with parameters, assume one result """
+        self.execute(sql, params)
+        return self.fetchone()
+
+    def execute(self, sql:Union[SQLLike, sqe.SQLWithParams], params:Optional[list]=None):
+        """ Execute SQL query """
+        if _DUMP_EXECUTES:
+            print('Executor.execute():', sql, params)
+        
+        if isinstance(sql, sqe.SQLWithParams):
+            if params:
+                raise RuntimeError('Cannot specify parameters when using SQLWithParams instance.')
+            e_sql, e_params = sql.sql, sql.params
+        else:
+            e_sql, e_params = sql, params
+
+        return self.cursor.execute(
+            self._sql_str(e_sql),
+            [self.filter_param(p) for p in e_params] if e_params else None
+        )
+
+    def executemany(self, sql:Union[SQLLike, sqe.SQLWithParams], params_list:Optional[List[list]]=None):
+        """ Execute SQL query many time """
+        return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
+
+    @staticmethod
+    def _sql_str(sql:SQLLike) -> str:
+        """ Convert to SQL string """
+        if isinstance(sql, str):
+            return sql
+        return sql.__sql__()
+
+    def execute_from(self, f:IO):
+        """ Execute SQL statements from file """
+        return self.execute(f.read())
+
+    def filter_param(self, param):
+        """ filter the parameter value for SQL execution """
+        # if isinstance(param, str):
+        #     return param.replace('\n', '\\n')
+        return param
+
+    def fetchjustone(self) -> Any:
+        """ Fetch just one record in result (if not, raise exception) """
+        if not self.cursor:
+            raise RuntimeError('Cursor not opened.')
+        result = self.cursor.fetchall()
+        if len(result) != 1:
+            raise RuntimeError('Not just one result.')
+        return result[0]
+
+    def fetchone(self) -> Any:
+        """ Fetch only one record in result (or no result as None) (if multiple, raise exception) """
+        if not self.cursor:
+            raise RuntimeError('Cursor not opened.')
+        result = self.cursor.fetchall()
+        if len(result) > 1:
+            raise RuntimeError('Multiple result.')
+        if result:
+            return result[0]
+        return None
+
+    def fetchall(self):
+        """ Fetch all records in result """
+        return self.cursor.fetchall()
+
+    def close(self):
+        """ Close cursur if not closed """
+        if self.cursor is not None:
+            self.cursor.close()
+            self.cursor = None
+
+    def __exit__(self, ex_type, ex_value, trace):
+        self.close()
+
+    def __del__(self):
+        self.close()
+
+
+
+class QueryExecutor(BasicQueryExecutor):
 
     def drop_database(self, name:str) -> None:
         """ Drop database """
@@ -239,84 +335,3 @@ class SQLExecutor:
             ([func(i, row) for func in kwargs.values()] for i, row in enumerate(rows, _index_start)),
         )
         return self.cursor.lastrowid
-
-    def execproc(self, procname:str, args:list) -> int:
-        """ Execute procedure or function defined in the Database """
-        try:
-            self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
-            return self.fetchjustone().id
-        except mysql_error.DataError as e:
-            raise RuntimeError('Errors in arguments on the function `{}` (args={})'.format(procname, repr(args))) from e
-
-    def query(self, sql:SQLLike, params:Optional[list]=None) -> Any:
-        """ Run sql with parameters """
-        self.execute(sql, params)
-        return self.fetchall()
-
-    def query_one(self, sql:SQLLike, params:Optional[list]=None) -> Any:
-        """ Run sql with parameters, assume one result """
-        self.execute(sql, params)
-        return self.fetchone()
-
-    def execute(self, sql:SQLLike, params:Optional[list]=None):
-        """ Execute SQL query """
-        if _DUMP_EXECUTES:
-            print('Executor.execute():', sql, params)
-        return self.cursor.execute(self._sql_str(sql), [self.filter_param(p) for p in params] if params else None)
-
-    def executemany(self, sql:SQLLike, params_list:Optional[List[list]]=None):
-        """ Execute SQL query many time """
-        return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
-
-    @staticmethod
-    def _sql_str(sql:SQLLike) -> str:
-        """ Convert to SQL string """
-        if isinstance(sql, str):
-            return sql
-        return sql.__sql__()
-
-    def execute_from(self, f:IO):
-        """ Execute SQL statements from file """
-        return self.execute(f.read())
-
-    def filter_param(self, param):
-        """ filter the parameter value for SQL execution """
-        # if isinstance(param, str):
-        #     return param.replace('\n', '\\n')
-        return param
-
-    def fetchjustone(self) -> Any:
-        """ Fetch just one record in result (if not, raise exception) """
-        if not self.cursor:
-            raise RuntimeError('Cursor not opened.')
-        result = self.cursor.fetchall()
-        if len(result) != 1:
-            raise RuntimeError('Not just one result.')
-        return result[0]
-
-    def fetchone(self) -> Any:
-        """ Fetch only one record in result (or no result as None) (if multiple, raise exception) """
-        if not self.cursor:
-            raise RuntimeError('Cursor not opened.')
-        result = self.cursor.fetchall()
-        if len(result) > 1:
-            raise RuntimeError('Multiple result.')
-        if result:
-            return result[0]
-        return None
-
-    def fetchall(self):
-        """ Fetch all records in result """
-        return self.cursor.fetchall()
-
-    def close(self):
-        """ Close cursur if not closed """
-        if self.cursor is not None:
-            self.cursor.close()
-            self.cursor = None
-
-    def __exit__(self, ex_type, ex_value, trace):
-        self.close()
-
-    def __del__(self):
-        self.close()

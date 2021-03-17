@@ -211,27 +211,27 @@ class Table(sqe.SQLExprType):
     def __getitem__(self, column_name:Union[Column, ColumnName]) -> Column:
         return self.column(column_name)
 
-    def get_table_links(self, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
-        """ Get links (pairs of two table-_coldict) between this table and specific table """
-        return self.db.get_table_links(self.name, dest_table)
+    # def get_table_links(self, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
+    #     """ Get links (pairs of two table-_coldict) between this table and specific table """
+    #     return self.db.get_table_links(self.name, dest_table)
 
     def find_tables_links(self, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
         """ Get links (pairs of two table-_coldict) between this table and specific tables """
         return self.db.find_tables_links(self.name, target_tables)
 
-    def get_parent_table_links(self) -> Iterator[Tuple['Table', Tuple[Column, Column]]]: # (table object, (left column, right column))
-        """ Get parent table(s) recursively with (table object, the table always exists or not) """
-        for table, (lcol, rcol) in self.parent_tables.items():
-            yield (table, (lcol, rcol))
-        for table, (lcol, rcol) in self.parent_tables.items():
-            yield from table.get_parent_table_links()
+    # def get_parent_table_links(self) -> Iterator[Tuple['Table', Tuple[Column, Column]]]: # (table object, (left column, right column))
+    #     """ Get parent table(s) recursively with (table object, the table always exists or not) """
+    #     for table, (lcol, rcol) in self.parent_tables.items():
+    #         yield (table, (lcol, rcol))
+    #     for table, (lcol, rcol) in self.parent_tables.items():
+    #         yield from table.get_parent_table_links()
 
-    def get_child_table_links(self) -> Iterator[Tuple['Table', Tuple[Column, Column]]]: # (table object, (left column, right column))
-        """ Get child table(s) recursively with (table object, the table always exists or not) """
-        for table, (lcol, rcol) in self.child_tables.items():
-            yield (table, (lcol, rcol))
-        for table, (lcol, rcol) in self.child_tables.items():
-            yield from table.get_child_table_links()
+    # def get_child_table_links(self) -> Iterator[Tuple['Table', Tuple[Column, Column]]]: # (table object, (left column, right column))
+    #     """ Get child table(s) recursively with (table object, the table always exists or not) """
+    #     for table, (lcol, rcol) in self.child_tables.items():
+    #         yield (table, (lcol, rcol))
+    #     for table, (lcol, rcol) in self.child_tables.items():
+    #         yield from table.get_child_table_links()
 
     def __repr__(self):
         return f'<Table `{self.name}`>'
@@ -370,12 +370,12 @@ class Database(sqe.SQLExprType):
         for ctable in _tbldict:
             yield from self.get_table_links(dest_table, ctable)
 
-    def get_table_links(self, base_table:TableName, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
-        """ Get links (pairs of two table-columns) between two _tbldict """
-        if dest_table in self[base_table].link_tables:
-            yield from ((rcol, lcol) for lcol, rcol in self[base_table].link_tables[dest_table])
-        if base_table in self[dest_table].link_tables:
-            yield from self[dest_table].link_tables[base_table]
+    # def get_table_links(self, base_table:TableName, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
+    #     """ Get links (pairs of two table-columns) between two _tbldict """
+    #     if dest_table in self[base_table].link_tables:
+    #         yield from ((rcol, lcol) for lcol, rcol in self[base_table].link_tables[dest_table])
+    #     if base_table in self[dest_table].link_tables:
+    #         yield from self[dest_table].link_tables[base_table]
  
     def __repr__(self):
         return f'<Database `{self.name}`>'
