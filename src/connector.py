@@ -4,7 +4,7 @@
 from typing import Optional
 from abc import ABCMeta, abstractmethod
 import mysql.connector
-from .executor import SQLExecutor
+from .executor import QueryExecutor
 from .schema import Database as DBSchema
 
 CursorABC = mysql.connector.abstracts.MySQLCursorAbstract
@@ -18,9 +18,9 @@ class DBConnectionABC(metaclass=ABCMeta):
         """ Get database cursor """
         raise NotImplementedError()
 
-    def executor(self, *args, **kwargs) -> SQLExecutor:
+    def executor(self, *args, **kwargs) -> QueryExecutor:
         """ Get libsql database executor """
-        return SQLExecutor(self.cursor(*args, **kwargs))
+        return QueryExecutor(self.cursor(*args, **kwargs))
 
 
 class MySQLConnection(DBConnectionABC):
