@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Sequence, Optional, Union, Tuple, NewType
 from . import fmt
 from . import schema
 from . import sqlexpr as sqe
+from . import expression
 from . import executor
 from itertools import chain
 
@@ -51,17 +52,17 @@ class DataView(sqe.SQLExprType):
         table:Optional[TableLike]=None,
         full:bool=True
     ):
-        self.qe = qe
-        self.db = db
-        self._table = None
-        self._joins = []
-        self._join_parents = None
-        self._colexprs = []
-        self._terms = None
-        self._groups = []
-        self._orders = []
-        self._limit = None
-        self._offset = None
+        self.qe : executor.BasicQueryExecutor = qe
+        self.db : schema.Database = db
+
+        self._table    : Optional[TableLike]                    = None
+        self._joins    : Sequence[TableLike]                    = []
+        self._colexprs : Sequence[expression.ExprType]          = []
+        self._terms    : Optional[expression.ExprType]          = None
+        self._groups   : Sequence[Union[ColumnLike, TableLike]] = []
+        self._orders   : Sequence[expression.ExprType]          = []
+        self._limit    : Optional[int]                          = None
+        self._offset   : Optional[int]                          = None
 
         self._result = None
 
@@ -104,8 +105,8 @@ class DataView(sqe.SQLExprType):
         self._colexprs.extend(colexprs)
         return self
 
-    def group(self, *columns:ColumnLike):
-        """ Append group(s) """
+    def group(self, *columns:Union[ColumnLike, TableLike]):
+        """ Append group column(s) or table(s) """
         self._groups.extend(columns)
         return self
 
@@ -132,8 +133,8 @@ class DataView(sqe.SQLExprType):
     #     self._join_child_tables = True
     #     return self
 
-
     def term(self, l, op, r):
+        """ Append term for WHERE clause """
         lexpr = l if isinstance(l, sqe.SQLExprType) else self.db.column(l)
         return self.where(sqe.BinaryExpr(op, lexpr, r))
 
@@ -169,41 +170,50 @@ class DataView(sqe.SQLExprType):
         raise TypeError('Unexpected type.')
 
     def execute(self):
+        """ Execute SQL """
         self._result = self.qe.query(self.sql_with_params)
         return self
 
     def prepare(self):
+        """ Prepare result (Execute SQL if not executed yet) """
         if self._result is None:
             self.execute()
         return self
 
     def refresh(self):
+        """ Re-execute SQL """
         return self.execute()
 
     @property
     def result(self):
+        """ Get result """
         self.prepare()
         return self._result
 
     def __iter__(self):
+        """ Iterate the result """
         return iter(self.result)
 
     def __len__(self):
+        """ Get length of the result """
         return len(self.result)
 
     def one(self):
+        """ Assume one result and get it """
         self.prepare()
         if len(self._result) != 1:
             raise RuntimeError('Length of result is not just one.')
         return self._result[0]
 
     def one_or_none(self):
+        """ Assume one result or None and get it """
         self.prepare()
         if self._result:
             return self.one()
         return None
 
     def exists(self):
+        """ Get existence of result """
         return bool(self.__len__())
 
 
@@ -211,7 +221,9 @@ class DataView(sqe.SQLExprType):
         # TODO: Implementation
         raise NotImplementedError()
 
+
     def __sqlout__(self, swp:sqe.SQLWithParams) -> None:
+        """ Generate SQL and parameters to SQLWithParams object """
 
         print('id(swp)=', id(swp))
 
@@ -244,6 +256,7 @@ class DataView(sqe.SQLExprType):
 
     @property
     def sql_with_params(self, default_swp:Optional[sqe.SQLWithParams]=None) -> sqe.SQLWithParams:
+        """ Generate and get SQL and parameters """
         swp = sqe.SQLWithParams() if default_swp is None else default_swp
         # print('generated id(swp)=', id(swp))
         swp.append(self)
