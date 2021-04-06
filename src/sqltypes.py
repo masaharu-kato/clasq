@@ -1,10 +1,12 @@
 """ SQL build-in data types """
+import typing
 import datetime
 from functools import lru_cache
 from . import sqltypebases as tb
 
+Optional = typing.Optional
+
 Nullable = tb.Nullable
-Optional = Nullable
 NotNull = tb.NotNull
 PrimaryKey = tb.PrimaryKey
 

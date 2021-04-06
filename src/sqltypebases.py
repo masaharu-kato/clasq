@@ -1,6 +1,6 @@
 """ SQL build-in data types """
 import types
-from typing import Any, final, Type, Optional
+import typing
 from functools import lru_cache
 from . import record
 
@@ -27,10 +27,11 @@ def _int_value_type(v:int):
 
 class SQLType:
     """ SQL data types """
-    _PY_TYPE_      : Optional[Type] = None # Corresponding python type
-    __TYPE_SQL__   : Optional[str]  = None # Code of this type in SQL. Specify None if it is the same as the class name
+    _PY_TYPE_      : typing.Optional[typing.Type] = None # Corresponding python type
+    __TYPE_SQL__   : typing.Optional[str]  = None # Code of this type in SQL. Specify None if it is the same as the class name
     _TYPE_HAS_DEFAULT_ : bool = True # Type has a default value
-    _TYPE_DEFAULT_VALUE_ : Any = None # Type's default value (if has)
+    _TYPE_DEFAULT_VALUE_ : typing.Any = None # Type's default value (if has)
+    _TYPE_COMMENT_ : str = None # Type's comment
 
     def __init__(self, v):
         self.v = v
@@ -44,20 +45,21 @@ class SQLType:
         assert issubclass(cls, Final)
         return cls.__TYPE_SQL__ or cls.__name__.upper()
 
-    @final
+    @typing.final
     @classmethod
     def validate_value(cls, v):
         """ Validate a given value """
         assert cls._PY_TYPE_ is not None
         return _isinstance(v, cls._PY_TYPE_) and cls._validate_value(v)
 
-    @final
+    @typing.final
     def validate(self):
         """ Validate a given value (with type check) """
         return self.validate_value(self.v)
 
     @classmethod
     def default(cls, *args):
+        """ Set/clear default value """
         if len(args) > 1:
             raise RuntimeError('Cannot specify multiple arguments.')
         if len(args):
@@ -69,13 +71,26 @@ class SQLType:
 
     @classmethod
     def has_default_value(cls):
+        """ Get this type has a default value or not """
         return cls._TYPE_HAS_DEFAULT_
 
     @classmethod
     def default_value(cls):
+        """ Get the default value (if exists) """
         if not cls.has_default_value():
             raise RuntimeError('This type does not have a default value.')
         return cls._TYPE_DEFAULT_VALUE_
+
+    @classmethod
+    def comment(cls, comment=None):
+        """ Set comment """
+        cls._TYPE_COMMENT_ = comment
+
+    @classmethod
+    def get_comment(cls):
+        """ Get comment """
+        return cls._TYPE_COMMENT_
+
 
 
 def get_type_sql(t):
@@ -161,8 +176,8 @@ class FloatType(NumericType):
 
 class DecimalType(NumericType, SQLTypeWithKey):
     """ Fixed Decimal types """
-    _TYPE_DECI_PREC_  : Optional[int] = None
-    _TYPE_DECI_SCALE_ : Optional[int] = None
+    _TYPE_DECI_PREC_  : typing.Optional[int] = None
+    _TYPE_DECI_SCALE_ : typing.Optional[int] = None
 
     @classmethod
     @lru_cache
@@ -236,14 +251,30 @@ class SQLTypeEnv:
         raise RuntimeError('This class cannot be initialized.')
 
     @classmethod
-    def set_type_alias(cls, tf:Type, tt:Type):
+    def set_type_alias(cls, tf:typing.Type, tt:typing.Type):
         """ Set an alias type of a given type """
         assert is_child_class(tt, SQLType)
         cls.type_aliases[tf] = tt
 
+    @staticmethod
+    def _is_typing_type(t):
+        return typing.get_origin(t) is not None
+
+    @staticmethod
+    def _is_typing_optional(t):
+        if typing.get_origin(t) is typing.Union:
+            tpargs = typing.get_args(t)
+            return len(tpargs) == 2 and tpargs[1] is type(None)
+
+    @staticmethod
+    def _typing_optional_basetype(t):
+        return t.__args__[0]
+
     @classmethod
     def actual_type(cls, t, *, ensure_nullable:bool=False):
         """ Get an actual type (subclass of SQLType) of a given type """
+        if cls._is_typing_optional(t):
+            return cls.actual_type(cls._typing_optional_basetype(t), ensure_nullable=False)
         if is_child_class(t, Record):
             return ForeignTableKey[t]
         if t in cls.type_aliases:
@@ -254,6 +285,8 @@ class SQLTypeEnv:
 
     @classmethod
     def is_compatible_type(cls, t):
+        if cls._is_typing_type(t):
+            return cls._is_typing_optional(t)
         return is_child_class(t, SQLType) or is_child_class(t, Record) or t in cls.type_aliases
 
     @classmethod
