@@ -1,8 +1,7 @@
 """
     Database schema module
 """
-from collections import defaultdict
-from typing import Any, Dict, Iterator, List, NewType, Optional, Union, Set, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, NewType, Optional, Union, Set, Tuple
 import sys
 import re
 import weakref
@@ -84,17 +83,19 @@ class Column(sqe.SQLExprType):
 
     def finalize(self, table:'Table'):
         """ Resolve references in link columns """
-        assert(isinstance(table, Table))
+        assert isinstance(table, Table)
         self.table = table
         self.link_columns = weakref.WeakSet(self.table.db.get_column_by_ref(cref) for cref in self.link_column_refs)
         self.frozen = True
 
     def unique_alias(self) -> str:
+        """ Get a unique alias on the database """
         if self.only_on_db:
             return self.name
         return self.table.name + '.' + self.name
 
     def opt_unique_alias(self) -> Optional[str]:
+        """ Get a unique alias on the database if it is needed """
         alias = self.unique_alias()
         if self.name == alias:
             return None
@@ -107,6 +108,7 @@ class Column(sqe.SQLExprType):
         return hash((hash(self.table), self.name))
 
     def vrepr(self):
+        """ Dump the details of this column """
         return repr((self.name, self.data_type, self.link_columns))
 
     def __str__(self) -> str:
@@ -370,12 +372,12 @@ class Database(sqe.SQLExprType):
         for ctable in _tbldict:
             yield from self.get_table_links(dest_table, ctable)
 
-    # def get_table_links(self, base_table:TableName, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
-    #     """ Get links (pairs of two table-columns) between two _tbldict """
-    #     if dest_table in self[base_table].link_tables:
-    #         yield from ((rcol, lcol) for lcol, rcol in self[base_table].link_tables[dest_table])
-    #     if base_table in self[dest_table].link_tables:
-    #         yield from self[dest_table].link_tables[base_table]
+    def get_table_links(self, base_table:TableName, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
+        """ Get links (pairs of two table-columns) between two _tbldict """
+        if dest_table in self[base_table].link_tables:
+            yield from ((rcol, lcol) for lcol, rcol in self[base_table].link_tables[dest_table])
+        if base_table in self[dest_table].link_tables:
+            yield from self[dest_table].link_tables[base_table]
  
     def __repr__(self):
         return f'<Database `{self.name}`>'
