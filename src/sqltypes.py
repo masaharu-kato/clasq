@@ -1,10 +1,10 @@
 """ SQL build-in data types """
-from typing import Type
+import datetime
 from functools import lru_cache
 from . import sqltypebases as tb
-from . import record
 
-Optional = tb.Optional
+Nullable = tb.Nullable
+Optional = Nullable
 NotNull = tb.NotNull
 PrimaryKey = tb.PrimaryKey
 
@@ -43,7 +43,9 @@ class UnsignedBigInt(tb.Final, tb.UnsignedIntegerType):
 
 class Unsigned(tb.SQLType):
     """ Unsigned sql type """
+
     @classmethod
+    @lru_cache
     def __class_getitem__(cls, t):
         if t == TinyInt:
             return UnsignedTinyInt
@@ -57,7 +59,7 @@ class Unsigned(tb.SQLType):
             return UnsignedBigInt
         raise RuntimeError('Invalid type.')
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *_args, **_kwargs):
         if not issubclass(cls, tb.Final):
             raise RuntimeError('Type is not specified.')
         return super().__new__(cls)
@@ -72,7 +74,6 @@ class Double(tb.Final, tb.FloatType):
 
 class Decimal(tb.Final, tb.DecimalType):
     """ Decimal type """
-    # TODO: Specify precision and scale
 
 
 class Bit(tb.Final, tb.NumericType):
@@ -131,14 +132,14 @@ class LongText(Text):
     """ Long Text type """
 
 
-class Enum(tb.Final, tb.SQLTypeWithValues):
+class Enum(tb.Final, tb.StringType, tb.SQLTypeWithValues):
     """ ENUM type """
     @classmethod
     def _validate_value(cls, v):
         return v in cls._TYPE_VALUES_
 
 
-class Set(tb.Final, tb.SQLTypeWithValues):
+class Set(tb.Final, tb.StringType, tb.SQLTypeWithValues):
     """ SET type """
     @classmethod
     def _validate_value(cls, v):
@@ -205,8 +206,14 @@ tb.SQLTypeEnv.set_type_alias(float, Double)
 tb.SQLTypeEnv.set_type_alias(str  , Text  )
 tb.SQLTypeEnv.set_type_alias(bytes, Blob  )
 
+tb.SQLTypeEnv.set_type_alias(datetime.date, Date)
+tb.SQLTypeEnv.set_type_alias(datetime.time, Time)
+tb.SQLTypeEnv.set_type_alias(datetime.datetime, DateTime)
+
 
 def main():
+    """ Debug """
+
     vi = Int(25)
     print(vi)
 

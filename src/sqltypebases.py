@@ -1,9 +1,17 @@
 """ SQL build-in data types """
-import abc
 import types
-from typing import final, Type
+from typing import Any, final, Type, Optional
 from functools import lru_cache
 from . import record
+
+
+def is_child_class(target, base):
+    return issubclass(target, base) and target is not base
+
+
+def _isinstance(v, t):
+    assert isinstance(t, type)
+    return isinstance(v, t)
 
 
 class _IntValueType:
@@ -16,10 +24,13 @@ def _int_value_type(v:int):
     return types.new_class('intv_{}'.format(v), bases=(_IntValueType,))
 
 
+
 class SQLType:
     """ SQL data types """
-    _PY_TYPE_ = None    # Corresponding python type
-    __TYPE_SQL__ = None # Code of this type in SQL. Specify None if it is the same as the class name
+    _PY_TYPE_      : Optional[Type] = None # Corresponding python type
+    __TYPE_SQL__   : Optional[str]  = None # Code of this type in SQL. Specify None if it is the same as the class name
+    _TYPE_HAS_DEFAULT_ : bool = True # Type has a default value
+    _TYPE_DEFAULT_VALUE_ : Any = None # Type's default value (if has)
 
     def __init__(self, v):
         self.v = v
@@ -36,53 +47,88 @@ class SQLType:
     @final
     @classmethod
     def validate_value(cls, v):
-        return isinstance(v, cls._PY_TYPE_) and cls._validate_value(v)
+        """ Validate a given value """
+        assert cls._PY_TYPE_ is not None
+        return _isinstance(v, cls._PY_TYPE_) and cls._validate_value(v)
 
     @final
     def validate(self):
+        """ Validate a given value (with type check) """
         return self.validate_value(self.v)
+
+    @classmethod
+    def default(cls, *args):
+        if len(args) > 1:
+            raise RuntimeError('Cannot specify multiple arguments.')
+        if len(args):
+            cls._TYPE_HAS_DEFAULT_ = True
+            cls._TYPE_DEFAULT_VALUE_ = args[0]
+        else:
+            cls._TYPE_HAS_DEFAULT_ = False
+            cls._TYPE_DEFAULT_VALUE_ = None
+
+    @classmethod
+    def has_default_value(cls):
+        return cls._TYPE_HAS_DEFAULT_
+
+    @classmethod
+    def default_value(cls):
+        if not cls.has_default_value():
+            raise RuntimeError('This type does not have a default value.')
+        return cls._TYPE_DEFAULT_VALUE_
+
+
+def get_type_sql(t):
+    """ Get the SQL of type in a given SQLType subclass """
+    assert issubclass(t, SQLType)
+    return t.__type_sql__()
 
 
 class SQLGenericType:
     """ SQL generic data types """
 
 
-class SQLTypeWithKey(SQLGenericType):
+class SQLTypeWithOptionalKey(SQLGenericType):
     """ SQL data type with key (length or value(s) etc.) """
+    _TYPE_HAS_KEY_ = False
 
     @classmethod
     def new_subclass(cls, classname:str, bases=None, **classprops):
+        """ Create a new subclass (using a given key) """
         return types.new_class(
             classname,
             (cls, *(bases or [])),
             {},
-            lambda ns: ns.update(classprops)
+            lambda ns: ns.update({'_TYPE_HAS_KEY_': True, **classprops})
         )
 
 
-class SQLTypeWithOptionalLength(SQLTypeWithKey):
+class SQLTypeWithKey(SQLTypeWithOptionalKey):
+    """ SQL data type with key (length or value(s) etc.) """
+
+    def __new__(cls, *_args, **_kwargs):
+        if not cls._TYPE_HAS_KEY_:
+            raise RuntimeError('Generic type key is not specified.')
+        return super().__new__(cls)
+
+
+class SQLTypeWithOptionalLength(SQLTypeWithOptionalKey):
     """ SQL data types with optional length """
     _MAX_LEN_ = None
 
     @classmethod
     @lru_cache
     def __class_getitem__(cls, l):
-        assert isinstance(l, int)
+        assert isinstance(l, int) and issubclass(cls, SQLType)
         return cls.new_subclass(
             f'{cls.__name__}_len{l}',
             _MAX_LEN_ = l,
-            __TYPE_SQL__ = f'{cls.__type_sql__()}({l})',
+            __TYPE_SQL__ = f'{get_type_sql(cls)}({l})',
         )
 
 
-class SQLTypeWithLength(SQLTypeWithOptionalLength):
+class SQLTypeWithLength(SQLTypeWithOptionalLength, SQLTypeWithKey):
     """ SQL data types with length (required) """
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._MAX_LEN_:
-            raise RuntimeError('Length is not specified.')
-        return super().__new__(cls)
-
 
 class NumericType(SQLType):
     """ Numeric types """
@@ -113,8 +159,26 @@ class FloatType(NumericType):
         return float(self.v)
 
 
-class DecimalType(NumericType):
+class DecimalType(NumericType, SQLTypeWithKey):
     """ Fixed Decimal types """
+    _TYPE_DECI_PREC_  : Optional[int] = None
+    _TYPE_DECI_SCALE_ : Optional[int] = None
+
+    @classmethod
+    @lru_cache
+    def __class_getitem__(cls, pr_sc): # Precision and scale
+        assert isinstance(pr_sc, tuple) and len(pr_sc) == 2 and isinstance(pr_sc[0], int) and isinstance(pr_sc[1], int)
+        pr, sc = pr_sc
+        return cls.new_subclass(
+            f'{cls.__name__}_{pr}_{sc}',
+            _TYPE_DECI_PREC_  = pr,
+            _TYPE_DECI_SCALE_ = sc,
+        )
+
+    def __new__(cls, *_args, **_kwargs):
+        if not cls._TYPE_DECI_PREC_ or not cls._TYPE_DECI_SCALE_:
+            raise RuntimeError('Precisoin and/or scale is not specified.')
+        return super().__new__(cls)
 
 
 class DatetimeType(SQLType):
@@ -144,7 +208,7 @@ class TextType(StringType, SQLTypeWithOptionalLength):
         return not cls._MAX_LEN_ or len(v) <= cls._MAX_LEN_
 
 
-class SQLTypeWithValues(StringType, SQLTypeWithLength):
+class SQLTypeWithValues(SQLTypeWithKey):
     """ SQL data types with optional length """
     _TYPE_VALUES_ = None
 
@@ -155,14 +219,8 @@ class SQLTypeWithValues(StringType, SQLTypeWithLength):
         return cls.new_subclass(
             f'{cls.__name__}_vals_' + '_'.join(values),
             _TYPE_VALUES_ = values,
-            __TYPE_SQL__  = f'{cls.__type_sql__()}(' + ', '.join(f"'{v}'" for v in values) + ')',
+            __TYPE_SQL__  = f'{get_type_sql(cls)}(' + ', '.join(f"'{v}'" for v in values) + ')',
         )
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._TYPE_VALUES_:
-            raise RuntimeError('Values is not specified.')
-        return super().__new__(cls)
-
 
 
 class Record:
@@ -179,26 +237,28 @@ class SQLTypeEnv:
 
     @classmethod
     def set_type_alias(cls, tf:Type, tt:Type):
-        assert issubclass(tt, SQLType)
+        """ Set an alias type of a given type """
+        assert is_child_class(tt, SQLType)
         cls.type_aliases[tf] = tt
 
     @classmethod
-    def actual_type(cls, t):
-        if t in cls.type_aliases:
-            return cls.type_aliases.get(t)
-        if issubclass(t, Record):
+    def actual_type(cls, t, *, ensure_nullable:bool=False):
+        """ Get an actual type (subclass of SQLType) of a given type """
+        if is_child_class(t, Record):
             return ForeignTableKey[t]
-        return t
-
-    @classmethod
-    def final_type(cls, t):
-        t = cls.actual_type(t)
-        if cls.default_not_null and not isinstance(t, (Optional, NotNull)):
+        if t in cls.type_aliases:
+            t = cls.type_aliases.get(t)
+        if ensure_nullable and cls.default_not_null and not issubclass(t, (Nullable, NotNull)):
             t = NotNull[t]
         return t
 
     @classmethod
+    def is_compatible_type(cls, t):
+        return is_child_class(t, SQLType) or is_child_class(t, Record) or t in cls.type_aliases
+
+    @classmethod
     def type_sql(cls, t) -> str:
+        """ Get a SQL of type for table creation """
         t = cls.actual_type(t)
         return t.__type_sql__()
 
@@ -207,13 +267,14 @@ class SQLTypeWithType(SQLTypeWithKey):
     """ SQL data types with optional length """
     _TYPE_BASE_ = None
     _TYPE_SQL_SUFFIX_ = None
+    _TYPE_ENSURE_NULLABLE_ = False
 
     @classmethod
     @lru_cache
     def __class_getitem__(cls, t):
         assert cls._TYPE_SQL_SUFFIX_ is not None
         assert isinstance(t, type)
-        t = SQLTypeEnv.actual_type(t)
+        t = SQLTypeEnv.actual_type(t, ensure_nullable=cls._TYPE_ENSURE_NULLABLE_)
         return cls.new_subclass(
             f'{cls.__name__}__{t.__name__}',
             (t,),
@@ -221,22 +282,18 @@ class SQLTypeWithType(SQLTypeWithKey):
             __TYPE_SQL__ = t.__type_sql__() + cls._TYPE_SQL_SUFFIX_,
         )
 
-    def __new__(cls, *args, **kwargs):
-        if not cls._TYPE_BASE_:
-            raise RuntimeError('Type is not specified.')
-        return super().__new__(cls)
-
 
 class Final:
     """ Represents the class is final (= actual SQL type) """
 
 
 class Int(Final, IntegerType):
+    """ Normal Int type """
     _MIN_VALUE_ = -2**31
     _MAX_VALUE_ = 2**31-1
 
 
-class Optional(Final, SQLTypeWithType):
+class Nullable(Final, SQLTypeWithType):
     """ SQL optional type """
     _TYPE_SQL_SUFFIX_ = ''
 
@@ -244,11 +301,14 @@ class Optional(Final, SQLTypeWithType):
 class NotNull(Final, SQLTypeWithType):
     """ SQL NOT NULL type """
     _TYPE_SQL_SUFFIX_ = ' NOT NULL'
+    _TYPE_HAS_DEFAULT_ = False
+    _TYPE_DEFAULT_VALUE_ = None
 
 
 class PrimaryKey(Final, SQLTypeWithType):
     """ SQL Primary Key type """
     _TYPE_SQL_SUFFIX_ = ' PRIMARY KEY'
+    _TYPE_ENSURE_NULLABLE_ = True
 
 
 class ForeignTableKey(Final, SQLTypeWithType):
@@ -266,13 +326,15 @@ class ForeignTableKey(Final, SQLTypeWithType):
         )
 
 
-class RecordEnv(SQLTypeEnv):
+# class RecordEnv(SQLTypeEnv):
+#     """ Record definition environment class """
 
-    common_columns = {
-        'id' : PrimaryKey[NotNull[Int]],
-    }
+#     common_columns = {
+#         'id' : PrimaryKey[NotNull[Int]],
+#     }
 
-    @classmethod
-    def set_common_columns(cls, tf:Type, tt:Type):
-        assert isinstance(tt, SQLType)
-        cls.common_columns[tf] = tt
+#     @classmethod
+#     def set_common_columns(cls, tf:Type, tt:Type):
+#         """ Set a common columns """
+#         assert isinstance(tt, SQLType)
+#         cls.common_columns[tf] = tt
