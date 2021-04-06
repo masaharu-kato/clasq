@@ -1,232 +1,111 @@
 """ SQL build-in data types """
-import abc
-import types
-from typing import final
+from typing import Type
 from functools import lru_cache
+from . import sqltypebases as tb
+from . import record
 
-class _IntValueType:
-    """ Int value type """
-    _VALUE_ = None
+Optional = tb.Optional
+NotNull = tb.NotNull
+PrimaryKey = tb.PrimaryKey
 
-def _int_value_type(v:int):
-    if not isinstance(v, int):
-        raise TypeError('`v` is not an integer.')
-    return types.new_class('intv_{}'.format(v), bases=(_IntValueType,))
-
-
-class SQLType:
-    """ SQL data types """
-    _PY_TYPE_ = None    # Corresponding python type
-    __TYPE_SQL__ = None # Code of this type in SQL. Specify None if it is the same as the class name
-
-    def __init__(self, v):
-        self.v = v
-
-    @classmethod
-    def _validate_value(cls, v): # Default implementation
-        return True 
-
-    @classmethod
-    def __type_sql__(cls): # Default implementation
-        return cls.__TYPE_SQL__ or f'{cls.__name__} NOT NULL'
-
-    @final
-    @classmethod
-    def validate_value(cls, v):
-        return isinstance(v, cls._PY_TYPE_) and cls._validate_value(v)
-
-    @final
-    def validate(self):
-        return self.validate_value(self.v)
-
-
-class Optional(SQLType):
-    """ SQL optional type """
-
-    def __class_getitem__(cls, t):
-        if not isinstance(t, type):
-            raise RuntimeError('Invalid key type.')
-
-        return types.new_class(
-            f'{cls.__name__}_opt',
-            (cls,),
-            {},
-            lambda ns: ns.update({
-                '_MAX_LEN_': l,
-                '__TYPE_SQL__': cls.__name__,
-            })
-        )
-
-
-
-
-
-class SQLTypeWithOptionalLength(SQLType):
-    """ SQL data types with optional length """
-
-    def __class_getitem__(cls, l):
-        if isinstance(l, int): 
-            return cls._with_length(l)
-        raise RuntimeError('Invalid key type.')
-
-    @classmethod
-    @lru_cache
-    def _with_length(cls, l):
-        assert isinstance(l, int)
-        return types.new_class(
-            f'{cls.__name__}_len{l}',
-            (cls,),
-            {},
-            lambda ns: ns.update({
-                '_MAX_LEN_': l,
-                '__TYPE_SQL__': f'{cls.__name__}({l})',
-            })
-        )
-
-
-class SQLTypeWithLength(SQLTypeWithOptionalLength):
-    """ SQL data types with length (required) """
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._MAX_LEN_:
-            raise RuntimeError('Length is not specified.')
-        return super().__new__(cls)
-
-
-class NumericType(SQLType):
-    """ Numeric types """
-
-class IntegerType(NumericType):
-    """ Integer types """
-    _PY_TYPE_ = int
-    _MIN_VALUE_ = None
-    _MAX_VALUE_ = None
-
-    @classmethod
-    def _validate_value(cls, v):
-        return cls._MIN_VALUE_ <= v and v <= cls._MAX_VALUE_
-
-    def __int__(self, v):
-        return int(self.v)
-
-
-class UnsignedIntegerType(IntegerType):
-    """ Unsigned integer types """
-    _MIN_VALUE_ = 0
-
-class TinyInt(IntegerType):
+class TinyInt(tb.Final, tb.IntegerType):
     _MIN_VALUE_ = -2**7
     _MAX_VALUE_ = 2**7-1
     
-class SmallInt(IntegerType):
+class SmallInt(tb.Final, tb.IntegerType):
     _MIN_VALUE_ = -2**15
     _MAX_VALUE_ = 2**15-1
     
-class MediumInt(IntegerType):
+class MediumInt(tb.Final, tb.IntegerType):
     _MIN_VALUE_ = -2**23
     _MAX_VALUE_ = 2**23-1
 
-class Int(IntegerType):
-    _MIN_VALUE_ = -2**31
-    _MAX_VALUE_ = 2**31-1
+Int = tb.Int
 
-class BigInt(IntegerType):
+class BigInt(tb.Final, tb.IntegerType):
     _MIN_VALUE_ = -2**63
     _MAX_VALUE_ = 2**63-1
 
-class UnsignedTinyInt(UnsignedIntegerType):
+class UnsignedTinyInt(tb.Final, tb.UnsignedIntegerType):
     _MAX_VALUE_ = 2**8-1
     
-class UnsignedSmallInt(UnsignedIntegerType):
+class UnsignedSmallInt(tb.Final, tb.UnsignedIntegerType):
     _MAX_VALUE_ = 2**16-1
     
-class UnsignedMediumInt(UnsignedIntegerType):
+class UnsignedMediumInt(tb.Final, tb.UnsignedIntegerType):
     _MAX_VALUE_ = 2**24-1
 
-class UnsignedInt(UnsignedIntegerType):
+class UnsignedInt(tb.Final, tb.UnsignedIntegerType):
     _MAX_VALUE_ = 2**32-1
 
-class UnsignedBigInt(UnsignedIntegerType):
+class UnsignedBigInt(tb.Final, tb.UnsignedIntegerType):
     _MAX_VALUE_ = 2**64-1
 
+class Unsigned(tb.SQLType):
+    """ Unsigned sql type """
+    @classmethod
+    def __class_getitem__(cls, t):
+        if t == TinyInt:
+            return UnsignedTinyInt
+        if t == SmallInt:
+            return UnsignedSmallInt
+        if t == MediumInt:
+            return UnsignedMediumInt
+        if t == Int:
+            return UnsignedInt
+        if t == BigInt:
+            return UnsignedBigInt
+        raise RuntimeError('Invalid type.')
 
-class FloatType(NumericType):
-    """ Floating-point decimal types """
-    _PY_TYPE_ = float
+    def __new__(cls, *args, **kwargs):
+        if not issubclass(cls, tb.Final):
+            raise RuntimeError('Type is not specified.')
+        return super().__new__(cls)
 
-    def __float__(self):
-        return float(self.v)
 
-class Float(FloatType):
+class Float(tb.Final, tb.FloatType):
     """ Float type """
 
-class Double(FloatType):
+class Double(tb.Final, tb.FloatType):
     """ Double type """
 
 
-class DecimalType(NumericType):
-    """ Fixed Decimal types """
-
-class Decimal(DecimalType):
+class Decimal(tb.Final, tb.DecimalType):
     """ Decimal type """
     # TODO: Specify precision and scale
 
 
-class Bit(NumericType):
+class Bit(tb.Final, tb.NumericType):
     """ Bit type """
 
     def __bytes__(self):
         return bytes(self.v)
 
 
-class DatetimeType(SQLType):
-    """ Date and time types """
-
-class DateTime(DatetimeType):
+class DateTime(tb.Final, tb.DatetimeType):
     """ DateTime type """
 
-class Date(DatetimeType):
+class Date(tb.Final, tb.DatetimeType):
     """ Date type """
 
-class Time(DatetimeType):
+class Time(tb.Final, tb.DatetimeType):
     """ Time type """
 
 
-class StringType():
-    """ String types """
-    _PY_TYPE_ = str
-    _MAX_LEN_ = None
-
-    def __str__(self):
-        return str(self.v)
-
-
-class CharType(StringType, SQLTypeWithLength):
-    """ Char types (with required length) """
-    @classmethod
-    def _validate_value(cls, v):
-        return len(v) <= cls._MAX_LEN_
-
-class Char(CharType):
+class Char(tb.Final, tb.CharType):
     """ CHAR string type """
 
-class VarChar(CharType):
+class VarChar(tb.Final, tb.CharType):
     """ VARCHAR string type """
 
-class Binary(CharType):
+class Binary(tb.Final, tb.CharType):
     """ CHAR string type """
 
-class VarBinary(CharType):
+class VarBinary(tb.Final, tb.CharType):
     """ VARCHAR string type """
 
 
-class TextType(StringType, SQLTypeWithOptionalLength):
-    """ Text types (with optional length) """
-    @classmethod
-    def _validate_value(cls, v):
-        return not cls._MAX_LEN_ or len(v) <= cls._MAX_LEN_
-
-class Blob(TextType):
+class Blob(tb.Final, tb.TextType):
     """ BLOB type """
 
 class TinyBlob(Blob):
@@ -239,7 +118,7 @@ class LongBlob(Blob):
     """ Long blob type """
 
 
-class Text(TextType):
+class Text(tb.Final, tb.TextType):
     """ TEXT type """
 
 class TinyText(Text):
@@ -252,37 +131,14 @@ class LongText(Text):
     """ Long Text type """
 
 
-class SQLTypeWithValues(TextType):
-    """ SQL data types with optional length """
-
-    @lru_cache
-    def __class_getitem__(cls, values):
-        if not isinstance(values, tuple) and all(isinstance(v, str) for v in values): 
-            raise RuntimeError('Invalid values type.')
-        return types.new_class(
-            f'{cls.__name__}_vals_' + '_'.join(values),
-            (cls,),
-            {},
-            lambda ns: ns.update({
-                '_TYPE_VALUES_': values,
-                '__TYPE_SQL__': f'{cls.__name__}(' + ', '.join(f"'{v}'" for v in values) + ')',
-            })
-        )
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._TYPE_VALUES_:
-            raise RuntimeError('Values is not specified.')
-        return super().__new__(cls)
-
-
-class Enum(StringType, SQLTypeWithValues):
+class Enum(tb.Final, tb.SQLTypeWithValues):
     """ ENUM type """
     @classmethod
     def _validate_value(cls, v):
         return v in cls._TYPE_VALUES_
 
 
-class Set(StringType, SQLTypeWithValues):
+class Set(tb.Final, tb.SQLTypeWithValues):
     """ SET type """
     @classmethod
     def _validate_value(cls, v):
@@ -343,14 +199,11 @@ class Real(Double):
     """ Real type (alias of Double) """
 
 
-PY_DEFAULT_TYPES = {
-    bool : Bool,
-    int  : Int,
-    float: Double,
-    str  : Text,
-    bytes: Blob,
-} 
-
+tb.SQLTypeEnv.set_type_alias(bool , Bool  )
+tb.SQLTypeEnv.set_type_alias(int  , Int   )
+tb.SQLTypeEnv.set_type_alias(float, Double)
+tb.SQLTypeEnv.set_type_alias(str  , Text  )
+tb.SQLTypeEnv.set_type_alias(bytes, Blob  )
 
 
 def main():
