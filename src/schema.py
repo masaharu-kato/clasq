@@ -1,7 +1,7 @@
 """
     Database schema module
 """
-from typing import Any, Dict, Iterator, List, NewType, Optional, Union, Set, Tuple
+from typing import Any, Dict, Iterator, List, NewType, Optional, Union, Set, Tuple, Type
 import sys
 import re
 import weakref
@@ -121,7 +121,7 @@ class Column(sqe.SQLExprType):
 
     def dump(self):
         """ Dump column attributes for debug """
-        print('  - {}'.format(self.name), end='')
+        print('  - {}\t{}'.format(self.name, self.data_type), end='')
         if self.link_columns:
             print(': Links to column: ', end='')
             for column in self.link_columns:
@@ -140,7 +140,7 @@ class Table(sqe.SQLExprType):
     only_on_db    : bool                               # The only table name in the database or not
     frozen        : bool                               # Is frozen or not
 
-    def __init__(self, name:TableName, columns:Optional[List[Column]]=None):
+    def __init__(self, name:TableName, columns:Optional[List[Column]]=None, *, record_class:Optional[Type]=None):
         self.db = None
         self.name = name
         self._coldict = {column.name: column for column in columns} if columns else {}
@@ -153,6 +153,7 @@ class Table(sqe.SQLExprType):
         self.child_tables  = {}
         self.only_on_db = True
         self.frozen = False
+        self.record_class = record_class
 
     @property
     def columns(self) -> Iterator[Column]:
@@ -254,7 +255,7 @@ class Table(sqe.SQLExprType):
 
     def dump(self):
         """ Dump table attributes for debug """
-        print(f'- Table: {self.name}')
+        print(f'- Table: {self.name} ({self.record_class})')
         for column in self.columns:
             column.dump()
         
