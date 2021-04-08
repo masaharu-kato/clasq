@@ -26,7 +26,7 @@ class SQLWithParams:
         """ Append new expression(s) """
         
         if raw: # Treat as a raw SQL word
-            assert(isinstance(val, str))
+            assert isinstance(val, str)
             self._append_raw(str(val))
 
         elif callable(val): 
@@ -52,6 +52,7 @@ class SQLWithParams:
         return self
 
     def append_clause(self, clause_name:str, *vals, end:str='\n'):
+        """ Append new clause """
         if not vals:
             return self
         if vals[0] is None or (isinstance(vals[0], (tuple, list)) and not vals[0]):
@@ -111,6 +112,7 @@ class SQLWithParams:
 
     @staticmethod
     def assert_keyword(word:str) -> None:
+        """ Raise exception if word is not a valid """
         if not re.match(r'\w+', word):
             raise RuntimeError('Invalid SQL word: `{}`'.format(word))
 
@@ -152,7 +154,6 @@ class SQLExprType(expression.ExprType):
     @abstractmethod
     def __sqlout__(self, swp:SQLWithParams) -> None:
         """ (Abstract) Output to SQL """
-        pass
 
 
 class UnaryExpr(SQLExprType, expression.UnaryExpr):
@@ -177,6 +178,7 @@ class FuncExpr(SQLExprType, expression.FuncExpr):
 
 
 def sqlobj(name) -> SQLWithParamsMaker:
+    """ Treat `name` as a name of the SQL object """
     objname = str(name)
     if not re.match(r'\w+', name):
         raise RuntimeError('Invalid SQL object name: `{}`'.format(name))
@@ -184,6 +186,7 @@ def sqlobj(name) -> SQLWithParamsMaker:
 
 
 def in_bracket(*vals) -> SQLWithParamsMaker:
+    """ The bracket SQL expression """
     return lambda swp: swp.append('(', raw=True).append(*vals).append(')', raw=True)
 
 # def _joined_maker(swp:SQLWithParamsMaker, *vals, sep:str) -> SQLWithParamsMaker:
@@ -257,4 +260,3 @@ def _sql_func(name:str) -> SQLWithParamsMaker:
     if name not in keywords.FUNCS:
         raise RuntimeError('Unknown SQL function: `{}`'.format(name))
     return lambda swp: swp.append(name, raw=True)
-

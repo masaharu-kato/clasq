@@ -1,6 +1,7 @@
 """ 
     SQL text format module
 """
+
 import re
 
 _IS_DEBUG = True

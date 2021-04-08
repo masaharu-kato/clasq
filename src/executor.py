@@ -16,6 +16,8 @@ SQLLike = str
 
 
 class TableInserts:
+    """ Table insertion utility class """
+
     def __init__(self, sqexec:'SQLExecutor', tablename:str, colnames:Optional[List[str]] = None):
         self.sqexec = sqexec
         self.tablename = tablename
@@ -23,6 +25,7 @@ class TableInserts:
         self.records = []
 
     def reset(self):
+        """ Reset data """
         self.colnames = None
         self.records = []
 
