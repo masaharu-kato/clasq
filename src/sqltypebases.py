@@ -6,6 +6,7 @@ from . import record
 
 
 def is_child_class(target, base):
+    """ Check if the target type is a subclass of the base type and not base type itself """
     return issubclass(target, base) and target is not base
 
 
@@ -27,11 +28,12 @@ def _int_value_type(v:int):
 
 class SQLType:
     """ SQL data types """
-    _PY_TYPE_      : typing.Optional[typing.Type] = None # Corresponding python type
-    __TYPE_SQL__   : typing.Optional[str]  = None # Code of this type in SQL. Specify None if it is the same as the class name
-    _TYPE_HAS_DEFAULT_ : bool = True # Type has a default value
-    _TYPE_DEFAULT_VALUE_ : typing.Any = None # Type's default value (if has)
-    _TYPE_COMMENT_ : str = None # Type's comment
+    _PY_TYPE_            : typing.Optional[typing.Type] = None # Corresponding python type
+    __TYPE_SQL__         : typing.Optional[str]  = None # Code of this type in SQL. Specify None if it is the same as the class name
+    _TYPE_HAS_DEFAULT_   : bool = True # Type has a default value
+    _TYPE_DEFAULT_VALUE_ : typing.Optional[typing.Any] = None # Type's default value (if has)
+    _TYPE_COMMENT_       : typing.Optional[str] = None # Type's comment
+    _TYPE_FOREIGN_KEY_   : typing.Optional[str] = None
 
     def __init__(self, v):
         self.v = v
@@ -62,7 +64,7 @@ class SQLType:
         """ Set/clear default value """
         if len(args) > 1:
             raise RuntimeError('Cannot specify multiple arguments.')
-        if len(args):
+        if args:
             cls._TYPE_HAS_DEFAULT_ = True
             cls._TYPE_DEFAULT_VALUE_ = args[0]
         else:
@@ -90,6 +92,15 @@ class SQLType:
     def get_comment(cls):
         """ Get comment """
         return cls._TYPE_COMMENT_
+
+    @classmethod
+    def get_foreign_key(cls):
+        """ Get foreign key if exists """
+        return cls._TYPE_FOREIGN_KEY_
+
+    @classmethod
+    def has_foreign_key(cls) -> bool:
+        return bool(cls._TYPE_FOREIGN_KEY_)
 
 
 
@@ -294,6 +305,7 @@ class SQLTypeEnv:
 
     @classmethod
     def is_compatible_column_type(cls, t):
+        """ Check if `t` is a compatible column type or not """
         if cls._is_typing_type(t):
             return cls._is_typing_optional(t) and cls.is_compatible_column_type(cls._typing_basetype(t))
         return is_child_class(t, SQLType) or is_child_class(t, Record) or t in cls.type_aliases
@@ -373,6 +385,7 @@ class ForeignTableKey(Final, SQLTypeWithType):
             (Int,),
             _TYPE_BASE_  = t,
             __TYPE_SQL__ = Int.__type_sql__(),
+            _TYPE_FOREIGN_KEY_ = t,
         )
 
 

@@ -1,18 +1,19 @@
-from copy import copy
-from typing import Optional, Sequence
+""" 
+    SQL expressions module
+"""
+
 from abc import abstractmethod
 
-class _Unspecified:
-    pass
-_UNSPECIFIED = _Unspecified()
-
-
 class ExprABC:
+    """ Expression Abstract class """
 
-    def op(self, op, y=_UNSPECIFIED):
-        if isinstance(y, _Unspecified):
-            return self.uop(op)
-        return self.bop(op, y)
+    def op(self, *args): # 1st: op, 2nd: y (optional)
+        """ Get unary or binary expression """
+        if len(args) > 2:
+            raise RuntimeError('Too many arguments.')
+        if len(args) == 2:
+            return self.uop(args[0])
+        return self.bop(args[0], args[1])
 
     @abstractmethod
     def uop(self, op):
@@ -35,15 +36,19 @@ class ExprType(ExprABC):
     """ Expression abstract class """
 
     def uop(self, op):
+        """ Get unary expression """ 
         return UnaryExpr(op, self)
 
     def bop(self, op, y):
+        """ Get binary expression """ 
         return BinaryExpr(op, self, y)
 
     def rbop(self, op, y):
+        """ Get reversed binary expression """ 
         return BinaryExpr(op, y, self)
 
     def infunc(self, name, *args):
+        """ Get in-function expression """ 
         return FuncExpr(name, self, *args)
 
 

@@ -11,36 +11,45 @@ NotNull = tb.NotNull
 PrimaryKey = tb.PrimaryKey
 
 class TinyInt(tb.Final, tb.IntegerType):
+    """ TINTINT type """
     _MIN_VALUE_ = -2**7
     _MAX_VALUE_ = 2**7-1
     
 class SmallInt(tb.Final, tb.IntegerType):
+    """ SMALLINT type """
     _MIN_VALUE_ = -2**15
     _MAX_VALUE_ = 2**15-1
     
 class MediumInt(tb.Final, tb.IntegerType):
+    """ MEDIUMINT type """
     _MIN_VALUE_ = -2**23
     _MAX_VALUE_ = 2**23-1
 
 Int = tb.Int
 
 class BigInt(tb.Final, tb.IntegerType):
+    """ BIGINT type """
     _MIN_VALUE_ = -2**63
     _MAX_VALUE_ = 2**63-1
 
 class UnsignedTinyInt(tb.Final, tb.UnsignedIntegerType):
+    """ Unsigned TINYINT type """
     _MAX_VALUE_ = 2**8-1
     
 class UnsignedSmallInt(tb.Final, tb.UnsignedIntegerType):
+    """ Unsigned SMALLINT type """
     _MAX_VALUE_ = 2**16-1
     
 class UnsignedMediumInt(tb.Final, tb.UnsignedIntegerType):
+    """ Unsigned MEDIUMINT type """
     _MAX_VALUE_ = 2**24-1
 
 class UnsignedInt(tb.Final, tb.UnsignedIntegerType):
+    """ Unsigned INT type """
     _MAX_VALUE_ = 2**32-1
 
 class UnsignedBigInt(tb.Final, tb.UnsignedIntegerType):
+    """ Unsigned BIGINT type """
     _MAX_VALUE_ = 2**64-1
 
 class Unsigned(tb.SQLType):

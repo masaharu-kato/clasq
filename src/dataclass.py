@@ -40,7 +40,6 @@ class Record(stb.Record):
             cn: stb.SQLTypeEnv.actual_type(ct, ensure_nullable=True)
             for cn, ct in cls._raw_column_types().items()
         }
-    
 
     @classmethod
     @lru_cache
@@ -55,25 +54,12 @@ class Record(stb.Record):
                     not_null = issubclass(coltype, st.NotNull),
                     is_primary = issubclass(coltype, st.PrimaryKey),
                     comment = coltype.get_comment(),
-                    link_column_refs = [], # TODO: Imp
+                    link_column_refs = [coltype.get_foreign_key()._tablename()] if coltype.has_foreign_key() else None,
                 )
                 for colname, coltype in cls._column_types().items()
             ],
             record_class = cls
         )
-
-    @classmethod
-    @lru_cache
-    def _create_table_sql(cls, *, exist_ok:bool=True) -> str:
-        """ Get create table SQL """
-        sql = ''
-        if exist_ok:
-            sql = f'DROP TABLE IF EXISTS `{cls._tablename()}`;\n'
-        sql += f'CREATE TABLE `{cls._tablename()}`(\n' + ',\n'.join(
-            f'  `{colname}` {coltype.__type_sql__()}'
-            for colname, coltype in cls._column_types().items()
-        ) + '\n)'
-        return sql
 
 
     def __init__(self, dv, *args, **kwargs):
@@ -143,5 +129,6 @@ class Database:
         """ Get all create table sqls in a specified module """
         return schema.Database(
             cls.dbname(),
-            [reccls._table() for reccls in cls.tables()]
+            [reccls._table() for reccls in cls.tables()],
+            finalize=True
         )
