@@ -27,7 +27,7 @@ class Record(stb.Record):
         for name, t in get_type_hints(cls).items():
             if not name or name[0] == '_':
                 continue
-            if not stb.SQLTypeEnv.is_compatible_type(t):
+            if not stb.SQLTypeEnv.is_compatible_column_type(t):
                 raise RuntimeError('Type of column `{}` ({}) is not compatible.'.format(name, t))
             coltypes[name] = t
         return coltypes
@@ -104,32 +104,44 @@ class Record(stb.Record):
 
     @property
     def _tables(self) -> DataView:
-        NotImplemented
-        # return self._raw_tables[self._table == self._id]
+        return self._raw_tables[self._table == self._id]
     
 
 class RootRecord(Record):
+    """ Root record (for common columns) """
+
+
+class Database:
     __dbname__ : Optional[str] = None
 
     @classmethod
     @lru_cache
-    def _dbname(cls):
+    def dbname(cls):
         """ Get database name of this record class """
         return cls.__dbname__ or 'db_' + cls.__name__.split('.')[-1].lower()
 
     @classmethod
     @lru_cache
-    def get_record_classes(cls):
-        """ Get all record classes in a specified module (python script file) """
-        for subclass in cls.__subclasses__():
-            assert issubclass(subclass, RootRecord)
-            yield subclass
+    def table_by_names(cls) -> Dict[str, Type]:
+        """ Get list of table name and types """
+        tbltypes = {}
+        for name, t in get_type_hints(cls).items():
+            if not name or name[0] == '_':
+                continue
+            if not stb.SQLTypeEnv.is_compatible_table_type(t):
+                raise RuntimeError('Type of table `{}` ({}) is not compatible.'.format(name, t))
+            tbltypes[name] = stb.SQLTypeEnv.table_basetype(t)
+        return tbltypes
+
+    @classmethod
+    def tables(cls) -> List[Type]:
+        return list(tbltypes.values())
 
     @classmethod
     @lru_cache
     def _db(cls) -> schema.Database:
         """ Get all create table sqls in a specified module """
         return schema.Database(
-            cls._dbname(),
-            [reccls._table() for reccls in cls.get_record_classes()]
+            cls.dbname(),
+            [reccls._table() for reccls in cls.tables()]
         )

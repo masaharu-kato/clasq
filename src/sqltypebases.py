@@ -265,16 +265,25 @@ class SQLTypeEnv:
         if typing.get_origin(t) is typing.Union:
             tpargs = typing.get_args(t)
             return len(tpargs) == 2 and tpargs[1] is type(None)
+        return False
 
     @staticmethod
-    def _typing_optional_basetype(t):
+    def _is_typing_list(t):
+        return typing.get_origin(t) is typing.List
+
+    @staticmethod
+    def _typing_basetype(t):
         return t.__args__[0]
+
+    @staticmethod
+    def _typing_basetypes(t):
+        return t.__args__
 
     @classmethod
     def actual_type(cls, t, *, ensure_nullable:bool=False):
         """ Get an actual type (subclass of SQLType) of a given type """
         if cls._is_typing_optional(t):
-            return cls.actual_type(cls._typing_optional_basetype(t), ensure_nullable=False)
+            return cls.actual_type(cls._typing_basetype(t), ensure_nullable=False)
         if is_child_class(t, Record):
             return ForeignTableKey[t]
         if t in cls.type_aliases:
@@ -284,10 +293,18 @@ class SQLTypeEnv:
         return t
 
     @classmethod
-    def is_compatible_type(cls, t):
+    def is_compatible_column_type(cls, t):
         if cls._is_typing_type(t):
-            return cls._is_typing_optional(t)
+            return cls._is_typing_optional(t) and cls.is_compatible_column_type(cls._typing_basetype(t))
         return is_child_class(t, SQLType) or is_child_class(t, Record) or t in cls.type_aliases
+
+    @classmethod
+    def is_compatible_table_type(cls, t):
+        return cls._is_typing_type(t) and cls._is_typing_list(t) and is_child_class(cls.table_basetype(t), Record)
+
+    @classmethod
+    def table_basetype(cls, t):
+        return cls._typing_basetype(t)
 
     @classmethod
     def type_sql(cls, t) -> str:
