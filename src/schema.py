@@ -37,7 +37,7 @@ def database_from_ddls(ddlstext:str) -> 'Database':
             ]
         ))
 
-    return Database(dbname, tables, final=True)
+    return Database(dbname, tables, finalize=True)
 
 
 TableName  = NewType('TableName', str)

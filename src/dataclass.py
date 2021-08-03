@@ -1,6 +1,6 @@
 """ Data record module """
 
-from typing import get_type_hints, Type, Dict, Optional
+from typing import List, get_type_hints, Type, Dict, Optional
 from functools import lru_cache
 from .view import DataView
 from . import sqltypebases as stb

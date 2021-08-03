@@ -2,7 +2,7 @@
 import types
 import typing
 from functools import lru_cache
-from . import record
+from . import dataclass
 
 
 def is_child_class(target, base):
@@ -379,7 +379,7 @@ class ForeignTableKey(Final, SQLTypeWithType):
     @classmethod
     @lru_cache
     def __class_getitem__(cls, t):
-        assert issubclass(t, record.Record)
+        assert issubclass(t, dataclass.Record)
         return cls.new_subclass(
             f'FK__{t.__name__}',
             (Int,),

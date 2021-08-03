@@ -18,7 +18,7 @@ SQLLike = str
 class TableInserts:
     """ Table insertion utility class """
 
-    def __init__(self, sqexec:'SQLExecutor', tablename:str, colnames:Optional[List[str]] = None):
+    def __init__(self, sqexec:'QueryExecutor', tablename:str, colnames:Optional[List[str]] = None):
         self.sqexec = sqexec
         self.tablename = tablename
         self.colnames = colnames
