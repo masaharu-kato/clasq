@@ -165,20 +165,26 @@ class _LinkTable:
 
 class Table(sqe.SQLExprType):
     """ Table schema class """
-    db: 'Database'                          # parent database object
-    name: str                               # table name
+    db          : 'Database'                # parent database object
+    name        : str                       # table name
     _coldict    : Dict[ColumnName, Column]  # dict of own columns (column name -> column object)
     _keycol     : Column                    # primary key column
     link_tables : Dict['Table', _LinkTable] # linked tables
     only_on_db  : bool                      # The only table name in the database or not
     frozen      : bool                      # Is frozen or not
 
-    def __init__(self, name:TableName, columns:Optional[List[Column]]=None, *, record_class:Optional[Type]=None):
+    def __init__(self,
+        table_name   : TableName,
+        columns      : Optional[List[Column]] = None,
+        *,
+        record_class : Optional[Type] = None
+    ):
+        assert columns is None or all(isinstance(c, Column) for c in columns)
+
         self.db = None
-        self.name = name
-        # print('Table', self.name)
+        self.name = table_name
         self._coldict = {column.name: column for column in columns} if columns else {}
-        assert all(isinstance(c, Column) for c in self._coldict.values())
+
         _keycols = [col for col in self._coldict.values() if col.is_primary]
         if len(_keycols) > 1:
             raise RuntimeError('Multiple primary keys.')
@@ -322,11 +328,17 @@ class Database(sqe.SQLExprType):
     _coldict: Dict[ColumnName, List[Column]]
     frozen: bool
 
-    def __init__(self, name:str, tables:Optional[List[Table]]=None, *, finalize:bool=False):
-        self.name = name
+    def __init__(self,
+        database_name : str,
+        tables        : Optional[List[Table]] = None,
+        *,
+        finalize      : bool = False
+    ):
+        assert tables is None or all(isinstance(t, Table) for t in tables)
+
+        self.name = database_name
         self._tbldict = {table.name: table for table in tables} if tables else {}
         self._coldict = {}
-        assert all(isinstance(t, Table) for t in self._tbldict.values())
         self.frozen = False
         if finalize:
             self.finalize()

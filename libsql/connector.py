@@ -28,8 +28,8 @@ class MySQLConnection(DBConnectionABC):
 
     def __init__(self, *args, dictionary:bool=False, named_tuple:bool=False, db_schema:Optional[DBSchema]=None, **kwargs):
         super().__init__()
-        self.cnx = mysql.connector.connect(*args, **kwargs)
-        self.db_schema = db_schema
+        self.cnx         = mysql.connector.connect(*args, **kwargs) # MySQL connection 
+        self.db_schema   = db_schema   # 
         self.cursor_dict = dictionary
         self.cursor_ntpl = named_tuple
 

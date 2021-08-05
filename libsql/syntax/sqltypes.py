@@ -1,4 +1,6 @@
-""" SQL build-in data types """
+"""
+    Definitions of built-in data types in SQL
+"""
 import typing
 import datetime
 from functools import lru_cache
@@ -221,27 +223,3 @@ tb.SQLTypeEnv.set_type_alias(datetime.date, Date)
 tb.SQLTypeEnv.set_type_alias(datetime.time, Time)
 tb.SQLTypeEnv.set_type_alias(datetime.datetime, DateTime)
 
-
-def main():
-    """ Debug """
-
-    vi = Int(25)
-    print(vi)
-
-    vchars = [
-        VarChar[64]('hogefuga'),
-        VarChar[32]('piyofoo'),
-        VarChar[32]('baaaa'),
-        VarChar[64]('efwaw'),
-        # VarChar('awfefwea'),
-        # VarChar('bbb'),
-        Text[128]('hogefugapiyopiyo'),
-        Text('afefwefjbifjawe32'),
-    ]
-
-    for i, vc in enumerate(vchars, 1):
-        print(i, type(vc), id(type(vc)), vc.__type_sql__(), id(vc), vc)
-
-
-if __name__ == '__main__':
-    main()

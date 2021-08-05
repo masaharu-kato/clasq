@@ -1,4 +1,6 @@
-""" SQL build-in data types """
+"""
+    Basic classes definitions for built-in data types in SQL
+"""
 import types
 import typing
 from functools import lru_cache

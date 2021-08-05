@@ -1,4 +1,6 @@
-""" SQL Expressions module """
+"""
+    SQL expressions module
+"""
 from abc import abstractmethod
 import re
 from typing import Any, Callable, List, Sequence, Optional
