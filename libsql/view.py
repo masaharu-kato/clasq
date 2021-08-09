@@ -3,13 +3,10 @@
 """
 
 from typing import Any, Dict, List, Sequence, Optional, Union, Tuple, NewType
-from . import fmt
-from . import schema
-from . import sqlexpr as sqe
-from . import expression
-from . import executor
-from itertools import chain
 
+from . import schema
+from .syntax import sql_expression as sqlex
+from . import executor
 
 ColumnName = schema.ColumnName
 ColumnLike = Union[schema.Column, ColumnName]
@@ -20,8 +17,7 @@ JoinType = NewType('JoinType', str)
 OrderType = NewType('OrderType', str)
 COp = NewType('COp', str) # SQL comparison operator type
 
-
-class DataView(sqe.SQLExprType):
+class DataView(sqlex.SQLExprType):
     """ Data-view class
         e.g. 
         dv = DataView(...)
@@ -57,10 +53,10 @@ class DataView(sqe.SQLExprType):
 
         self._table    : Optional[TableLike]                    = None
         self._joins    : Sequence[TableLike]                    = []
-        self._colexprs : Sequence[expression.ExprType]          = []
-        self._terms    : Optional[expression.ExprType]          = None
+        self._colexprs : Sequence[sqlex.ExprType]          = []
+        self._terms    : Optional[sqlex.ExprType]          = None
         self._groups   : Sequence[Union[ColumnLike, TableLike]] = []
-        self._orders   : Sequence[expression.ExprType]          = []
+        self._orders   : Sequence[sqlex.ExprType]          = []
         self._limit    : Optional[int]                          = None
         self._offset   : Optional[int]                          = None
 
@@ -94,33 +90,33 @@ class DataView(sqe.SQLExprType):
         """ Generate a new view instance with table joined with other tables """
         return self.new(self._table, *self._joins, *tables)
 
-    def where(self, *exprs):
+    def where(self, *exprs) -> 'DataView':
         """ Append terms """
         for expr in exprs:
             self._terms = expr if self._terms is None else self._terms & expr
         return self
 
-    def column(self, *colexprs):
+    def column(self, *colexprs) -> 'DataView':
         """ Add extra column """
         self._colexprs.extend(colexprs)
         return self
 
-    def group(self, *columns:Union[ColumnLike, TableLike]):
+    def group(self, *columns:Union[ColumnLike, TableLike]) -> 'DataView':
         """ Append group column(s) or table(s) """
         self._groups.extend(columns)
         return self
 
-    def orders(self, *colexprs):
+    def orders(self, *colexprs) -> 'DataView':
         """ Append order(s) """
         self._orders.extend(colexprs)
         return self
 
-    def limit(self, limit:Optional[int]):
+    def limit(self, limit:Optional[int]) -> 'DataView':
         """ Set limit """
         self._limit = limit
         return self
 
-    def offset(self, offset:Optional[int]):
+    def offset(self, offset:Optional[int]) -> 'DataView':
         """ Set offset """
         self._offset = offset
         return self
@@ -133,12 +129,12 @@ class DataView(sqe.SQLExprType):
     #     self._join_child_tables = True
     #     return self
 
-    def term(self, l, op, r):
+    def term(self, l, op, r) -> 'DataView':
         """ Append term for WHERE clause """
         lexpr = l if isinstance(l, sqe.SQLExprType) else self.db.column(l)
         return self.where(sqe.BinaryExpr(op, lexpr, r))
 
-    def eq(self, table:TableLike, **kwargs):
+    def eq(self, table:TableLike, **kwargs) -> 'DataView':
         """ Append equal terms on WHERE clause """
         table = self.db.table(table)
         for column_name, value in kwargs.items():
@@ -152,7 +148,7 @@ class DataView(sqe.SQLExprType):
 
     def __getitem__(self, key):
         """ Append various terms """
-        if isinstance(key, sqe.SQLExprType):
+        if isinstance(key, sqlex.SQLExprType):
             return self.where(key)
 
         if isinstance(key, slice):
@@ -169,18 +165,18 @@ class DataView(sqe.SQLExprType):
 
         raise TypeError('Unexpected type.')
 
-    def execute(self):
+    def execute(self) -> 'DataView':
         """ Execute SQL """
         self._result = self.qe.query(self.sql_with_params)
         return self
 
-    def prepare(self):
+    def prepare(self) -> 'DataView':
         """ Prepare result (Execute SQL if not executed yet) """
         if self._result is None:
             self.execute()
         return self
 
-    def refresh(self):
+    def refresh(self) -> 'DataView':
         """ Re-execute SQL """
         return self.execute()
 
@@ -222,12 +218,10 @@ class DataView(sqe.SQLExprType):
         raise NotImplementedError()
 
 
-    def __sqlout__(self, swp:sqe.SQLWithParams) -> None:
+    def sql_with_params(self) -> Tuple[str, list]:
         """ Generate SQL and parameters to SQLWithParams object """
 
-        print('id(swp)=', id(swp))
-
-        if not self._table:
+        if self._table is None:
             raise RuntimeError('Table is not set.')
 
         # clarify target columns
@@ -237,31 +231,35 @@ class DataView(sqe.SQLExprType):
         for colexpr in self._colexprs:
             target_columns.append(self.db.column(colexpr))
 
+        sql, params = '', []
+
+        def append_clause(self, clause_name:str, *vals, end:str='\n'):
+            """ Append new clause """
+            nonlocal sql, params
+            if vals[0] is None or (isinstance(vals[0], (tuple, list)) and not vals[0]):
+                return self
+            csql, cparams = sqlex.sql_with_params(sqlex.RawExpr(clause_name), *vals, end=end)
+            sql += csql
+            params.extend(cparams)
+
         # construct query
-        swp.append_clause('SELECT', [sqe.col_opt_as(col, col.opt_unique_alias()) for col in target_columns])
-        swp.append_clause('FROM'  , self._table)
+        append_clause('SELECT', [(col, sqlex.RawExpr('AS'), sqlex.QuotedName(col.unique_alias())) for col in target_columns])
+        append_clause('FROM'  , self._table)
 
         for table, (lcol, rcol) in self._joins:
-            swp.append_clause(('INNER' if lcol.not_null and rcol.not_null else 'LEFT') + ' JOIN', table, end='')
-            swp.append_clause('ON', lcol == rcol)
+            append_clause(('INNER' if lcol.not_null and rcol.not_null else 'LEFT') + ' JOIN', table, end=' ')
+            append_clause('ON', lcol == rcol)
 
-        swp.append_clause('WHERE'   , self._terms)
-        swp.append_clause('GROUP BY', self._groups)
-        swp.append_clause('ORDER BY', [sqe.ordered_column(order) for order in self._orders])
-        swp.append_clause('LIMIT'   , self._limit)
-        swp.append_clause('OFFSET'  , self._offset)
+        append_clause('WHERE'   , self._terms)
+        append_clause('GROUP BY', self._groups)
+        append_clause('ORDER BY', [
+            (colexpr, sqlex.RawExpr('DESC' if isinstance(colexpr, sqlex.UnaryExpr) and colexpr.op == '-' else 'ASC'))
+            for colexpr in self._orders
+        ])
+        append_clause('LIMIT'   , self._limit)
+        append_clause('OFFSET'  , self._offset)
         
-        #print(swp.sql, 'params:', swp.params)
-        #print('')
-
-    @property
-    def sql_with_params(self, default_swp:Optional[sqe.SQLWithParams]=None) -> sqe.SQLWithParams:
-        """ Generate and get SQL and parameters """
-        swp = sqe.SQLWithParams() if default_swp is None else default_swp
-        # print('generated id(swp)=', id(swp))
-        swp.append(self)
-        # print(swp.sql, swp.params)
-        return swp
+        return sql, params
 
 
 # @staticmethod

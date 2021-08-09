@@ -7,23 +7,10 @@ import mysql.connector
 from .executor import QueryExecutor
 from .schema import Database as DBSchema
 
-CursorABC = mysql.connector.abstracts.MySQLCursorAbstract
+MySQLCursorABC = mysql.connector.abstracts.MySQLCursorAbstract
 
 
-class DBConnectionABC(metaclass=ABCMeta):
-    """ SQL Connection Abstract Class """
-
-    @abstractmethod
-    def cursor(self, *args, **kwargs):
-        """ Get database cursor """
-        raise NotImplementedError()
-
-    def executor(self, *args, **kwargs) -> QueryExecutor:
-        """ Get libsql database executor """
-        return QueryExecutor(self.cursor(*args, **kwargs))
-
-
-class MySQLConnection(DBConnectionABC):
+class MySQLConnection:
     """ MySQL Connection Class """
 
     def __init__(self, *args, dictionary:bool=False, named_tuple:bool=False, db_schema:Optional[DBSchema]=None, **kwargs):
@@ -37,7 +24,7 @@ class MySQLConnection(DBConnectionABC):
         """ Commit changes """
         return self.cnx.commit()
 
-    def cursor(self, *args, **kwargs) -> 'MySQLCursor':
+    def create_cursor(self, *args, **kwargs) -> 'MySQLCursor':
         """ Get cursor object """
         if self.cursor_dict:
             kwargs['dictionary'] = True
@@ -58,16 +45,10 @@ class MySQLConnection(DBConnectionABC):
 
 class MySQLCursor:
     """ Basic MySQL Cursor (with parent `MySQLConnection` instance) """
-    def __init__(self, con:MySQLConnection, cursor:CursorABC):
+    def __init__(self, con:MySQLConnection, cursor:MySQLCursorABC):
         self.con = con
         self.cursor = cursor
 
     # def __getattr__(self, name:str):
     #     """ Call method or get property on cursor object """
     #     return getattr(self.cursor, name)
-
-# class DebugSQLConnection(DBConnectionABC):
-#     """ Virtual Database Connection for Debugging """
-
-#     def cursor(self, *args, **kwargs):
-#         return DebugDBCursor(*args, **kwargs)

@@ -4,7 +4,7 @@ import os
 import sys
 import subprocess
 from dbconfig import ROOT_DIR, DBCFG
-from libsql.cursor import CommandCursor
+from libsql.cursor import MySQLCommandCursor
 from libsql.connector import SQLExecutor
 
 _DB_USERS_ = ['admin', 'loader', 'viewer']
@@ -12,7 +12,7 @@ _DB_USERS_ = ['admin', 'loader', 'viewer']
 def create_sample_db(*, debug_dump:bool=False) -> None:
     """ Create (or recreate) database itself and users """
 
-    with SQLExecutor(CommandCursor(['mysql'], debug_dump=(sys.stderr if debug_dump else None))) as exr:
+    with SQLExecutor(MySQLCommandCursor(['mysql'], debug_dump=(sys.stderr if debug_dump else None))) as exr:
         exr.recreate_database(DBCFG['server']['databasename'])
         exr.use_database(DBCFG['server']['databasename'])
 

@@ -264,36 +264,36 @@ class SQLTypeEnv:
         raise RuntimeError('This class cannot be initialized.')
 
     @classmethod
-    def set_type_alias(cls, tf:typing.Type, tt:typing.Type):
+    def set_type_alias(cls, tf:typing.Type, tt:typing.Type) -> None:
         """ Set an alias type of a given type """
         assert is_child_class(tt, SQLType)
         cls.type_aliases[tf] = tt
 
     @staticmethod
-    def _is_typing_type(t):
+    def _is_typing_type(t) -> bool:
         return typing.get_origin(t) is not None
 
     @staticmethod
-    def _is_typing_optional(t):
+    def _is_typing_optional(t) -> bool:
         if typing.get_origin(t) is typing.Union:
             tpargs = typing.get_args(t)
             return len(tpargs) == 2 and tpargs[1] is type(None)
         return False
 
     @staticmethod
-    def _is_typing_list(t):
+    def _is_typing_list(t) -> bool:
         return typing.get_origin(t) is typing.List
 
     @staticmethod
-    def _typing_basetype(t):
+    def _typing_basetype(t) -> typing.Type:
         return t.__args__[0]
 
     @staticmethod
-    def _typing_basetypes(t):
+    def _typing_basetypes(t) -> typing.List[typing.Type]:
         return t.__args__
 
     @classmethod
-    def actual_type(cls, t, *, ensure_nullable:bool=False):
+    def actual_type(cls, t, *, ensure_nullable:bool=False) -> typing.Type:
         """ Get an actual type (subclass of SQLType) of a given type """
         if cls._is_typing_optional(t):
             return cls.actual_type(cls._typing_basetype(t), ensure_nullable=False)
@@ -306,19 +306,23 @@ class SQLTypeEnv:
         return t
 
     @classmethod
-    def is_compatible_column_type(cls, t):
+    def is_compatible_column_type(cls, t) -> bool:
         """ Check if `t` is a compatible column type or not """
         if cls._is_typing_type(t):
             return cls._is_typing_optional(t) and cls.is_compatible_column_type(cls._typing_basetype(t))
         return is_child_class(t, SQLType) or is_child_class(t, Record) or t in cls.type_aliases
 
     @classmethod
-    def is_compatible_table_type(cls, t):
+    def is_compatible_table_type(cls, t) -> bool:
+        """ Check if the type specified in the type hint is vaild """
         return cls._is_typing_type(t) and cls._is_typing_list(t) and is_child_class(cls.table_basetype(t), Record)
 
     @classmethod
-    def table_basetype(cls, t):
-        return cls._typing_basetype(t)
+    def table_basetype(cls, t) -> typing.Type[Record]:
+        """ Get the original table type from the type hint """
+        _t = cls._typing_basetype(t)
+        assert is_child_class(_t, Record)
+        return _t
 
     @classmethod
     def type_sql(cls, t) -> str:

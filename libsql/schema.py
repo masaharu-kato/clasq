@@ -1,43 +1,43 @@
 """
     Database schema module
 """
+from abc import abstractmethod
 from typing import Any, Dict, Iterator, List, NewType, Optional, Union, Set, Sequence, Tuple, Type
 import sys
 import re
 import weakref
+from .syntax.sql_expression import SQLExprType
 
 import sqlparse
 import ddlparse
 
-from . import sqlexpr as sqe
+_IS_DEBUG = True
 
+def asobj(_objname) -> str:
+    """ Format single object name """
+    name = str(_objname)
+    if _IS_DEBUG:
+        if '`' in name:
+            raise RuntimeError('Invalid character(s) found in the object name.')
+    return '`' + name + '`'
 
-def database_from_ddls(ddlstext:str) -> 'Database':
-    """ Create this object by ddl text (CREATE TABLE sql texts) """
-    ddltexts = sqlparse.split('\n'.join(l for l in ddlstext.splitlines() if not re.match(r'^\s*\-\-', l)))
-    dbname = (re.match(r'^\s*USE\s+`?(\w+)`?', ddltexts[0], re.IGNORECASE) or [None, None])[1]
-    tables = []
+def joinobjs(*objs) -> str:
+    return '.'.join(objs)
 
-    for ddltext in ddltexts:
-        if not re.match(r'^\s*CREATE TABLE.*\(', ddltext):
-            continue
-        ddlparser = ddlparse.DdlParse(ddltext)
-        ddl = ddlparser.parse()
-        tables.append(Table(
-            ddl.name, [
-                Column(
-                    dcol.name,
-                    dcol.data_type,
-                    not_null = dcol.not_null,
-                    is_primary = dcol.primary_key,
-                    default = dcol.default,
-                    comment = dcol.comment,
-                    link_column_refs = [ColumnRef(dcol.fk_ref_table, dcol.fk_ref_column)] if dcol.foreign_key else None,
-                ) for dcol in ddl.columns.values()
-            ]
-        ))
+class SQLSchemaObjABC(SQLExprType):
+    """ SQL Schema object abstract class """
 
-    return Database(dbname, tables, finalize=True)
+    @abstractmethod
+    def __hash__(self) -> int:
+        """ Get the hash value """
+    
+    @abstractmethod
+    def sql(self) -> str:
+        """ Get SQL expression of this schema object """
+
+    def sql_with_params(self) -> Tuple[str, List]:
+        """ Output sql and its placeholder parameters """
+        return self.sql(), []
 
 
 TableName  = NewType('TableName', str)
@@ -65,93 +65,58 @@ class ColumnRef:
 
     def __repr__(self):
         if self.column_name is None:
-            return f'<ColumnRef `{self.table_name}`.(key)>'
-        return f'<ColumnRef `{self.table_name}`.`{self.column_name}`>'
+            return '<ColumnRef `%s`.(key)>' % self.table_name
+        return '<ColumnRef `%s`.`%s`>' % (self.table_name, self.column_name)
 
 
-class Column(sqe.SQLExprType):
+class Column(SQLSchemaObjABC):
     """ Column schema class """
-    name             : str
-    data_type        : str
-    not_null         : bool
-    is_primary       : bool
-    default          : Any
-    comment          : str
-    link_column_refs : List[ColumnRef]
-    table            : 'Table'         # parent table object
-    link_columns     : Set['Column']
-    only_on_db       : bool            # The only table name in the database or not
-    frozen           : bool
 
     def __init__(self,
         name:str, data_type:str, *, not_null:bool = False, is_primary:bool = False, default:Any = None,
         comment:Optional[str] = None, link_column_refs:Optional[Sequence[Union[ColumnRef, tuple, str]]] = None
     ):
+        assert isinstance(name, str)
+        assert isinstance(data_type, str)
+        assert isinstance(not_null, bool)
+        assert isinstance(is_primary, bool)
+        self.table:Optional[Table] = None
         self.name = name
         self.data_type = data_type
         self.not_null = not_null
         self.is_primary = is_primary
-        self.default = default
+        self.default_value = default
         self.comment = comment
-        self.frozen = False
         self.link_column_refs = [] if link_column_refs is None else [ColumnRef.from_tuple(cref) for cref in link_column_refs]
-        # print(self, self.link_column_refs)
         self.link_columns = {}
         self.only_on_db = False
 
-    def finalize(self, table:'Table'):
-        """ Resolve references in link columns """
+    def _set_table_and_finalize(self, table:'Table') -> None:
+        """ Set the parent table and finalize (resolve references in self.link columns) """
         assert isinstance(table, Table)
         self.table = table
         self.link_columns = weakref.WeakSet(self.table.db.get_column_by_ref(cref) for cref in self.link_column_refs)
-        self.frozen = True
 
     def unique_alias(self) -> str:
         """ Get a unique alias on the database """
+        assert self.table is not None
         if self.only_on_db:
             return self.name
         return self.table.name + '.' + self.name
 
-    def opt_unique_alias(self) -> Optional[str]:
-        """ Get a unique alias on the database if it is needed """
-        alias = self.unique_alias()
-        if self.name == alias:
-            return None
-        return alias
+    def __repr__(self) -> str:
+        if self.table is None:
+            return '<Column ???.`%s`>' % self.name
+        return '<Column `%s`.`%s`>' % (self.table.name, self.name)
 
-    def __repr__(self):
-        if not self.frozen:
-            return f'<Column ???.`{self.name}`>'
-        return f'<Column `{self.table.name}`.`{self.name}`>'
-
-    def __hash__(self):
+    def __hash__(self) -> int:
+        assert self.table is not None
         return hash((hash(self.table), self.name))
 
-    def vrepr(self):
-        """ Dump the details of this column """
-        return repr((self.name, self.data_type, self.link_columns))
-
-    def __str__(self) -> str:
-        if not self.frozen:
-            return f'???.{self.name}'
-        return f'{self.table.name}.{self.name}'
-
     def sql(self, *, table:bool=True) -> str:
-        return (f'`{self.table.name}`.' if table else '') + f'`{self.name}`'
-
-    def __sqlout__(self, swp:sqe.SQLWithParams):
-        if not self.only_on_db:
-            swp.append(self.table).append('.', raw=True)
-        return swp.append(sqe.sqlobj(self.name))
-
-    def dump(self):
-        """ Dump column attributes for debug """
-        print('  - {}\t{}'.format(self.name, self.data_type), end='')
-        if self.link_columns:
-            print(': Links to column: ', end='')
-            for column in self.link_columns:
-                print(column.table.name + '.' + column.name, end=' ')
-        print('')
+        """ Get SQL expression of this column """
+        assert self.table is not None
+        return joinobjs(self.table.sql(), asobj(self.name))
 
 
 class _LinkTable:
@@ -163,36 +128,33 @@ class _LinkTable:
         self.is_parent = is_parent
 
 
-class Table(sqe.SQLExprType):
-    """ Table schema class """
-    db          : 'Database'                # parent database object
-    name        : str                       # table name
-    _coldict    : Dict[ColumnName, Column]  # dict of own columns (column name -> column object)
-    _keycol     : Column                    # primary key column
-    link_tables : Dict['Table', _LinkTable] # linked tables
-    only_on_db  : bool                      # The only table name in the database or not
-    frozen      : bool                      # Is frozen or not
+class Table(SQLSchemaObjABC):
+    """ Table schema class """          
 
     def __init__(self,
-        table_name   : TableName,
-        columns      : Optional[List[Column]] = None,
+        table_name  : TableName, # Table name
+        columns     : List[Column] = None, # List of columns
         *,
-        record_class : Optional[Type] = None
+        record_type : Optional[Type] = None # Record class type
     ):
-        assert columns is None or all(isinstance(c, Column) for c in columns)
+        assert isinstance(table_name, str)
+        assert all(isinstance(c, Column) for c in columns)
 
-        self.db = None
-        self.name = table_name
+        self.db:Optional[Database] = None # parent database object
+        self.name = table_name            # table name
+
+        # dict of own columns (column name -> column object)
         self._coldict = {column.name: column for column in columns} if columns else {}
-
+        
+        # find primary key columns (assume single primary key)
         _keycols = [col for col in self._coldict.values() if col.is_primary]
         if len(_keycols) > 1:
             raise RuntimeError('Multiple primary keys.')
         self._keycol = _keycols[0] if _keycols else None
-        self.link_tables = {}
-        self.only_on_db = True
-        self.frozen = False
-        self.record_class = record_class
+
+        self.link_tables = {}    # linked tables
+        self.only_on_dbs = True  # The only table name in the databases or not
+        self.record_class = record_type # Record class type
 
     @property
     def columns(self) -> Iterator[Column]:
@@ -204,20 +166,14 @@ class Table(sqe.SQLExprType):
         """ Get primary key column """
         return self._keycol
 
-    def add_column(self, column:Column):
-        """ Add new column """
-        if self.frozen:
-            raise RuntimeError('This table is frozen.')
-        if column.name in self._coldict:
-            raise RuntimeError('Column `{}` already exists in table `{}`'.format(column.name, self.name))
-        self._coldict[column.name] = column
-
-    def finalize(self, db:'Database'):
-        """ Resolve references in _coldict """
+    def _set_db_and_finalize(self, db:'Database'):
+        """ Set the parent Database schema class 
+            and finalize this table (Resolve references in self._coldict)
+        """
         assert isinstance(db, Database)
         self.db = db
         for column in self.columns:
-            column.finalize(self)
+            column._set_table_and_finalize(self)
 
         # Generate child and parent tables
         for origcol in self.columns:
@@ -230,21 +186,19 @@ class Table(sqe.SQLExprType):
                 self.link_tables[destcol.table] = _LinkTable(origcol, destcol, is_nullable=not origcol.not_null, is_parent=False)
                 destcol.table.link_tables[self] = _LinkTable(destcol, origcol, is_nullable=not destcol.not_null, is_parent=True)
 
-        self.frozen = True
-
     def column(self, column:Union[Column, ColumnName]) -> Column:
-        """ Get column by column name / Check if column is valid """
+        """ Get column by column name / Check if column is valid
+            When the Column object specified:
+                The column is in this table: return the Column object
+                Else: raise Error
+            When the column name (assume string) specified:
+                If the name of column exists: return the Column object
+                Else: raise KeyError
+        """
         if isinstance(column, Column):
             if id(column.table) != id(self):
                 raise RuntimeError(f'Unknown column `{column}`')
             return column
-
-        if not isinstance(column, str):
-            raise TypeError(f'Invalid type of column (type:{type(column)}).')
-
-        if column not in self._coldict:
-            raise KeyError(f'Undefined column `{column}`.')
-
         return self._coldict[column]
 
     def col(self, column_name:Union[Column, ColumnName]) -> Column:
@@ -254,114 +208,56 @@ class Table(sqe.SQLExprType):
     def __getitem__(self, column_name:Union[Column, ColumnName]) -> Column:
         return self.column(column_name)
 
-    # def get_table_links(self, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
-    #     """ Get links (pairs of two table-_coldict) between this table and specific table """
-    #     return self.db.get_table_links(self.name, dest_table)
-
     def find_tables_links(self, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
         """ Get links (pairs of two table-_coldict) between this table and specific tables """
         return self.db.find_tables_links(self.name, target_tables)
 
-    # def get_parent_table_links(self) -> Iterator[Tuple['Table', Tuple[Column, Column]]]: # (table object, (left column, right column))
-    #     """ Get parent table(s) recursively with (table object, the table always exists or not) """
-    #     for table, (lcol, rcol) in self.parent_tables.items():
-    #         yield (table, (lcol, rcol))
-    #     for table, (lcol, rcol) in self.parent_tables.items():
-    #         yield from table.get_parent_table_links()
+    def __repr__(self) -> str:
+        return '<Table `%s`>' % self.name
 
-    # def get_child_table_links(self) -> Iterator[Tuple['Table', Tuple[Column, Column]]]: # (table object, (left column, right column))
-    #     """ Get child table(s) recursively with (table object, the table always exists or not) """
-    #     for table, (lcol, rcol) in self.child_tables.items():
-    #         yield (table, (lcol, rcol))
-    #     for table, (lcol, rcol) in self.child_tables.items():
-    #         yield from table.get_child_table_links()
-
-    def __repr__(self):
-        return f'<Table `{self.name}`>'
-
-    def __hash__(self):
+    def __hash__(self) -> int:
+        assert self.db is not None
         return hash((hash(self.db), self.name))
 
-    def vrepr(self):
-        """ Get detailed representation """
-        return repr((self.name, list(self.columns)))
-
-    def sql(self, *, db:bool=False) -> str:
-        return (f'`{self.db.name}`.' if db else '') + f'`{self.name}`'
-
-    def __str__(self) -> str:
-        return self.name
-
-    def __sqlout__(self, swp:sqe.SQLWithParams):
-        if not self.only_on_db:
-            swp.append(self.db).append('.', raw=True)
-        return swp.append(sqe.sqlobj(self.name))
+    def sql(self) -> str:
+        assert self.db is not None
+        _o = asobj(self.name)
+        return self.joinobjs(self.db.sql(), _o) if self.only_on_dbs else _o
 
     def create_table_sql(self, *, exist_ok:bool=True) -> str:
         """ Get create table SQL """
         sql = ''
         if exist_ok:
-            sql = f'DROP TABLE IF EXISTS `{self.name}`\n'
+            sql = f'DROP TABLE IF EXISTS {asobj(self.name)}\n'
 
         sts = []
         for col in self.columns:
-            sts.append(f'  `{col.name}` {col.data_type}')
+            sts.append(f'  {asobj(col.name)} {col.data_type}')
 
         for info in self.link_tables.values():
             sts.append('  ' + ('LEFT' if info.is_nullable else 'INNER') + f' JOIN {info.destcol.table.sql()} ON {info.origcol.sql()} = {info.destcol.sql()}')
 
-        sql += f'CREATE TABLE `{self.name}`(\n' + ',\n'.join(sts) + '\n)'
+        sql += f'CREATE TABLE {asobj(self.name)}(\n' + ',\n'.join(sts) + '\n)'
         return sql
 
 
-    def dump(self):
-        """ Dump table attributes for debug """
-        print(f'- Table: {self.name} ({self.record_class})')
-        for column in self.columns:
-            column.dump()
-    
-
-class Database(sqe.SQLExprType):
+class Database(SQLSchemaObjABC):
     """ Database schema class """
-    name: str
-    _tbldict: Dict[TableName, Table]
-    _coldict: Dict[ColumnName, List[Column]]
-    frozen: bool
 
     def __init__(self,
-        database_name : str,
-        tables        : Optional[List[Table]] = None,
-        *,
-        finalize      : bool = False
+        database_name : str,         # Database name
+        tables        : List[Table], # List of Table schema objects
     ):
         assert tables is None or all(isinstance(t, Table) for t in tables)
 
         self.name = database_name
         self._tbldict = {table.name: table for table in tables} if tables else {}
         self._coldict = {}
-        self.frozen = False
-        if finalize:
-            self.finalize()
 
-    @property
-    def tables(self) -> Iterator[Table]:
-        """ Iterate all table objects """
-        return self._tbldict.values()
-
-    def add_table(self, table:Table):
-        """ Add new table """
-        if self.frozen:
-            raise RuntimeError('This database is frozen.')
-        if table.name in self._tbldict:
-            raise RuntimeError('Table `{}` already exists.'.format(table.name))
-        self._tbldict[table.name] = table
-
-    def finalize(self):
-        """ Resolve references in _tbldict """
-
+        # Resolve references in _tbldict
         for table in self.tables:
             # Finalize table
-            table.finalize(self)
+            table._set_db_and_finalize(self)
 
             # Search columns in the tables
             for column in table.columns:
@@ -373,8 +269,10 @@ class Database(sqe.SQLExprType):
             if len(columns) == 1:
                 columns[0].only_on_db = True
 
-        self.frozen = True
-                
+    @property
+    def tables(self) -> Iterator[Table]:
+        """ Iterate all table objects """
+        return self._tbldict.values()  
                 
     def table(self, table:Union[Table, TableName]) -> Table:
         """ Get table object by table name / Check if table is valid """
@@ -383,16 +281,8 @@ class Database(sqe.SQLExprType):
                 raise RuntimeError(f'Unknown table `{table}`.')
             return table
 
-        if not isinstance(table, str):
-            raise TypeError(f'Invalid type of table (type:{type(table)}).')
-
-        table_s = table.split('.')
-        if len(table_s) >= 2: # Specified like 'database.table'
-            table = table_s[-1]
-
-        if table not in self._tbldict:
-            raise KeyError(f'Undefined table `{table}`.')
-
+        # assert isinstance(table, str)
+        # table = table.split('.')[-1]
         return self._tbldict[table]
     
     def __getitem__(self, table_name:Union[Table, TableName]) -> Table:
@@ -452,34 +342,40 @@ class Database(sqe.SQLExprType):
     def __hash__(self):
         return hash(self.name)
 
-    def vrepr(self):
-        """ Get detailed representation """
-        return repr((self.name, list(self.tables)))
-
-    def __str__(self) -> str:
-        return self.name
-
-    def __sqlout__(self, swp:sqe.SQLWithParams):
-        return swp.append(sqe.sqlobj(self.name))
+    def sql(self) -> str:
+        return asobj(self.name)
 
     def create_tables_sql(self, *, exist_ok:bool=True):
         """ Get tables creation SQL """
         return ''.join(table.create_table_sql(exist_ok=exist_ok) + ';\n' for table in self.tables)
 
-    def dump(self):
-        """ Dump database attributes for debug """
-        print(f'Database {self.name}')
-        for table in self.tables:
-            table.dump()
-            print('')
 
+def database_from_ddls(ddlstext:str) -> 'Database':
+    """ Create this object by ddl text (CREATE TABLE sql texts) """
+    ddltexts = sqlparse.split('\n'.join(l for l in ddlstext.splitlines() if not re.match(r'^\s*\-\-', l)))
+    dbname = (re.match(r'^\s*USE\s+`?(\w+)`?', ddltexts[0], re.IGNORECASE) or [None, None])[1]
+    tables = []
 
-    # def __init__(self,
-    #     table_columns:Dict[Table, List[Column]],
-    #     table_links  :Dict[Table, Dict[Table, Column]],
-    # ):
-    #     self.table_columns = table_columns
-    #     self.table_links = table_links
+    for ddltext in ddltexts:
+        if not re.match(r'^\s*CREATE TABLE.*\(', ddltext):
+            continue
+        ddlparser = ddlparse.DdlParse(ddltext)
+        ddl = ddlparser.parse()
+        tables.append(Table(
+            ddl.name, [
+                Column(
+                    dcol.name,
+                    dcol.data_type,
+                    not_null = dcol.not_null,
+                    is_primary = dcol.primary_key,
+                    default = dcol.default,
+                    comment = dcol.comment,
+                    link_column_refs = [ColumnRef(dcol.fk_ref_table, dcol.fk_ref_column)] if dcol.foreign_key else None,
+                ) for dcol in ddl.columns.values()
+            ]
+        ))
+
+    return Database(dbname, tables, finalize=True)
 
 
 def main():

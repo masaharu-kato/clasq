@@ -3,8 +3,8 @@
 from typing import List, get_type_hints, Type, Dict, Optional
 from functools import lru_cache
 from .view import DataView
-from . import sqltypebases as stb
-from . import sqltypes as st
+from .syntax import sqltypebases as stb
+from .syntax import sqltypes as st
 from . import schema
 
 
@@ -43,7 +43,7 @@ class Record(stb.Record):
 
     @classmethod
     @lru_cache
-    def _table(cls) -> schema.Table:
+    def _table_schema(cls) -> schema.Table:
         """ Get table object (in schema module) """
         return schema.Table(
             cls._tablename(),
@@ -58,7 +58,7 @@ class Record(stb.Record):
                 )
                 for colname, coltype in cls._column_types().items()
             ],
-            record_class = cls
+            record_type = cls
         )
 
 
@@ -90,7 +90,7 @@ class Record(stb.Record):
 
     @property
     def _tables(self) -> DataView:
-        return self._raw_tables[self._table == self._id]
+        return self._raw_tables[self._table_schema == self._id]
     
 
 class RootRecord(Record):
@@ -108,27 +108,31 @@ class Database:
 
     @classmethod
     @lru_cache
-    def table_by_names(cls) -> Dict[str, Type]:
+    def table_by_names(cls) -> Dict[str, Type[Record]]:
         """ Get list of table name and types """
-        tbltypes = {}
+        table_types_by_name:Dict[str, Type[Record]] = {}
+        # Get types hints of this (current) class
         for name, t in get_type_hints(cls).items():
+            # Ignore hidden type hints 
             if not name or name[0] == '_':
                 continue
+            # Check if the type specified in the type hint is vaild
             if not stb.SQLTypeEnv.is_compatible_table_type(t):
                 raise RuntimeError('Type of table `{}` ({}) is not compatible.'.format(name, t))
-            tbltypes[name] = stb.SQLTypeEnv.table_basetype(t)
-        return tbltypes
+            # Get the original table type from the type hint
+            table_types_by_name[name] = stb.SQLTypeEnv.table_basetype(t)
+        return table_types_by_name
 
     @classmethod
-    def tables(cls) -> List[Type]:
-        return list(tbltypes.values())
+    def tables(cls) -> List[Type[Record]]:
+        return list(cls.table_by_names().values())
 
     @classmethod
     @lru_cache
-    def _db(cls) -> schema.Database:
+    def _db_schema(cls) -> schema.Database:
         """ Get all create table sqls in a specified module """
         return schema.Database(
             cls.dbname(),
-            [reccls._table() for reccls in cls.tables()],
+            [reccls._table_schema() for reccls in cls.tables()],
             finalize=True
         )
