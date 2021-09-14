@@ -5,6 +5,7 @@ import types
 import typing
 from functools import lru_cache
 
+T = typing.TypeVar('T')
 
 def is_child_class(target, base):
     """ Check if the target type is a subclass of the base type and not base type itself """
@@ -139,7 +140,7 @@ class SQLTypeWithKey(SQLTypeWithOptionalKey):
         return super().__new__(cls)
 
 
-class SQLTypeWithOptionalLength(SQLTypeWithOptionalKey):
+class SQLTypeWithOptionalLength(SQLTypeWithOptionalKey, typing.Generic[T]):
     """ SQL data types with optional length """
     _MAX_LEN_ = None
 
@@ -186,7 +187,7 @@ class FloatType(NumericType):
         return float(self.v)
 
 
-class DecimalType(NumericType, SQLTypeWithKey):
+class DecimalType(NumericType, SQLTypeWithKey, typing.Generic[T]):
     """ Fixed Decimal types """
     _TYPE_DECI_PREC_  : typing.Optional[int] = None
     _TYPE_DECI_SCALE_ : typing.Optional[int] = None
@@ -235,7 +236,7 @@ class TextType(StringType, SQLTypeWithOptionalLength):
         return not cls._MAX_LEN_ or len(v) <= cls._MAX_LEN_
 
 
-class SQLTypeWithValues(SQLTypeWithKey):
+class SQLTypeWithValues(SQLTypeWithKey, typing.Generic[T]):
     """ SQL data types with optional length """
     _TYPE_VALUES_ = None
 
@@ -269,30 +270,30 @@ class SQLTypeEnv:
         cls.type_aliases[tf] = tt
 
     @staticmethod
-    def _is_typing_type(t) -> bool:
+    def _is_typing_type(t:typing.Type) -> bool:
         return typing.get_origin(t) is not None
 
     @staticmethod
-    def _is_typing_optional(t) -> bool:
+    def _is_typing_optional(t:typing.Type) -> bool:
         if typing.get_origin(t) is typing.Union:
             tpargs = typing.get_args(t)
             return len(tpargs) == 2 and tpargs[1] is type(None)
         return False
 
     @staticmethod
-    def _is_typing_list(t) -> bool:
+    def _is_typing_list(t:typing.Type) -> bool:
         return typing.get_origin(t) is typing.List
 
     @staticmethod
-    def _typing_basetype(t) -> typing.Type:
+    def _typing_basetype(t:typing.Type) -> typing.Type:
         return t.__args__[0]
 
     @staticmethod
-    def _typing_basetypes(t) -> typing.List[typing.Type]:
+    def _typing_basetypes(t:typing.Type) -> typing.List[typing.Type]:
         return t.__args__
 
     @classmethod
-    def actual_type(cls, t, *, ensure_nullable:bool=False) -> typing.Type:
+    def actual_type(cls, t:typing.Type, *, ensure_nullable:bool=False) -> typing.Type:
         """ Get an actual type (subclass of SQLType) of a given type """
         if cls._is_typing_optional(t):
             return cls.actual_type(cls._typing_basetype(t), ensure_nullable=False)
@@ -305,32 +306,32 @@ class SQLTypeEnv:
         return t
 
     @classmethod
-    def is_compatible_column_type(cls, t) -> bool:
+    def is_compatible_column_type(cls, t:typing.Type) -> bool:
         """ Check if `t` is a compatible column type or not """
         if cls._is_typing_type(t):
             return cls._is_typing_optional(t) and cls.is_compatible_column_type(cls._typing_basetype(t))
         return is_child_class(t, SQLType) or is_child_class(t, Record) or t in cls.type_aliases
 
     @classmethod
-    def is_compatible_table_type(cls, t) -> bool:
+    def is_compatible_table_type(cls, t:typing.Type) -> bool:
         """ Check if the type specified in the type hint is vaild """
         return cls._is_typing_type(t) and cls._is_typing_list(t) and is_child_class(cls.table_basetype(t), Record)
 
     @classmethod
-    def table_basetype(cls, t) -> typing.Type[Record]:
+    def table_basetype(cls, t:typing.Type) -> typing.Type[Record]:
         """ Get the original table type from the type hint """
         _t = cls._typing_basetype(t)
         assert is_child_class(_t, Record)
         return _t
 
     @classmethod
-    def type_sql(cls, t) -> str:
+    def type_sql(cls, t:typing.Type) -> str:
         """ Get a SQL of type for table creation """
         t = cls.actual_type(t)
         return t.__type_sql__()
 
 
-class SQLTypeWithType(SQLTypeWithKey):
+class SQLTypeWithType(SQLTypeWithKey, typing.Generic[T]):
     """ SQL data types with optional length """
     _TYPE_BASE_:typing.Optional[typing.Type] = None
     _TYPE_SQL_SUFFIX_:typing.Optional[str] = None
@@ -338,7 +339,7 @@ class SQLTypeWithType(SQLTypeWithKey):
 
     @classmethod
     @lru_cache
-    def __class_getitem__(cls, t):
+    def __class_getitem__(cls, t:typing.Type):
         assert cls._TYPE_SQL_SUFFIX_ is not None
         assert isinstance(t, type)
         t = SQLTypeEnv.actual_type(t, ensure_nullable=cls._TYPE_ENSURE_NULLABLE_)
@@ -365,7 +366,7 @@ class Nullable(Final, SQLTypeWithType):
     _TYPE_SQL_SUFFIX_ = ''
 
 
-class NotNull(Final, SQLTypeWithType):
+class NotNull(Final, SQLTypeWithType, typing.Generic[T]):
     """ SQL NOT NULL type """
     _TYPE_SQL_SUFFIX_ = ' NOT NULL'
     _TYPE_HAS_DEFAULT_ = False
@@ -378,12 +379,12 @@ class PrimaryKey(Final, SQLTypeWithType):
     _TYPE_ENSURE_NULLABLE_ = True
 
 
-class ForeignTableKey(Final, SQLTypeWithType):
+class ForeignTableKey(Final, SQLTypeWithType, typing.Generic[T]):
     """ Foreign table key (Primary key) """
 
     @classmethod
     @lru_cache
-    def __class_getitem__(cls, t):
+    def __class_getitem__(cls, t:typing.Type):
         assert issubclass(t, Record)
         return cls.new_subclass(
             f'FK__{t.__name__}',

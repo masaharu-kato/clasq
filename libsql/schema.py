@@ -2,7 +2,7 @@
     Database schema module
 """
 from abc import abstractmethod
-from typing import Any, Dict, Iterator, List, NewType, Optional, Union, Set, Sequence, Tuple, Type
+from typing import Any, DefaultDict, Dict, Iterator, List, NewType, Optional, Union, Set, Sequence, Tuple, Type
 import sys
 import re
 import weakref
@@ -73,15 +73,15 @@ class Column(SQLSchemaObjABC):
     """ Column schema class """
 
     def __init__(self,
-        name:str, data_type:str, *, not_null:bool = False, is_primary:bool = False, default:Any = None,
+        name:Union[ColumnName, str], data_type:str, *, not_null:bool = False, is_primary:bool = False, default:Any = None,
         comment:Optional[str] = None, link_column_refs:Optional[Sequence[Union[ColumnRef, tuple, str]]] = None
     ):
         assert isinstance(name, str)
         assert isinstance(data_type, str)
         assert isinstance(not_null, bool)
         assert isinstance(is_primary, bool)
-        self.table:Optional[Table] = None
-        self.name :ColumnName = name
+        self._table:Optional[Table] = None
+        self.name = ColumnName(name)
         self.data_type = data_type
         self.not_null = not_null
         self.is_primary = is_primary
@@ -94,33 +94,35 @@ class Column(SQLSchemaObjABC):
     def _set_table_and_finalize(self, table:'Table') -> None:
         """ Set the parent table and finalize (resolve references in self.link columns) """
         assert isinstance(table, Table)
-        self.table = table
-        assert self.table.db is not None
+        self._table = table
         self.link_columns = weakref.WeakSet(self.table.db.get_column_by_ref(cref) for cref in self.link_column_refs)
+
+    @property
+    def table(self) -> 'Table':
+        if self._table is None:
+            raise RuntimeError('Table is not set.')
+        return self._table
 
     def unique_alias(self) -> str:
         """ Get a unique alias on the database """
-        assert self.table is not None
         if self.only_on_db:
             return self.name
         return self.table.name + '.' + self.name
 
     def __repr__(self) -> str:
-        if self.table is None:
+        if self._table is None:
             return '<Column ???.`%s`>' % self.name
         return '<Column `%s`.`%s`>' % (self.table.name, self.name)
 
     def __hash__(self) -> int:
-        assert self.table is not None
         return hash((hash(self.table), self.name))
 
     def sql(self, *, table:bool=True) -> str:
         """ Get SQL expression of this column """
-        assert self.table is not None
         return joinobjs(self.table.sql(), asobj(self.name))
 
 
-class _LinkTable:
+class TableLink:
     """ Linked table information """
     def __init__(self, origcol:Column, destcol:Column, is_nullable:bool, is_parent:bool):
         self.origcol = origcol
@@ -133,7 +135,7 @@ class Table(SQLSchemaObjABC):
     """ Table schema class """          
 
     def __init__(self,
-        table_name  : TableName, # Table name
+        table_name  : Union[TableName, str], # Table name
         columns     : Optional[List[Column]] = None, # List of columns
         *,
         record_type : Optional[Type] = None # Record class type
@@ -141,8 +143,8 @@ class Table(SQLSchemaObjABC):
         assert isinstance(table_name, str)
         assert columns is None or all(isinstance(c, Column) for c in columns)
 
-        self.db:Optional[Database] = None # parent database object
-        self.name = table_name            # table name
+        self._db:Optional[Database] = None # parent database object
+        self.name = TableName(table_name)            # table name
 
         # dict of own columns (column name -> column object)
         self._coldict = {column.name: column for column in columns} if columns is not None else {}
@@ -151,9 +153,12 @@ class Table(SQLSchemaObjABC):
         _keycols = [col for col in self._coldict.values() if col.is_primary]
         if len(_keycols) > 1:
             raise RuntimeError('Multiple primary keys.')
-        self._keycol = _keycols[0] if _keycols else None
+        if not len(_keycols):
+            raise RuntimeError('No primary keys.')
 
-        self.link_tables:Dict[Table, _LinkTable] = {}    # linked tables
+        self._keycol = _keycols[0]
+
+        self.tables_links:Dict[Table, List[TableLink]] = DefaultDict(lambda: [])   # linked tables
         self.only_on_dbs = True  # The only table name in the databases or not
         self.record_class = record_type # Record class type
 
@@ -172,7 +177,7 @@ class Table(SQLSchemaObjABC):
             and finalize this table (Resolve references in self._coldict)
         """
         assert isinstance(db, Database)
-        self.db = db
+        self._db = db
         for column in self.columns:
             column._set_table_and_finalize(self)
 
@@ -180,13 +185,14 @@ class Table(SQLSchemaObjABC):
         for origcol in self.columns:
             for destcol in origcol.link_columns:
                 # print(origcol, destcol)
-                assert destcol.table is not None
+                self.tables_links[destcol.table].append(TableLink(origcol, destcol, is_nullable=not origcol.not_null, is_parent=False))
+                destcol.table.tables_links[self].append(TableLink(destcol, origcol, is_nullable=not destcol.not_null, is_parent=True ))
 
-                if destcol.table in self.link_tables:
-                    raise RuntimeError(f'Multiple table links found between {origcol.sql()} and {destcol.sql()}')
-
-                self.link_tables[destcol.table] = _LinkTable(origcol, destcol, is_nullable=not origcol.not_null, is_parent=False)
-                destcol.table.link_tables[self] = _LinkTable(destcol, origcol, is_nullable=not destcol.not_null, is_parent=True)
+    @property
+    def db(self) -> 'Database':
+        if self._db is None:
+            raise RuntimeError('Database is not set.')
+        return self._db
 
     def column(self, column:Union[Column, ColumnName]) -> Column:
         """ Get column by column name / Check if column is valid
@@ -210,20 +216,18 @@ class Table(SQLSchemaObjABC):
     def __getitem__(self, column_name:Union[Column, ColumnName]) -> Column:
         return self.column(column_name)
 
-    def find_tables_links(self, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
-        """ Get links (pairs of two table-_coldict) between this table and specific tables """
-        assert self.db is not None
-        return self.db.find_tables_links(self.name, target_tables)
+    # def find_tables_links(self, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
+    #     """ Get links (pairs of two table-_coldict) between this table and specific tables """
+    #     assert self.db is not None
+    #     return self.db.find_tables_links(self.name, target_tables)
 
     def __repr__(self) -> str:
         return '<Table `%s`>' % self.name
 
     def __hash__(self) -> int:
-        assert self.db is not None
         return hash((hash(self.db), self.name))
 
     def sql(self) -> str:
-        assert self.db is not None
         _o = asobj(self.name)
         return joinobjs(self.db.sql(), _o) if self.only_on_dbs else _o
 
@@ -237,8 +241,9 @@ class Table(SQLSchemaObjABC):
         for col in self.columns:
             sts.append(f'  {asobj(col.name)} {col.data_type}')
 
-        for info in self.link_tables.values():
-            sts.append('  ' + ('LEFT' if info.is_nullable else 'INNER') + f' JOIN {info.destcol.table.sql()} ON {info.origcol.sql()} = {info.destcol.sql()}')
+        for table, links in self.tables_links.items():
+            for link in links:
+                sts.append('  ' + ('LEFT' if link.is_nullable else 'INNER') + f' JOIN {link.destcol.table.sql()} ON {link.origcol.sql()} = {link.destcol.sql()}')
 
         sql += f'CREATE TABLE {asobj(self.name)}(\n' + ',\n'.join(sts) + '\n)'
         return sql
@@ -294,7 +299,7 @@ class Database(SQLSchemaObjABC):
     def column(self, column:Union[Column, ColumnName, str]) -> Column:
         """ Get column object by column name (Assume just one column) / Check if column is valid """
         if isinstance(column, Column):
-            if column.table is None or id(column.table.db) != id(self):
+            if id(column.table.db) != id(self):
                 raise RuntimeError(f'Unknown column `{column}`.')
             return column
 
@@ -326,18 +331,18 @@ class Database(SQLSchemaObjABC):
             return table.keycol
         return table[column_ref.column_name]
 
-    def find_tables_links(self, dest_table:TableName, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
-        """ Get links (pairs of two table-columns) between a specific table and target _tbldict """
-        _tbldict = self.tables if target_tables is None else target_tables
-        for ctable in _tbldict:
-            yield from self.get_table_links(dest_table, ctable)
+    # def find_tables_links(self, dest_table:TableName, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
+    #     """ Get links (pairs of two table-columns) between a specific table and target _tbldict """
+    #     _tbldict = self.tables if target_tables is None else target_tables
+    #     for ctable in _tbldict:
+    #         yield from self.get_table_links(dest_table, ctable)
 
-    def get_table_links(self, base_table:TableName, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
-        """ Get links (pairs of two table-columns) between two _tbldict """
-        if dest_table in self[base_table].link_tables:
-            yield from ((rcol, lcol) for lcol, rcol in self[base_table].link_tables[self[dest_table]])
-        if base_table in self[dest_table].link_tables:
-            yield from self[dest_table].link_tables[self[base_table]]
+    # def get_table_links(self, base_table:TableName, dest_table:TableName) -> Iterator[Tuple[Column, Column]]:
+    #     """ Get links (pairs of two table-columns) between two _tbldict """
+    #     if dest_table in self[base_table].tables_links:
+    #         yield from ((rcol, lcol) for lcol, rcol in self[base_table].tables_links[self[dest_table]])
+    #     if base_table in self[dest_table].tables_links:
+    #         yield from self[dest_table].tables_links[self[base_table]]
  
     def __repr__(self):
         return f'<Database `{self.name}`>'

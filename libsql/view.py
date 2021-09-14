@@ -46,13 +46,13 @@ class DataView(sqlex.SQLExprType):
         qe:executor.BasicQueryExecutor,
         db:schema.Database,
         table:Optional[TableLike]=None,
-        full:bool=True
+        # full:bool=True
     ):
         self.qe : executor.BasicQueryExecutor = qe
         self.db : schema.Database = db
 
-        self._table    : Optional[TableLike]                    = None
-        self._joins    : List[TableLike]                    = []
+        self._table    : Optional[schema.Table]                    = None
+        self._joins    : List[Tuple[TableLike, Tuple[ColumnLike, ColumnLike]]] = []
         self._colexprs : Sequence[sqlex.SQLExprType]          = []
         self._terms    : Optional[sqlex.SQLExprType]          = None
         self._groups   : Sequence[Union[ColumnLike, TableLike]] = []
@@ -63,27 +63,26 @@ class DataView(sqlex.SQLExprType):
         self._result = None
 
         if table:
-            self.table(table, full=full)
+            self.table(table) #, full=full)
 
-    def new(self, table:Optional[TableLike]=None, *, full:bool=True):
+    def new(self, table:Optional[TableLike]=None): # , *, full:bool=True):
         """ Generate a new view instance with table """
-        return DataView(self.qe, self.db, table, full=full)
+        return DataView(self.qe, self.db, table) # , full=full)
 
-    def table(self, table:TableLike, *, full:bool=True):
+    def table(self, table:TableLike): # , *, full:bool=True):
         """ Set a base table """
         self._table = self.db.table(table)
-        if full:
-            self.join(*self._table.get_parent_table_links())
+        # if full:
+        #     self.join(*self._table.get_parent_table_links())
         return self
 
     @property
     def tables(self):
         return DataViewTables(self)
 
-    def join(self, *tables:TableLike):
+    def join(self, table:TableLike, lcol:ColumnLike, rcol:ColumnLike):
         """ Join other tables """
-        for table in tables:
-            self._joins.append(self.db.table(table))
+        self._joins.append((self.db.table(table), (lcol, rcol)))
         return self
 
     def join_new(self, *tables:TableLike):

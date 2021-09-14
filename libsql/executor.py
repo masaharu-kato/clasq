@@ -128,7 +128,7 @@ class BasicQueryExecutor:
             [self.filter_param(p) for p in e_params] if e_params else None
         )
 
-    def executemany(self, sql:SQLLike, params_list:Optional[List[list]]=None):
+    def executemany(self, sql:SQLLike, params_list:Optional[Iterable[list]]=None):
         """ Execute SQL query many time """
         return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
 
