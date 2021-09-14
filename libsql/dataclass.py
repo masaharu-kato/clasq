@@ -15,9 +15,9 @@ class Record(stb.Record):
 
     @classmethod
     @lru_cache
-    def _tablename(cls) -> str:
+    def _tablename(cls) -> schema.TableName:
         """ Get table name of this record class """
-        return cls.__tablename__ or 't_' + cls.__name__.split('.')[-1].lower()
+        return schema.TableName(cls.__tablename__ or 't_' + cls.__name__.split('.')[-1].lower())
 
     @classmethod
     @lru_cache
@@ -86,7 +86,7 @@ class Record(stb.Record):
 
     @property
     def _raw_tables(self) -> DataView:
-        return self._dv.new.tables
+        return self._dv.new().tables
 
     @property
     def _tables(self) -> DataView:
@@ -108,9 +108,9 @@ class Database:
 
     @classmethod
     @lru_cache
-    def table_by_names(cls) -> Dict[str, Type[Record]]:
+    def table_by_names(cls) -> Dict[str, Type[stb.Record]]:
         """ Get list of table name and types """
-        table_types_by_name:Dict[str, Type[Record]] = {}
+        table_types_by_name:Dict[str, Type[stb.Record]] = {}
         # Get types hints of this (current) class
         for name, t in get_type_hints(cls).items():
             # Ignore hidden type hints 
@@ -134,5 +134,4 @@ class Database:
         return schema.Database(
             cls.dbname(),
             [reccls._table_schema() for reccls in cls.tables()],
-            finalize=True
         )

@@ -52,11 +52,11 @@ class DataView(sqlex.SQLExprType):
         self.db : schema.Database = db
 
         self._table    : Optional[TableLike]                    = None
-        self._joins    : Sequence[TableLike]                    = []
-        self._colexprs : Sequence[sqlex.ExprType]          = []
-        self._terms    : Optional[sqlex.ExprType]          = None
+        self._joins    : List[TableLike]                    = []
+        self._colexprs : Sequence[sqlex.SQLExprType]          = []
+        self._terms    : Optional[sqlex.SQLExprType]          = None
         self._groups   : Sequence[Union[ColumnLike, TableLike]] = []
-        self._orders   : Sequence[sqlex.ExprType]          = []
+        self._orders   : List[sqlex.SQLExprType]          = []
         self._limit    : Optional[int]                          = None
         self._offset   : Optional[int]                          = None
 
@@ -65,7 +65,7 @@ class DataView(sqlex.SQLExprType):
         if table:
             self.table(table, full=full)
 
-    def new(self, table:Optional[TableLike]=None, full:bool=True):
+    def new(self, table:Optional[TableLike]=None, *, full:bool=True):
         """ Generate a new view instance with table """
         return DataView(self.qe, self.db, table, full=full)
 
@@ -131,8 +131,8 @@ class DataView(sqlex.SQLExprType):
 
     def term(self, l, op, r) -> 'DataView':
         """ Append term for WHERE clause """
-        lexpr = l if isinstance(l, sqe.SQLExprType) else self.db.column(l)
-        return self.where(sqe.BinaryExpr(op, lexpr, r))
+        lexpr = l if isinstance(l, sqlex.SQLExprType) else self.db.column(l)
+        return self.where(sqlex.BinaryExpr(op, lexpr, r))
 
     def eq(self, table:TableLike, **kwargs) -> 'DataView':
         """ Append equal terms on WHERE clause """
@@ -143,6 +143,7 @@ class DataView(sqlex.SQLExprType):
         
     def id(self, idval:int):
         """ Append `id` equal term on WHERE clause """
+        assert self._table is None
         return self.eq(self._table, id=idval)
 
 
@@ -167,7 +168,7 @@ class DataView(sqlex.SQLExprType):
 
     def execute(self) -> 'DataView':
         """ Execute SQL """
-        self._result = self.qe.query(self.sql_with_params)
+        self._result = self.qe.query(self.sql_with_params())
         return self
 
     def prepare(self) -> 'DataView':
@@ -227,13 +228,14 @@ class DataView(sqlex.SQLExprType):
         # clarify target columns
         target_columns = [*self._table.columns]
         for table, _ in self._joins:
-            target_columns.extend(table.columns)
+            target_columns.extend(self.db[table].columns)
         for colexpr in self._colexprs:
+            assert isinstance(colexpr, (schema.Column, str)) 
             target_columns.append(self.db.column(colexpr))
 
         sql, params = '', []
 
-        def append_clause(self, clause_name:str, *vals, end:str='\n'):
+        def append_clause(clause_name:str, *vals, end:str='\n'):
             """ Append new clause """
             nonlocal sql, params
             if vals[0] is None or (isinstance(vals[0], (tuple, list)) and not vals[0]):
@@ -283,5 +285,5 @@ class DataViewTables:
     def __init__(self, dv:DataView):
         self.dv = dv
 
-    def __getattr__(self, tablename:str):
-        return self.dv.table(tablename)
+    def __getattr__(self, tablename:Union[str, TableName]):
+        return self.dv.table(TableName(tablename))

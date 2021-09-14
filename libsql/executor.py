@@ -3,11 +3,8 @@
 """
 from typing import Any, Callable, Dict, IO, Iterable, List, Optional, Union
 import warnings
-import mysql.connector.errors as mysql_error
-from . import fmt
-from . import sqlexpr as sqe
-# from .query import QueryMaker
-# from .cursor import MySQLCursor
+import mysql.connector.errors as mysql_error # type: ignore
+from . import schema
 
 _DUMP_EXECUTES = False
 
@@ -22,7 +19,7 @@ class TableInserts:
         self.sqexec = sqexec
         self.tablename = tablename
         self.colnames = colnames
-        self.records = []
+        self.records:List[List] = []
 
     def reset(self):
         """ Reset data """
@@ -67,7 +64,7 @@ class TableInserts:
         assert(isinstance(self.records, list) and all(isinstance(record, list) for record in self.records))
 
         self.sqexec.executemany(
-            f'INSERT INTO {fmt.fo(self.tablename)}(' + ', '.join(map(fmt.fo, self.colnames)) + ')'
+            f'INSERT INTO {schema.asobj(self.tablename)}(' + ', '.join(map(schema.asobj, self.colnames)) + ')'
              + ' VALUES(' + ', '.join(['%s'] * len(self.colnames)) + ')',
              self.records
         )
@@ -104,34 +101,34 @@ class BasicQueryExecutor:
         except mysql_error.DataError as e:
             raise RuntimeError('Errors in arguments on the function `{}` (args={})'.format(procname, repr(args))) from e
 
-    def query(self, sql:Union[SQLLike, sqe.SQLWithParams], params:Optional[list]=None) -> Any:
+    def query(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         """ Run sql with parameters """
         self.execute(sql, params)
         return self.fetchall()
 
-    def query_one(self, sql:Union[SQLLike, sqe.SQLWithParams], params:Optional[list]=None) -> Any:
+    def query_one(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         """ Run sql with parameters, assume one result """
         self.execute(sql, params)
         return self.fetchone()
 
-    def execute(self, sql:Union[SQLLike, sqe.SQLWithParams], params:Optional[list]=None):
+    def execute(self, sql:SQLLike, params:Optional[list]=None):
         """ Execute SQL query """
         if _DUMP_EXECUTES:
             print('Executor.execute():', sql, params)
         
-        if isinstance(sql, sqe.SQLWithParams):
-            if params:
-                raise RuntimeError('Cannot specify parameters when using SQLWithParams instance.')
-            e_sql, e_params = sql.sql, sql.params
-        else:
-            e_sql, e_params = sql, params
+        # if isinstance(sql, sqe.SQLWithParams):
+        #     if params:
+        #         raise RuntimeError('Cannot specify parameters when using SQLWithParams instance.')
+        #     e_sql, e_params = sql.sql, sql.params
+        # else:
+        e_sql, e_params = sql, params
 
         return self.cursor.execute(
             self._sql_str(e_sql),
             [self.filter_param(p) for p in e_params] if e_params else None
         )
 
-    def executemany(self, sql:Union[SQLLike, sqe.SQLWithParams], params_list:Optional[List[list]]=None):
+    def executemany(self, sql:SQLLike, params_list:Optional[List[list]]=None):
         """ Execute SQL query many time """
         return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
 
@@ -194,32 +191,32 @@ class QueryExecutor(BasicQueryExecutor):
 
     def drop_database(self, name:str) -> None:
         """ Drop database """
-        self.execute(f'DROP DATABASE IF EXISTS {fmt.fo(name)}')
+        self.execute(f'DROP DATABASE IF EXISTS {schema.asobj(name)}')
 
     def drop_user(self, name:str) -> None:
         """ Drop user """
-        self.execute(f'DROP USER IF EXISTS {fmt.fo(name)}')
+        self.execute(f'DROP USER IF EXISTS {schema.asobj(name)}')
 
     def drop_table(self, name:str) -> None:
         """ Drop table """
-        self.execute(f'DROP TABLE IF EXISTS {fmt.fo(name)}')
+        self.execute(f'DROP TABLE IF EXISTS {schema.asobj(name)}')
 
     def create_database(self, name:str) -> None:
         """ Create database """
-        self.execute(f'CREATE DATABASE {fmt.fo(name)}')
+        self.execute(f'CREATE DATABASE {schema.asobj(name)}')
 
     def use_database(self, name:str) -> None:
         """ Use database """
-        self.execute(f'USE {fmt.fo(name)}')
+        self.execute(f'USE {schema.asobj(name)}')
 
     def create_user(self, name:str, password:str, grants:List[str]) -> None:
         """ Create user """
-        self.execute(f'CREATE USER {fmt.fo(name)} IDENTIFIED BY "{password}"')
-        self.execute('GRANT ' + ', '.join(grants) + f' ON * TO {fmt.fo(name)}')
+        self.execute(f'CREATE USER {schema.asobj(name)} IDENTIFIED BY "{password}"')
+        self.execute('GRANT ' + ', '.join(grants) + f' ON * TO {schema.asobj(name)}')
 
     def create_table(self, name:str, colname_types:Dict[str, str]) -> None:
         """ Create table """
-        self.execute(f'CREATE TABLE {fmt.fo(name)}(' + ', '.join(f'{fmt.fo(cn)} {fmt.sqltype(ct)}' for cn, ct in colname_types.items()) + ')')
+        self.execute(f'CREATE TABLE {schema.asobj(name)}(' + ', '.join(f'{schema.asobj(cn)} {fmt.sqltype(ct)}' for cn, ct in colname_types.items()) + ')')
 
     def create_function(self, name:str, arg_types:Dict[str, str], return_type:str, statements:Iterable[str], *, determinstic:bool=False) -> None:
         # TODO: Implementation
@@ -241,25 +238,25 @@ class QueryExecutor(BasicQueryExecutor):
             END//
         ''')
 
-    def recreate_database(self, name:str, *args, **kwargs) -> None:
+    def recreate_database(self, name:str) -> None:
         """ Recreate (drop and create) database """
         self.drop_database(name)
-        self.create_database(name, *args, **kwargs)
+        self.create_database(name)
 
-    def recreate_user(self, name:str, password:str, grants:List[str], *args, **kwargs) -> None:
+    def recreate_user(self, name:str, password:str, grants:List[str]) -> None:
         """ Recreate (drop and create) user """
         self.drop_user(name)
-        self.create_user(name, password, grants, *args, **kwargs)
+        self.create_user(name, password, grants)
 
-    def recreate_table(self, name:str, colname_types:Dict[str, str], *args, **kwargs) -> None:
+    def recreate_table(self, name:str, colname_types:Dict[str, str]) -> None:
         """ Recreate (drop and create) table """
         self.drop_table(name)
-        self.create_table(name, colname_types, *args, **kwargs)
+        self.create_table(name, colname_types)
     
     def insert(self, tablename:str, **kwargs:Any) -> int:
         """ Execute insert query """
         self.execute(
-            f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
+            f'INSERT INTO {schema.asobj(tablename)}(' + ', '.join(map(schema.asobj, kwargs)) + ')'
              + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
             list(kwargs.values())
         )
@@ -300,9 +297,9 @@ class QueryExecutor(BasicQueryExecutor):
     
     # def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
     #     """ Execute select query for a single table with equivalence conditions """
-    #     sql = 'SELECT ' + (', '.join(map(fmt.fo, colnames)) if colnames else '*') + ' FROM ' + fmt.fo(tablename)
+    #     sql = 'SELECT ' + (', '.join(map(schema.asobj, colnames)) if colnames else '*') + ' FROM ' + schema.asobj(tablename)
     #     if kwargs:
-    #         sql += ' WHERE ' + ' AND '.join(fmt.fo(k) + ' = %s' for k in kwargs)
+    #         sql += ' WHERE ' + ' AND '.join(schema.asobj(k) + ' = %s' for k in kwargs)
     #     self.execute(sql, list(kwargs.values()))
     #     return self.fetchall()
 
@@ -326,14 +323,14 @@ class QueryExecutor(BasicQueryExecutor):
     def update(self, tablename:str, _id_colname:str='id', *, id:int, **kwargs:Any): # pylint: disable=redefined-builtin
         """ Execute update query """
         self.execute(
-            f'UPDATE {fmt.fo(tablename)} SET ' + ', '.join(fmt.fo(k) + ' = %s' for k in kwargs) + f' WHERE {fmt.fo(_id_colname)} = %s',
+            f'UPDATE {schema.asobj(tablename)} SET ' + ', '.join(schema.asobj(k) + ' = %s' for k in kwargs) + f' WHERE {schema.asobj(_id_colname)} = %s',
              [*kwargs.values(), id]
         )
 
     def insertmany(self, tablename:str, rows:Iterable[list], _index_start:int=0, **kwargs:Callable) -> int:
         """ Execute insert query many time """
         self.executemany(
-            f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
+            f'INSERT INTO {schema.asobj(tablename)}(' + ', '.join(map(schema.asobj, kwargs)) + ')'
              + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
             ([func(i, row) for func in kwargs.values()] for i, row in enumerate(rows, _index_start)),
         )

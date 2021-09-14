@@ -2,9 +2,8 @@
     SQL Connection classes and functions
 """
 from typing import Optional
-from abc import ABCMeta, abstractmethod
-import mysql.connector
-from .executor import QueryExecutor
+import mysql.connector # type: ignore
+import mysql.connector.abstracts # type: ignore
 from .schema import Database as DBSchema
 
 MySQLCursorABC = mysql.connector.abstracts.MySQLCursorAbstract

@@ -4,7 +4,6 @@
 import types
 import typing
 from functools import lru_cache
-from . import dataclass
 
 
 def is_child_class(target, base):
@@ -164,8 +163,8 @@ class NumericType(SQLType):
 class IntegerType(NumericType):
     """ Integer types """
     _PY_TYPE_ = int
-    _MIN_VALUE_ = None
-    _MAX_VALUE_ = None
+    _MIN_VALUE_:typing.Optional[int] = None
+    _MAX_VALUE_:typing.Optional[int] = None
 
     @classmethod
     def _validate_value(cls, v):
@@ -257,7 +256,7 @@ class Record:
 
 class SQLTypeEnv:
     """ SQL Type environment definition """
-    type_aliases = {}
+    type_aliases:typing.Dict[typing.Type, typing.Type] = {}
     default_not_null = True
 
     def __new__(cls, *args, **kwargs):
@@ -333,8 +332,8 @@ class SQLTypeEnv:
 
 class SQLTypeWithType(SQLTypeWithKey):
     """ SQL data types with optional length """
-    _TYPE_BASE_ = None
-    _TYPE_SQL_SUFFIX_ = None
+    _TYPE_BASE_:typing.Optional[typing.Type] = None
+    _TYPE_SQL_SUFFIX_:typing.Optional[str] = None
     _TYPE_ENSURE_NULLABLE_ = False
 
     @classmethod
@@ -385,7 +384,7 @@ class ForeignTableKey(Final, SQLTypeWithType):
     @classmethod
     @lru_cache
     def __class_getitem__(cls, t):
-        assert issubclass(t, dataclass.Record)
+        assert issubclass(t, Record)
         return cls.new_subclass(
             f'FK__{t.__name__}',
             (Int,),
