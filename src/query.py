@@ -3,6 +3,7 @@
 """
 
 from typing import Any, Dict, List, Optional, Union, Tuple, NewType
+import warnings
 from . import fmt
 from . import schema
 
@@ -135,8 +136,11 @@ class QueryMaker:
         _loaded_tables = [base_table]
         for target_table, jointype in join_tables:
             clink = list(self.db[target_table].find_tables_links(_loaded_tables))
-            if not len(clink) == 1:
-                raise RuntimeError('No links or multiple links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
+            if not len(clink):
+                raise RuntimeError('No links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
+            if len(clink) > 1:
+                warnings.warn(RuntimeWarning('Multiple links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables))))
+                # raise RuntimeError('Multiple links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
             joins.append((jointype, clink[0]))
             _loaded_tables.insert(0, target_table)
 
