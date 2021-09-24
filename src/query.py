@@ -67,15 +67,20 @@ class QueryMaker:
         _where_sqls = [where_sql] if where_sql else []
         _where_params = [] if where_params is None else [*where_params]
 
+        _where_eqs = []
         if where_eq:
             column, value = where_eq
-            _where_sqls.append(f'{fmt.fmo(column)} = %s')
-            _where_params.append(value)
+            _where_eqs.append((column, value))
+        if where_eqs is not None:
+            _where_eqs.extend(where_eqs)
 
-        if where_eqs:
-            for column, value in where_eqs:
-                _where_sqls.append(f'{fmt.fmo(column)} = %s')
-                _where_params.append(value)
+        if _where_eqs:
+            for column, value in _where_eqs:
+                if value is None:
+                    _where_sqls.append(f'{fmt.fmo(column)} IS NULL')
+                else:
+                    _where_sqls.append(f'{fmt.fmo(column)} = %s')
+                    _where_params.append(value)
 
         return self._select_query(
             base_table    = table if table else tables[0],
@@ -175,6 +180,7 @@ class QueryMaker:
             sql += ' OFFSET %s\n'
             params.append(offset)
 
+        # print(sql, params)
         return sql, params
 
 
