@@ -43,6 +43,7 @@ class QueryMaker:
         limit         : Optional[int]                                = None,
         offset        : Optional[int]                                = None,
         skip_duplicate_columns: bool = True,
+        dump_sql : bool = False,
     ) -> Tuple[str, list]:
         """
             Calculate SQL SELECT query
@@ -94,6 +95,7 @@ class QueryMaker:
             limit         = limit,
             offset        = offset,
             skip_duplicate_columns = skip_duplicate_columns,
+            dump_sql = dump_sql,
         )
 
 
@@ -108,6 +110,7 @@ class QueryMaker:
         limit         : Optional[int],
         offset        : Optional[int],
         skip_duplicate_columns : bool,
+        dump_sql : bool = False,
     ) -> Tuple[str, list]:
 
         column_exprs:Dict[str, Union[List[schema.Column, bool], str]] = {}
@@ -184,7 +187,8 @@ class QueryMaker:
             sql += ' OFFSET %s\n'
             params.append(offset)
 
-        # print(sql, params)
+        if dump_sql:
+            print(sql, params)
         return sql, params
 
 
