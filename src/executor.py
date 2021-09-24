@@ -133,12 +133,13 @@ class SQLExecutor:
         )
 
 
-    def insertmany(self, tablename:str, rows:Iterable[list], _index_start:int=0, **kwargs:Callable) -> int:
+    def insertmany(self, tablename:str, rows:Iterable[list], _index_start:Optional[int]=None, **kwargs:Callable) -> int:
         """ Execute insert query many time """
+        _itr = enumerate(rows, _index_start) if _index_start is not None else ((row,) for row in rows)
         self.executemany(
             f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
              + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
-            ([func(i, row) for func in kwargs.values()] for i, row in enumerate(rows, _index_start)),
+            ([func(*_row) for func in kwargs.values()] for _row in _itr)
         )
         return self.cursor.lastrowid
 
@@ -222,13 +223,17 @@ class SQLExecutor:
 
     def close(self):
         """ Close cursur if not closed """
-        if self.cursor is not None:
-            self.cursor.close()
-            self.cursor = None
+        try:
+            if self.cursor is not None:
+                self.cursor.close()
+                self.cursor = None
+        except ReferenceError:
+            pass
 
 
     def __exit__(self, ex_type, ex_value, trace):
         self.close()
+        self.cursor = None
 
 
     def __del__(self):
