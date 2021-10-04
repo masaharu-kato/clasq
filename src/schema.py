@@ -2,12 +2,12 @@
     Database schema module
 """
 from collections import defaultdict
-from typing import Dict, List, NewType, Tuple, Optional, Iterator
+from typing import Dict, List, NewType, Tuple, Optional, Iterator, Union, ValuesView
 import sys
 import re
 
-import sqlparse
-import ddlparse
+import sqlparse # type: ignore
+import ddlparse # type: ignore
 
 TableName  = NewType('TableName', str)
 ColumnName = NewType('ColumnName', str)
@@ -23,14 +23,14 @@ class ColumnRef:
 
 class Column:
     """ Column schema class """
-    name: str
+    name: ColumnName
     data_type: str
     link_column_refs: List[ColumnRef]
     table: 'Table'
     link_columns: List['Column']
 
-    def __init__(self, name, data_type, link_column_refs = None):
-        self.name = name
+    def __init__(self, name:Union[str, ColumnName], data_type:str, link_column_refs = None):
+        self.name = ColumnName(name)
         self.data_type = data_type
         self.link_column_refs = [] if link_column_refs is None else link_column_refs
         self.link_columns = []
@@ -60,18 +60,18 @@ class Column:
 class Table:
     """ Table schema class """
     db: 'Database'
-    name: str
+    name: TableName
     _coldict: Dict[ColumnName, Column]
     link_tables: Dict[TableName, Tuple[Column, Column]]
 
-    def __init__(self, name:TableName, _coldict:List[Column]):
+    def __init__(self, name:Union[str, TableName], _coldict:List[Column]):
         assert all(isinstance(c, Column) for c in _coldict)
-        self.name = name
+        self.name = TableName(name)
         self._coldict = {column.name: column for column in _coldict}
         assert all(isinstance(c, Column) for c in self.columns)
 
     @property
-    def columns(self) -> Iterator[Column]:
+    def columns(self) -> ValuesView[Column]:
         """ Iterate all column objects """
         return self._coldict.values()
 
@@ -135,7 +135,7 @@ class Database:
             self.resolve_references()
 
     @property
-    def tables(self) -> Iterator[Table]:
+    def tables(self) -> ValuesView[Table]:
         """ Iterate all table objects """
         return self._tbldict.values()
 
@@ -157,7 +157,7 @@ class Database:
 
     def find_tables_links(self, dest_table:TableName, target_tables:Optional[List[TableName]]=None) -> Iterator[Tuple[Column, Column]]:
         """ Get links (pairs of two table-columns) between a specific table and target _tbldict """
-        _tbldict = self.tables if target_tables is None else target_tables
+        _tbldict = list(self.tables) if target_tables is None else [self[name] for name in target_tables]
         for ctable in _tbldict:
             yield from self.get_table_links(dest_table, ctable)
 

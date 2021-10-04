@@ -113,7 +113,7 @@ class QueryMaker:
         dump_sql : bool = False,
     ) -> Tuple[str, list]:
 
-        column_exprs:Dict[str, Union[List[schema.Column, bool], str]] = {}
+        column_exprs:Dict[str, Union[Dict[schema.Column, bool], str]] = {}
         for column in self.db[base_table].columns:
             column_exprs[column.name] = [column, False] # output table : no
 

@@ -16,7 +16,7 @@ class SQLFailedError(RuntimeError):
 class SQLExecutor:
     """ SQL実行クラス """
 
-    def __init__(self, sqcursor:'MySQLCursor'):
+    def __init__(self, sqcursor):
         """ Initialize a instance with a cursor to the Database """
 
         # if not isinstance(sqcursor, MySQLCursor):
@@ -68,17 +68,17 @@ class SQLExecutor:
     def recreate_database(self, name:str, *args, **kwargs) -> None:
         """ Recreate (drop and create) database """
         self.drop_database(name)
-        self.create_database(name, *args, **kwargs)
+        self.create_database(name)
 
     def recreate_user(self, name:str, password:str, grants:List[str], *args, **kwargs) -> None:
         """ Recreate (drop and create) user """
         self.drop_user(name)
-        self.create_user(name, password, grants, *args, **kwargs)
+        self.create_user(name, password, grants)
 
     def recreate_table(self, name:str, colname_types:Dict[str, str], *args, **kwargs) -> None:
         """ Recreate (drop and create) table """
         self.drop_table(name)
-        self.create_table(name, colname_types, *args, **kwargs)
+        self.create_table(name, colname_types)
     
     def insert(self, tablename:str, **kwargs:Any) -> int:
         """ Execute insert query """
@@ -193,8 +193,8 @@ class SQLExecutor:
         return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
 
     @staticmethod
-    def _sql_params_dump(sql:SQLLike, params:list) -> str:
-        return '%s with parameters[%s]' % (sql, ', '.join(map(str, params)))
+    def _sql_params_dump(sql:SQLLike, params:Optional[list]=None) -> str:
+        return '%s with parameters[%s]' % (sql, ', '.join(map(str, params)) if params is not None else 'None')
 
     @staticmethod
     def _sql_str(sql:SQLLike) -> str:

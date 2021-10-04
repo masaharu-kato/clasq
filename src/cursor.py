@@ -11,7 +11,7 @@ MySQLConnection = connector.MySQLConnection
 MySQLCursor = connector.MySQLCursor
 
 
-class ExecOnlyCursor(CursorABC):
+class ExecOnlyCursor(connector.CursorABC):
     """ Execute only cursor """
 
     def callproc(self, procname, args=()):
@@ -86,7 +86,7 @@ class CommandCursor(ExecOnlyCursor):
         self.clear()
         return execs
 
-    def __enter__(self) -> 'SQLCommandRunner':
+    def __enter__(self) -> 'CommandCursor':
         return self
 
     def close(self):

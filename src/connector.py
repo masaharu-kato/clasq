@@ -3,7 +3,7 @@
 """
 from typing import Optional
 from abc import ABCMeta, abstractmethod
-import mysql.connector
+import mysql.connector # type: ignore
 from .executor import SQLExecutor
 from .schema import Database as DBSchema
 
