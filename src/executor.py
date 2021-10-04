@@ -6,9 +6,12 @@ from . import fmt
 from .query import QueryMaker
 # from .cursor import MySQLCursor
 
-_DUMP_EXECUTES = False
-
 SQLLike = Union[QueryMaker, str]
+
+
+class SQLFailedError(RuntimeError):
+    """ SQL Failed Exception """
+
 
 class SQLExecutor:
     """ SQL実行クラス """
@@ -79,13 +82,16 @@ class SQLExecutor:
     
     def insert(self, tablename:str, **kwargs:Any) -> int:
         """ Execute insert query """
-        self.execute(
-            f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
-             + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
-            list(kwargs.values())
-        )
-        # self.execute('INSERT INTO ' + tablename + ' VALUES(' + ', '.join(['%s'] * len(args)) + ')', args) # In case of using normal list
-        return self.cursor.lastrowid
+        try:
+            self.execute(
+                f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
+                + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
+                list(kwargs.values())
+            )
+            # self.execute('INSERT INTO ' + tablename + ' VALUES(' + ', '.join(['%s'] * len(args)) + ')', args) # In case of using normal list
+            return self.cursor.lastrowid
+        except Exception as e:
+            raise SQLFailedError('Failed to insert on table %s' % tablename) from e
 
     def _select_query(self, *args, **kwargs):
         if self.qmaker is None:
@@ -127,45 +133,58 @@ class SQLExecutor:
 
     def update(self, tablename:str, _id_colname:str='id', *, id:int, **kwargs:Any): # pylint: disable=redefined-builtin
         """ Execute update query """
-        self.execute(
-            f'UPDATE {fmt.fo(tablename)} SET ' + ', '.join(fmt.fo(k) + ' = %s' for k in kwargs) + f' WHERE {fmt.fo(_id_colname)} = %s',
-             [*kwargs.values(), id]
-        )
+        try:
+            self.execute(
+                f'UPDATE {fmt.fo(tablename)} SET ' + ', '.join(fmt.fo(k) + ' = %s' for k in kwargs) + f' WHERE {fmt.fo(_id_colname)} = %s',
+                [*kwargs.values(), id]
+            )
+        except Exception as e:
+            raise SQLFailedError('Failed to update on table %s' % tablename) from e
 
 
     def insertmany(self, tablename:str, rows:Iterable[list], _index_start:Optional[int]=None, **kwargs:Callable) -> int:
         """ Execute insert query many time """
         _itr = enumerate(rows, _index_start) if _index_start is not None else ((row,) for row in rows)
-        self.executemany(
-            f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
-             + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
-            ([func(*_row) for func in kwargs.values()] for _row in _itr)
-        )
-        return self.cursor.lastrowid
+        try:
+            self.executemany(
+                f'INSERT INTO {fmt.fo(tablename)}(' + ', '.join(map(fmt.fo, kwargs)) + ')'
+                + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
+                ([func(*_row) for func in kwargs.values()] for _row in _itr)
+            )
+            return self.cursor.lastrowid
+        except Exception as e:
+            raise SQLFailedError('Failed to insert many on table %s' % tablename) from e
 
 
     def execproc(self, procname:str, args:list) -> int:
         """ Execute procedure or function defined in the Database """
-        self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
-        return self.fetchjustone().id
-
+        try:
+            self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
+            return self.fetchjustone().id
+        except Exception as e:
+            raise SQLFailedError('Failed to execute procedure: %s (args: %s)' % (procname, ', '.join(map(str, args)))) from e
 
     def query(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         """ Run sql with parameters """
-        self.execute(sql, params)
-        return self.fetchall()
+        try:
+            self.execute(sql, params)
+            return self.fetchall()
+        except Exception as e:
+            raise SQLFailedError('Failed to query SQL: %s' % self._sql_params_dump(sql, params)) from e
 
 
     def query_one(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         """ Run sql with parameters, assume one result """
-        self.execute(sql, params)
-        return self.fetchone()
+        try:
+            self.execute(sql, params)
+            return self.fetchone()
+        except Exception as e:
+            raise SQLFailedError('Failed to query_one SQL: %s' % self._sql_params_dump(sql, params)) from e
+        
 
 
     def execute(self, sql:SQLLike, params:Optional[list]=None):
         """ Execute SQL query """
-        if _DUMP_EXECUTES:
-            print('Executor.execute():', sql, params)
         return self.cursor.execute(self._sql_str(sql), [self.filter_param(p) for p in params] if params else None)
 
 
@@ -173,6 +192,9 @@ class SQLExecutor:
         """ Execute SQL query many time """
         return self.cursor.executemany(self._sql_str(sql), [[self.filter_param(p) for p in params] for params in params_list] if params_list else None)
 
+    @staticmethod
+    def _sql_params_dump(sql:SQLLike, params:list) -> str:
+        return '%s with parameters[%s]' % (sql, ', '.join(map(str, params)))
 
     @staticmethod
     def _sql_str(sql:SQLLike) -> str:
