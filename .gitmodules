@@ -1,0 +1,3 @@
+[submodule "libs/ddlparse"]
+	path = libs/ddlparse
+	url = https://github.com/masaharu-kato/ddlparse

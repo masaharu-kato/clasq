@@ -1,15 +1,18 @@
 import argparse
 import os
 import sys
-import subprocess
-from dbconfig import ROOT_DIR, DBCFG
+from pathlib import Path
+from libbc.config import LIB_ROOT_DIR, Configuration
 from src.cursor import CommandCursor
 from src.connector import SQLExecutor
 
 _DB_USERS_ = ['admin', 'loader', 'viewer']
 
-def create_sample_db(*, debug_dump:bool=False) -> None:
+def create_sample_db(db_config_path:Path, *, debug_dump:bool=False) -> None:
     """ Create (or recreate) database itself and users """
+    # TODO: Fix
+
+    DBCFG = Configuration(db_config_path)
 
     with SQLExecutor(CommandCursor(['mysql'], debug_dump=(sys.stderr if debug_dump else None))) as exr:
         exr.recreate_database(DBCFG['server']['databasename'])
@@ -22,7 +25,7 @@ def create_sample_db(*, debug_dump:bool=False) -> None:
                 ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'EXECUTE']
             )
 
-        with open(os.path.join(ROOT_DIR, 'conf/tables.sql')) as f:
+        with open(os.path.join(LIB_ROOT_DIR, DBCFG['schema']['path'])) as f:
             exr.execute_from(f)
 
 

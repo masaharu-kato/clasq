@@ -3,8 +3,12 @@
 """
 from typing import Optional
 from abc import ABCMeta, abstractmethod
-import mysql.connector
+import mysql.connector # type: ignore
 from .executor import SQLExecutor
+from .schema import Database as DBSchema
+
+CursorABC = mysql.connector.abstracts.MySQLCursorAbstract
+
 
 class DBConnectionABC(metaclass=ABCMeta):
     """ SQL Connection Abstract Class """
@@ -22,23 +26,28 @@ class DBConnectionABC(metaclass=ABCMeta):
 class MySQLConnection(DBConnectionABC):
     """ MySQL Connection Class """
 
-    def __init__(self, *args, dictionary:bool=False, named_tuple:bool=False, **kwargs):
+    def __init__(self, *args, dictionary:bool=False, named_tuple:bool=False, db_schema:Optional[DBSchema]=None, **kwargs):
         super().__init__()
         self.cnx = mysql.connector.connect(*args, **kwargs)
+        self.db_schema = db_schema
         self.cursor_dict = dictionary
         self.cursor_ntpl = named_tuple
 
     def commit(self):
+        """ Commit changes """
         return self.cnx.commit()
 
-    def cursor(self, *args, **kwargs):
+    def cursor(self, *args, **kwargs) -> 'MySQLCursor':
+        """ Get cursor object """
         if self.cursor_dict:
             kwargs['dictionary'] = True
         if self.cursor_ntpl:
             kwargs['named_tuple'] = True
-        return self.cnx.cursor(*args, **kwargs)
+
+        return MySQLCursor(self, self.cnx.cursor(*args, **kwargs))
 
     def close(self) -> None:
+        """ Close cursor """
         if self.cnx is not None:
             self.cnx.close()
             self.cnx = None
@@ -47,9 +56,18 @@ class MySQLConnection(DBConnectionABC):
         self.close()
 
 
+class MySQLCursor:
+    """ Basic MySQL Cursor (with parent `MySQLConnection` instance) """
+    def __init__(self, con:MySQLConnection, cursor:CursorABC):
+        self.con = con
+        self.cursor = cursor
+
+    # def __getattr__(self, name:str):
+    #     """ Call method or get property on cursor object """
+    #     return getattr(self.cursor, name)
+
 # class DebugSQLConnection(DBConnectionABC):
 #     """ Virtual Database Connection for Debugging """
 
 #     def cursor(self, *args, **kwargs):
 #         return DebugDBCursor(*args, **kwargs)
-
