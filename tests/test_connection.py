@@ -1,6 +1,6 @@
 import pytest
-from src.connector import MySQLConnection
-from src.executor import SQLExecutor
+from libsql.connector import MySQLConnection
+from libsql.executor import SQLExecutor
 from dbconfig import DBCFG
 
 USERS = [
@@ -22,7 +22,7 @@ def test_connection(username):
 
     assert cnx
 
-    cursor = cnx.cursor(dictionary=True)
+    cursor = cnx.create_cursor(dictionary=True)
     cursor.execute('SELECT * FROM users ORDER BY id LIMIT 2')
     assert cursor.fetchall() == USERS
 
@@ -52,7 +52,7 @@ def test_dict_connection():
 
     assert cnx
 
-    cursor = cnx.cursor()
+    cursor = cnx.create_cursor()
     cursor.execute('SELECT * FROM users ORDER BY id LIMIT 2')
     assert cursor.fetchall() == USERS
 
