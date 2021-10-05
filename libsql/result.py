@@ -41,16 +41,16 @@ class ResultIterator:
             return self.nextidx - 1
         return None
 
-    def colidx(self, colname:str, *, tables:Optional[Tuple[str]]=None):
-        tables = tables or tuple()
-        return self.tables_colname2i[tables][colname]
+    # def colidx(self, colname:str, *, tables:Optional[Tuple[str]]=None):
+    #     _tables:Tuple[str] = tables or tuple()
+    #     return self.tables_colname2i[_tables][colname]
 
-    def colbyidx(self, idx:int):
-        raw = self.row[idx]
-        fac = self.factories[idx]
-        if fac:
-            return fac(raw)
-        return raw
+    # def colbyidx(self, idx:int):
+    #     raw = self.row[idx]
+    #     fac = self.factories[idx]
+    #     if fac:
+    #         return fac(raw)
+    #     return raw
 
-    def col(self, colname:str, *, tables:Optional[Tuple[str]]=None):
-        return self.colbyidx(self.colidx(colname, tables=tables))
+    # def col(self, colname:str, *, tables:Optional[Tuple[str]]=None):
+    #     return self.colbyidx(self.colidx(colname, tables=tables))

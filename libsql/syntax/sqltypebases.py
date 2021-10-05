@@ -17,17 +17,6 @@ def _isinstance(v, t):
     return isinstance(v, t)
 
 
-class _IntValueType:
-    """ Int value type """
-    _VALUE_ = None
-
-def _int_value_type(v:int):
-    if not isinstance(v, int):
-        raise TypeError('`v` is not an integer.')
-    return types.new_class('intv_{}'.format(v), bases=(_IntValueType,))
-
-
-
 class SQLType:
     """ SQL data types """
     _PY_TYPE_            : typing.Optional[typing.Type] = None # Corresponding python type
@@ -300,7 +289,7 @@ class SQLTypeEnv:
         if is_child_class(t, Record):
             return ForeignTableKey[t]
         if t in cls.type_aliases:
-            t = cls.type_aliases.get(t)
+            t = cls.type_aliases[t]
         if ensure_nullable and cls.default_not_null and not issubclass(t, (Nullable, NotNull)):
             t = NotNull[t]
         return t
@@ -393,17 +382,3 @@ class ForeignTableKey(Final, SQLTypeWithType, typing.Generic[T]):
             __TYPE_SQL__ = Int.__type_sql__(),
             _TYPE_FOREIGN_KEY_ = t,
         )
-
-
-# class RecordEnv(SQLTypeEnv):
-#     """ Record definition environment class """
-
-#     common_columns = {
-#         'id' : PrimaryKey[NotNull[Int]],
-#     }
-
-#     @classmethod
-#     def set_common_columns(cls, tf:Type, tt:Type):
-#         """ Set a common columns """
-#         assert isinstance(tt, SQLType)
-#         cls.common_columns[tf] = tt

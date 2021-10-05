@@ -2,19 +2,13 @@
     SQL query module
 """
 
+from re import A
 from typing import Any, Dict, List, Sequence, Optional, Union, Tuple, NewType
 
-from . import schema
+from .schema import Column, ColumnName, ColumnLike, Table, TableName, TableLike, Database
 from .syntax import sql_expression as sqlex
 from . import executor
 
-ColumnName = schema.ColumnName
-ColumnLike = Union[schema.Column, ColumnName]
-TableName = schema.TableName
-TableLike = Union[schema.Table, TableName]
-ColumnAs = Union[ColumnName, Tuple[ColumnName, str]]
-JoinType = NewType('JoinType', str)
-OrderType = NewType('OrderType', str)
 COp = NewType('COp', str) # SQL comparison operator type
 
 class DataView(sqlex.SQLExprType):
@@ -44,23 +38,23 @@ class DataView(sqlex.SQLExprType):
 
     def __init__(self,
         qe:executor.BasicQueryExecutor,
-        db:schema.Database,
+        db:Database,
         table:Optional[TableLike]=None,
         # full:bool=True
     ):
         self.qe : executor.BasicQueryExecutor = qe
-        self.db : schema.Database = db
+        self.db : Database = db
 
-        self._table    : Optional[schema.Table]                    = None
-        self._joins    : List[Tuple[TableLike, Tuple[ColumnLike, ColumnLike]]] = []
-        self._colexprs : Sequence[sqlex.SQLExprType]          = []
+        self._table    : Optional[Table]                    = None
+        self._joins    : List[Tuple[Table, Tuple[Column, Column]]] = []
+        self._colexprs : List[sqlex.SQLExprType]          = []
         self._terms    : Optional[sqlex.SQLExprType]          = None
-        self._groups   : Sequence[Union[ColumnLike, TableLike]] = []
+        self._groups   : List[Column] = []
         self._orders   : List[sqlex.SQLExprType]          = []
         self._limit    : Optional[int]                          = None
         self._offset   : Optional[int]                          = None
 
-        self._result = None
+        self._result:Optional[List[Any]] = None
 
         if table:
             self.table(table) #, full=full)
@@ -82,7 +76,7 @@ class DataView(sqlex.SQLExprType):
 
     def join(self, table:TableLike, lcol:ColumnLike, rcol:ColumnLike):
         """ Join other tables """
-        self._joins.append((self.db.table(table), (lcol, rcol)))
+        self._joins.append((self.db.table(table), (self.db.column(lcol), self.db.column(rcol))))
         return self
 
     def join_new(self, *tables:TableLike):
@@ -100,7 +94,7 @@ class DataView(sqlex.SQLExprType):
         self._colexprs.extend(colexprs)
         return self
 
-    def group(self, *columns:Union[ColumnLike, TableLike]) -> 'DataView':
+    def group(self, *columns:Column) -> 'DataView':
         """ Append group column(s) or table(s) """
         self._groups.extend(columns)
         return self
@@ -142,7 +136,7 @@ class DataView(sqlex.SQLExprType):
         
     def id(self, idval:int):
         """ Append `id` equal term on WHERE clause """
-        assert self._table is None
+        assert self._table is not None
         return self.eq(self._table, id=idval)
 
 
@@ -167,7 +161,7 @@ class DataView(sqlex.SQLExprType):
 
     def execute(self) -> 'DataView':
         """ Execute SQL """
-        self._result = self.qe.query(self.sql_with_params())
+        self._result = self.qe.query(*self.sql_with_params())
         return self
 
     def prepare(self) -> 'DataView':
@@ -227,9 +221,9 @@ class DataView(sqlex.SQLExprType):
         # clarify target columns
         target_columns = [*self._table.columns]
         for table, _ in self._joins:
-            target_columns.extend(self.db[table].columns)
+            target_columns.extend(self.db.table(table).columns)
         for colexpr in self._colexprs:
-            assert isinstance(colexpr, (schema.Column, str)) 
+            assert isinstance(colexpr, (Column, str)) 
             target_columns.append(self.db.column(colexpr))
 
         sql, params = '', []

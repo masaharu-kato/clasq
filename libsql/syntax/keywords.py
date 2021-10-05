@@ -1,4 +1,6 @@
-""" SQL Keywords """
+"""
+    Definitions of SQL Keywords
+"""
 
 from typing import Dict
 

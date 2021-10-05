@@ -3,11 +3,9 @@
 """
 from abc import abstractmethod
 import re
-from typing import Any, Callable, List, Sequence, Optional, Tuple
+from typing import List, Tuple
 from . import py_expression
 from ..syntax import keywords
-
-_IS_DEBUG = True
 
 _SPACE_ = ' '
 _COMMA_ = ','

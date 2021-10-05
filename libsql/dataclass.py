@@ -1,6 +1,6 @@
 """ Data record module """
 
-from typing import List, get_type_hints, Type, Dict, Optional
+from typing import List, cast, get_type_hints, Type, Dict, Optional
 from functools import lru_cache
 from .view import DataView
 from .syntax import sqltypebases as stb
@@ -79,6 +79,9 @@ class Record(stb.Record):
             value = ctype(raw_value) if raw_value is not None else None
             setattr(self, name, value)
 
+    @property
+    def id(self):
+        ...
 
     @property
     def _db(self):
@@ -90,7 +93,7 @@ class Record(stb.Record):
 
     @property
     def _tables(self) -> DataView:
-        return self._raw_tables[self._table_schema == self._id]
+        return self._raw_tables[self._table_schema() == self.id]
     
 
 class RootRecord(Record):
@@ -108,9 +111,9 @@ class Database:
 
     @classmethod
     @lru_cache
-    def table_by_names(cls) -> Dict[str, Type[stb.Record]]:
+    def table_by_names(cls) -> Dict[str, Type[Record]]:
         """ Get list of table name and types """
-        table_types_by_name:Dict[str, Type[stb.Record]] = {}
+        table_types_by_name:Dict[str, Type[Record]] = {}
         # Get types hints of this (current) class
         for name, t in get_type_hints(cls).items():
             # Ignore hidden type hints 
@@ -120,7 +123,7 @@ class Database:
             if not stb.SQLTypeEnv.is_compatible_table_type(t):
                 raise RuntimeError('Type of table `{}` ({}) is not compatible.'.format(name, t))
             # Get the original table type from the type hint
-            table_types_by_name[name] = stb.SQLTypeEnv.table_basetype(t)
+            table_types_by_name[name] = cast(Type[Record], stb.SQLTypeEnv.table_basetype(t))
         return table_types_by_name
 
     @classmethod
