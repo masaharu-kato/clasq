@@ -187,12 +187,15 @@ class Table(SQLSchemaObjABC):
         
         # find primary key columns (assume single primary key)
         _keycols = [col for col in self._coldict.values() if col.is_primary]
-        if len(_keycols) > 1:
-            raise RuntimeError('Multiple primary keys on table %s' % table_name)
-        if not len(_keycols):
-            raise RuntimeError('No primary keys on table %s' % table_name)
+        if len(_keycols) == 1:
+            self._keycol = _keycols[0]
+        else:
+            self._keycol = None
+            # if len(_keycols) > 1:
+            #     raise RuntimeError('Multiple primary keys on table %s' % table_name)
+            if not len(_keycols):
+                raise RuntimeError('No primary keys on table %s' % table_name)
 
-        self._keycol = _keycols[0]
 
         self.tables_links:Dict[Table, List[TableLink]] = DefaultDict(lambda: [])   # linked tables
         self.only_on_dbs = True  # The only table name in the databases or not
@@ -206,6 +209,8 @@ class Table(SQLSchemaObjABC):
     @property
     def keycol(self) -> Column:
         """ Get primary key column """
+        if self._keycol is None:
+            raise RuntimeError('No single primary key on this table.')
         return self._keycol
 
     def _set_db_and_finalize(self, db:'Database'):
