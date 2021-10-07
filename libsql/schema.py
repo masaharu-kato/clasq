@@ -246,7 +246,7 @@ class Table(SQLSchemaObjABC):
         """
         if isinstance(column, Column):
             if id(column.table) != id(self):
-                raise RuntimeError(f'Unknown column `{column}`')
+                raise KeyError(f'Unknown column `{column}`')
             return column
         return self._coldict[ColumnName(column)]
 
@@ -336,13 +336,18 @@ class Database(SQLSchemaObjABC):
     def __getitem__(self, table:TableLike) -> Table:
         return self.table(table)
 
-    def column(self, column:ColumnLike, *, tables:Optional[Sequence[TableLike]]=None) -> Column:
-        """ Get column object by column name (Assume just one column) / Check if column is valid """
-        # TODO: Implement `tables` option
+    def column(self, column:ColumnLike, pr_tables:Optional[Sequence[TableLike]]=None) -> Column:
+        """ Get column object by column name (Assume just one column) / Check if column is valid
+            pr_tables: Priority tables
+        """
+
+        p_tables = [self.table(t) for t in pr_tables] if pr_tables is not None else None
 
         if isinstance(column, Column):
             if id(column.table.db) != id(self):
-                raise RuntimeError(f'Unknown column `{column}`.')
+                raise KeyError(f'Unknown column `{column}`.')
+            # if t_tables is not None and not any(column in table.columns for table in tables):
+            #     raise RuntimeError(f'Column `{column}` is not in the target tables.')
             return column
 
         if not isinstance(column, str):
@@ -350,8 +355,19 @@ class Database(SQLSchemaObjABC):
 
         col_s = column.split('.')
         if len(col_s) >= 2: # Specified like 'database.table.column' or 'table.column'
-            return self.table(col_s[-2]).column(col_s[-1])
+            table = self.table(col_s[-2])
+            # if p_tables is not None and table not in p_tables:
+            #     raise RuntimeError(f'Column `{column}` is not in the target tables.')
+            return table.column(col_s[-1])
 
+        if p_tables:
+            for table in p_tables:
+                try:
+                    return table.column(column)
+                except KeyError:
+                    pass
+            # raise KeyError(f'Column `{column}` not found in the target tables.')
+            
         if column not in self._coldict:
             raise KeyError(f'Undefined column `{column}`.')
 
