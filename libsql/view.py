@@ -33,9 +33,6 @@ class DataView(sqlex.SQLExprType):
         dv.new('students')[100:150] # list students (offset = 100, limit = 50)
         dv.new('students')[100::50] # list students (offset = 100, limit = 50)
     """
-
-    # def __init__(self, db:schema.Database, table:Optional[TableLike]=None, *, parent:bool=True, child:bool=True)
-
     def __init__(self,
         qe:executor.BasicQueryExecutor,
         db:Database,
@@ -113,14 +110,6 @@ class DataView(sqlex.SQLExprType):
         """ Set offset """
         self._offset = offset
         return self
-
-    # def join_parents(self):
-    #     self._join_parent_tables = True
-    #     return self
-
-    # def join_children(self):
-    #     self._join_child_tables = True
-    #     return self
 
     def term(self, l, op, r) -> 'DataView':
         """ Append term for WHERE clause """
@@ -255,23 +244,6 @@ class DataView(sqlex.SQLExprType):
         append_clause('OFFSET'  , self._offset)
         
         return sql, params
-
-
-# @staticmethod
-# def AUTO_ALIAS_FUNC(tablename:str, colname:str) -> str:
-#     """ Automatically aliasing function for columns expressions in SELECT query """
-#     return tablename[:-1] + '_' + colname
-
-
-# def assert_type(value, *types):
-#     """
-#         Assert type of specified value
-#         Specify each element of `types` to tuple of types to union type.
-#         Specify `types` to the types on iterate levels.
-#         e.g. list/tuple of tuple of 
-#     """
-#     if isinstance(, type):
-#         pass
 
 
 class DataViewTables:

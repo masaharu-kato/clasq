@@ -249,7 +249,6 @@ class QueryExecutor(BasicQueryExecutor):
         limit          : Optional[int]                                = None, # Limit of results
         offset         : Optional[int]                                = None, # Offset of results
         skip_same_alias: bool = True,
-        fetch_one      : bool = False,
     ) -> Tuple[str, list]:
         """
             Calculate SQL SELECT query
@@ -278,7 +277,6 @@ class QueryExecutor(BasicQueryExecutor):
         limit          : Optional[int]               = None, # Limit of results
         offset         : Optional[int]               = None, # Offset of results
         skip_same_alias: bool = True,
-        fetch_one      : bool = False,
     ) -> Tuple[str, list]:
 
         if not tables:
@@ -350,6 +348,7 @@ class QueryExecutor(BasicQueryExecutor):
                         select_columns.append((column, _alias))
                         used_column_names.add(_alias)
 
+        # Construct SELECT column expressions
         select_extra_columns:List[Tuple[ExtraColumnExpr, ColumnAlias]] = []
         for column_expr, alias in extra_columns:
             if alias in used_column_names:
@@ -357,10 +356,9 @@ class QueryExecutor(BasicQueryExecutor):
             select_extra_columns.append((column_expr, alias))
             used_column_names.add(alias)
 
-        # Construct SELECT column expressions
         select_col_exprs = []
-        for column, alias in select_columns:
-            select_col_exprs.append(column.sql() + ((' AS ' + astext(alias)) if alias is not None else ''))
+        for column, opt_alias in select_columns:
+            select_col_exprs.append(column.sql() + ((' AS ' + astext(opt_alias)) if opt_alias is not None else ''))
         for column_expr, alias in select_extra_columns:
             select_col_exprs.append(column_expr + ' AS ' + astext(alias))
 
@@ -377,6 +375,7 @@ class QueryExecutor(BasicQueryExecutor):
             joins.append((jointype, clink[0]))
             _loaded_tables.insert(0, target_table)
 
+        # Construct SQL statement
         sql = 'SELECT ' + ', '.join(select_col_exprs) + ' FROM ' + base_table.sql() + '\n'
 
         for jointype, tlink in joins:
@@ -401,6 +400,7 @@ class QueryExecutor(BasicQueryExecutor):
             sql += ' OFFSET %s\n'
             params.append(offset)
 
+        # Return a tuple of (SQL statement, list of parameter values)
         return sql, params
 
     @staticmethod
