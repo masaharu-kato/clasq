@@ -294,7 +294,9 @@ class QueryExecutor(BasicQueryExecutor):
         _where_sqls = [where_sql] if where_sql else []
         _where_params = [] if where_params is None else [*where_params]
 
-        _where_eqs = [(self.db.column(columnlike), value) for columnlike, value in where_eqs]
+        pr_tables = [*tables, *opt_tables, *(table for table, _ in join_tables)]
+
+        _where_eqs = [(self.db.column(columnlike, pr_tables), value) for columnlike, value in where_eqs]
         for column, value in _where_eqs:
             if value is None:
                 _where_sqls.append(f'{column.sql()} IS NULL')
@@ -309,8 +311,8 @@ class QueryExecutor(BasicQueryExecutor):
             extra_columns = [(ExtraColumnExpr(cexpr), ColumnAlias(alias)) for cexpr, alias in extra_columns],
             where_sql     = ' AND '.join(_where_sqls),
             where_params  = _where_params,
-            groups        = [self.db.column(col) for col in groups],
-            orders        = [(self.db.column(col), OrderType(odt)) for col, odt in orders],
+            groups        = [self.db.column(col, pr_tables) for col in groups],
+            orders        = [(self.db.column(col, pr_tables), OrderType(odt)) for col, odt in orders],
             limit         = limit,
             offset        = offset,
             skip_same_alias = skip_same_alias,
@@ -383,7 +385,7 @@ class QueryExecutor(BasicQueryExecutor):
         # Construct SQL statement
         sql = 'SELECT ' + ', '.join(select_col_exprs) + ' FROM ' + base_table.sql() + '\n'
         params:List[Any] = []
-        
+
         for jointype, tlink in joins:
             sql += f' {self._fmt_jointype(jointype)} JOIN {tlink.lcol.table.sql()} ON {tlink.lcol.sql()} = {tlink.rcol.sql()}'
             if join_ons.get(tlink.rcol.table.name):
