@@ -1,6 +1,6 @@
 import pytest
 from libsql.connector import MySQLConnection
-from libsql.executor import SQLExecutor
+from libsql.executor import QueryExecutor
 from dbconfig import DBCFG
 
 USERS = [
@@ -26,14 +26,14 @@ def test_connection(username):
     cursor.execute('SELECT * FROM users ORDER BY id LIMIT 2')
     assert cursor.fetchall() == USERS
 
-    with SQLExecutor(cursor) as executor:
+    with QueryExecutor(cursor) as executor:
         assert executor.query('SELECT * FROM users WHERE id = 1') == USERS[:1]
         assert executor.query_one('SELECT * FROM users WHERE id = 1') == USERS[0]
 
     cursor.close()
 
     with pytest.raises(TypeError):
-        executor = SQLExecutor(cnx)
+        executor = QueryExecutor(cnx)
 
     with cnx.executor(dictionary=True) as executor:
         assert executor.query('SELECT * FROM users WHERE id = 1') == USERS[:1]
