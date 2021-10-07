@@ -234,6 +234,7 @@ class QueryExecutor(BasicQueryExecutor):
     def _select_query(self, *,
         table          : Optional[TableLike]                          = None, # Base table
         join_tables    : Optional[List[Tuple[TableLike, JoinLike]]]   = None, # Tables to join
+        join_ons       : Optional[Dict[TableLike, Tuple[str, list]]]  = None, # Terms in join `ON` clause
         tables         : Optional[List[TableLike]]                    = None, # Tables to join
         opt_table      : Optional[TableLike]                          = None, # Optional table to join
         opt_tables     : Optional[List[TableLike]]                    = None, # Optional tables to join
@@ -261,6 +262,7 @@ class QueryExecutor(BasicQueryExecutor):
             groups     = list(self._one_or_more(group, groups)),
             orders     = list(self._one_or_more(order, orders)),
             join_tables= join_tables or [], extra_columns=extra_columns or [], where_sql=where_sql, where_params=where_params, limit=limit, offset=offset,
+            join_ons   = {} if join_ons is None else join_ons,
             skip_same_alias=skip_same_alias
         )
 
@@ -268,6 +270,7 @@ class QueryExecutor(BasicQueryExecutor):
         tables         : List[TableLike]                   , # Tables
         opt_tables     : List[TableLike]                   , # Optional tables to join
         join_tables    : List[Tuple[TableLike, JoinLike]]  , # Tables to join
+        join_ons       : Dict[TableLike, Tuple[str, list]] , # Terms on joion `ON` clause
         extra_columns  : List[Tuple[str, str]]             , # Extra select column expression and its aliases
         where_eqs      : List[Tuple[ColumnLike, Any]]      , # Where equal formulas
         groups         : List[ColumnLike]                  , # Grouping columns
@@ -302,6 +305,7 @@ class QueryExecutor(BasicQueryExecutor):
         return self._construct_select_query(
             base_table    = self.db.table(tables[0]),
             join_tables   = _join_tables,
+            join_ons      = {self.db.table(table): (expr, params) for table, (expr, params) in join_ons.items()},
             extra_columns = [(ExtraColumnExpr(cexpr), ColumnAlias(alias)) for cexpr, alias in extra_columns],
             where_sql     = ' AND '.join(_where_sqls),
             where_params  = _where_params,
@@ -316,6 +320,7 @@ class QueryExecutor(BasicQueryExecutor):
     def _construct_select_query(self, *,
         base_table      : Table,
         join_tables     : List[Tuple[Table, JoinType]],
+        join_ons        : Dict[Table, Tuple[str, list]],
         extra_columns   : List[Tuple[ExtraColumnExpr, ColumnAlias]],
         where_sql       : Optional[str],
         where_params    : list,
@@ -377,11 +382,16 @@ class QueryExecutor(BasicQueryExecutor):
 
         # Construct SQL statement
         sql = 'SELECT ' + ', '.join(select_col_exprs) + ' FROM ' + base_table.sql() + '\n'
-
-        for jointype, tlink in joins:
-            sql += f' {self._fmt_jointype(jointype)} JOIN {tlink.lcol.table.sql()} ON {tlink.lcol.sql()} = {tlink.rcol.sql()}\n'
-
         params:List[Any] = []
+        
+        for jointype, tlink in joins:
+            sql += f' {self._fmt_jointype(jointype)} JOIN {tlink.lcol.table.sql()} ON {tlink.lcol.sql()} = {tlink.rcol.sql()}'
+            if join_ons.get(tlink.rcol.table.name):
+                _on_sql, _on_params = join_ons[tlink.rcol.table.name]
+                sql += ' AND (' + _on_sql + ')'
+                params.extend(_on_params)
+            sql += '\n'
+
         if where_sql:
             sql += ' WHERE ' + where_sql + '\n'
             params.extend(where_params)
