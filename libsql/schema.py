@@ -15,6 +15,16 @@ import ddlparse # type: ignore
 
 _IS_DEBUG = True
 
+class NotFoundError(KeyError):
+    """ Not Found Error """
+
+class ColumnNotFoundError(NotFoundError):
+    """ Column not found error """
+
+class TableNotFoundError(NotFoundError):
+    """ Table not found error """
+
+
 def asobj(_objname) -> str:
     """ Format single object name """
     if _objname is None:
@@ -239,16 +249,20 @@ class Table(SQLSchemaObjABC):
         """ Get column by column name / Check if column is valid
             When the Column object specified:
                 The column is in this table: return the Column object
-                Else: raise Error
+                Else: raise ColumnNotFoundError
             When the column name (assume string) specified:
                 If the name of column exists: return the Column object
-                Else: raise KeyError
+                Else: raise ColumnNotFoundError
         """
         if isinstance(column, Column):
             if id(column.table) != id(self):
-                raise KeyError(f'Unknown column `{column}`')
+                raise ColumnNotFoundError(f'Unknown column `{column}`')
             return column
-        return self._coldict[ColumnName(column)]
+
+        try:
+            return self._coldict[ColumnName(column)]
+        except KeyError:
+            raise ColumnNotFoundError('Column `%s` not found.' % column)
 
     def col(self, column:ColumnLike) -> Column:
         """ Get column objects (alias of `self.column`) """
@@ -326,12 +340,15 @@ class Database(SQLSchemaObjABC):
         """ Get table object by table name / Check if table is valid """
         if isinstance(table, Table):
             if id(table.db) != id(self):
-                raise RuntimeError(f'Unknown table `{table}`.')
+                raise TableNotFoundError(f'Unknown table `{table}`.')
             return table
 
         # assert isinstance(table, str)
         # table = table.split('.')[-1]
-        return self._tbldict[TableName(table)]
+        try:
+            return self._tbldict[TableName(table)]
+        except KeyError:
+            raise TableNotFoundError('Table `%s` not found.' % table)
     
     def __getitem__(self, table:TableLike) -> Table:
         return self.table(table)
@@ -364,7 +381,7 @@ class Database(SQLSchemaObjABC):
             for table in p_tables:
                 try:
                     return table.column(column)
-                except KeyError:
+                except ColumnNotFoundError:
                     pass
             # raise KeyError(f'Column `{column}` not found in the target tables.')
             
