@@ -386,13 +386,18 @@ class QueryExecutor(BasicQueryExecutor):
         sql = 'SELECT ' + ', '.join(select_col_exprs) + ' FROM ' + base_table.sql() + '\n'
         params:List[Any] = []
 
+        join_on_used = {table: False for table in join_ons}
         for jointype, tlink in joins:
-            sql += f' {self._fmt_jointype(jointype)} JOIN {tlink.lcol.table.sql()} ON {tlink.lcol.sql()} = {tlink.rcol.sql()}'
-            if join_ons.get(tlink.rcol.table.name):
-                _on_sql, _on_params = join_ons[tlink.rcol.table.name]
+            _target_table = tlink.lcol.table
+            sql += f' {self._fmt_jointype(jointype)} JOIN {_target_table.sql()} ON {tlink.lcol.sql()} = {tlink.rcol.sql()}'
+            if join_ons.get(_target_table):
+                _on_sql, _on_params = join_ons[_target_table]
                 sql += ' AND (' + _on_sql + ')'
                 params.extend(_on_params)
+                join_on_used[_target_table] = True
             sql += '\n'
+        if not all(join_on_used.values()):
+            raise RuntimeError('Unused join_on setting(s) exist: %s' % ', '.join(table.name for table, used in join_on_used.items() if not used))
 
         if where_sql:
             sql += ' WHERE ' + where_sql + '\n'
