@@ -176,6 +176,13 @@ class TableLink:
     def rcol(self) -> Column:
         return self.destcol
 
+    def __repr__(self) -> str:
+        return '<TableLink %s -> %s %s %s>' % (
+            self.origcol,
+            self.destcol,
+            'nullable' if self.is_nullable else 'not_null',
+            'parent' if self.is_parent else 'child',
+        )   
 
 class Table(SQLSchemaObjABC):
     """ Table schema class """          
