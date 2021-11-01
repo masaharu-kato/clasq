@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, IO, Iterable, Iterator, List, Optional, 
 import warnings
 from libsql.connector import CursorABC
 import mysql.connector.errors as mysql_error # type: ignore
-from .schema import Column, ColumnAlias, ColumnLike, Database, ExtraColumnExpr, JoinLike, JoinType, OrderLike, OrderType, Table, TableLike, TableLink, asobj, astext, astype
+from .schema import Column, ColumnAlias, ColumnLike, Database, ExtraColumnExpr, JoinLike, JoinType, OrderLike, OrderType, Table, TableLike, TableLink, asobj, asop, astext, astype
 
 T = TypeVar('T')
 SQLLike = str
@@ -241,6 +241,8 @@ class QueryExecutor(BasicQueryExecutor):
         extra_columns  : Optional[List[Tuple[str, str]]]              = None, # Extra select column expression and its aliases
         where_sql      : Optional[str]                                = None, # Where SQL
         where_params   : Optional[list]                               = None, # Where SQL parameters
+        where_op       : Optional[Tuple[ColumnLike, Any]]             = None, # Where binary operator formula
+        where_ops      : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where binary operator formulas
         where_eq       : Optional[Tuple[ColumnLike, Any]]             = None, # Where equal formula
         where_eqs      : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where equal formulas
         where_not_eq   : Optional[Tuple[ColumnLike, Any]]             = None, # Where not equal formula
@@ -260,6 +262,7 @@ class QueryExecutor(BasicQueryExecutor):
         return self._select_query_by_list(
             tables        = list(self._one_or_more(table, tables)),
             opt_tables    = list(self._one_or_more(opt_table, opt_tables)),
+            where_ops     = list(self._one_or_more(where_op, where_ops)),
             where_eqs     = list(self._one_or_more(where_eq, where_eqs)),
             where_not_eqs = list(self._one_or_more(where_not_eq, where_not_eqs)),
             groups        = list(self._one_or_more(group, groups)),
@@ -275,6 +278,7 @@ class QueryExecutor(BasicQueryExecutor):
         join_tables    : List[Tuple[TableLike, JoinLike]]  , # Tables to join
         join_ons       : Dict[TableLike, Tuple[str, list]] , # Terms on joion `ON` clause
         extra_columns  : List[Tuple[str, str]]             , # Extra select column expression and its aliases
+        where_ops      : List[Tuple[ColumnLike, str, Any]] , # Where binary operator formulas
         where_eqs      : List[Tuple[ColumnLike, Any]]      , # Where equal formulas
         where_not_eqs  : List[Tuple[ColumnLike, Any]]      , # Where not equal formulas
         groups         : List[ColumnLike]                  , # Grouping columns
@@ -301,22 +305,23 @@ class QueryExecutor(BasicQueryExecutor):
         pr_tables = [*tables, *opt_tables, *(table for table, _ in join_tables)]
 
         # Process where equals
-        _where_eqs = [(self.db.column(columnlike, pr_tables), value) for columnlike, value in where_eqs]
-        for column, value in _where_eqs:
-            if value is None:
-                _where_sqls.append(f'{column.sql()} IS NULL')
-            else:
-                _where_sqls.append(f'{column.sql()} = %s')
-                _where_params.append(value)
+        _where_ops = [(columnlike, op, value) for columnlike, op, value in where_ops]
+        _where_ops.extend((columnlike, '=', value) for columnlike, value in where_eqs)
+        _where_ops.extend((columnlike, '<>', value) for columnlike, value in where_not_eqs)
 
-        # Process where not equals
-        _where_not_eqs = [(self.db.column(columnlike, pr_tables), value) for columnlike, value in where_not_eqs]
-        for column, value in _where_not_eqs:
-            if value is None:
-                _where_sqls.append(f'{column.sql()} IS NOT NULL')
-            else:
-                _where_sqls.append(f'{column.sql()} <> %s')
+        for columnlike, _op, value in _where_ops:
+            op = asop(_op)
+            column = self.db.column(columnlike, pr_tables)
+            if value is not None:
+                _where_sqls.append(f'{column.sql()} {op} %s')
                 _where_params.append(value)
+            else:
+                if op in ('=', 'IS'):
+                    _where_sqls.append(f'{column.sql()} IS NULL')
+                elif op in ('<>', '!=', 'IS NOT'):
+                    _where_sqls.append(f'{column.sql()} IS NOT NULL')
+                else:
+                    raise RuntimeError('Invalid operator for NULL (None) value')
         
         return self._construct_select_query(
             base_table    = self.db.table(tables[0]),
