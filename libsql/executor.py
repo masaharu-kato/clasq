@@ -278,7 +278,7 @@ class QueryExecutor(BasicQueryExecutor):
         join_tables    : List[Tuple[TableLike, JoinLike]]  , # Tables to join
         join_ons       : Dict[TableLike, Tuple[str, list]] , # Terms on joion `ON` clause
         extra_columns  : List[Tuple[str, str]]             , # Extra select column expression and its aliases
-        where_ops      : List[Tuple[ColumnLike, str, Any]] , # Where binary operator formulas
+        where_ops      : List[Union[Tuple[ColumnLike, str, Any], list]] , # Where binary operator formulas (list for OR operator)
         where_eqs      : List[Tuple[ColumnLike, Any]]      , # Where equal formulas
         where_not_eqs  : List[Tuple[ColumnLike, Any]]      , # Where not equal formulas
         groups         : List[ColumnLike]                  , # Grouping columns
@@ -289,6 +289,15 @@ class QueryExecutor(BasicQueryExecutor):
         offset         : Optional[int]               = None, # Offset of results
         skip_same_alias: bool = True,
     ) -> Tuple[str, list]:
+        """
+            Construct SELECT SQL query
+
+            where_ops examples:
+            ex1. [('name', '=', 'hogename')] -> 'name = %s', ['hogename']
+            ex2. [('num', '>=', 123), ('num', '<=', 456)] -> '(num >= %s) AND (num <= %s)', [123, 456]
+            ex3. [ [('year', '>', 2020), [('year', '=', 2020), ('month', '>=', 6))] ], [('year', '<', 2022), [('year', '=', 2022), ('month', '<=', 8))] ] ]
+                 -> '((year > 2020) OR ((year = 2020) AND (month >= 6))) AND ((year < 2022) OR ((year = 2022) AND (month <= 8)))'
+        """
 
         if not tables:
             raise RuntimeError('No tables specified.')
@@ -298,38 +307,57 @@ class QueryExecutor(BasicQueryExecutor):
         _join_tables.extend((self.db.table(tablelike), JoinType.INNER) for tablelike in tables[1:])
         _join_tables.extend((self.db.table(tablelike), JoinType.LEFT ) for tablelike in opt_tables)
 
-        # Process where clause
-        _where_sqls = [where_sql] if where_sql else []
-        _where_params = [] if where_params is None else [*where_params]
-
         pr_tables = [*tables, *opt_tables, *(table for table, _ in join_tables)]
 
         # Process where equals
-        _where_ops = [(columnlike, op, value) for columnlike, op, value in where_ops]
-        _where_ops.extend((columnlike, '=', value) for columnlike, value in where_eqs)
-        _where_ops.extend((columnlike, '<>', value) for columnlike, value in where_not_eqs)
+        try:
+            where_ops.extend((columnlike, '=', value) for columnlike, value in where_eqs)
+            where_ops.extend((columnlike, '<>', value) for columnlike, value in where_not_eqs)
+        except ValueError as e:
+            raise RuntimeError('Invalid eq or not_eq parameters: ', where_eqs, where_not_eqs) from e
 
-        for columnlike, _op, value in _where_ops:
-            op = asop(_op)
-            column = self.db.column(columnlike, pr_tables)
-            if value is not None:
-                _where_sqls.append(f'{column.sql()} {op} %s')
-                _where_params.append(value)
-            else:
-                if op in ('=', 'IS'):
-                    _where_sqls.append(f'{column.sql()} IS NULL')
-                elif op in ('<>', '!=', 'IS NOT'):
-                    _where_sqls.append(f'{column.sql()} IS NOT NULL')
+        def _proc_where_ops(_where_ops:list, *, sqls:Optional[list]=None, prms:Optional[list]=None, is_and:bool):
+            sqls = [] if sqls is None else sqls
+            prms = [] if prms is None else prms
+            for _where_op in _where_ops:
+                if isinstance(_where_op, list):
+                    _sql, _prms = _proc_where_ops(_where_op, is_and=not is_and)
+                    sqls.append(_sql)
+                    prms.extend(_prms)
+                    continue
+                
+                try:
+                    columnlike, _op, value = _where_op
+                except ValueError as e:
+                    raise RuntimeError('Invalid operator expression: %s' % _where_op) from e
+                op = asop(_op)
+                column = self.db.column(columnlike, pr_tables)
+                if value is not None:
+                    sqls.append(f'{column.sql()} {op} %s')
+                    prms.append(value)
                 else:
-                    raise RuntimeError('Invalid operator for NULL (None) value')
+                    if op in ('=', 'IS'):
+                        sqls.append(f'{column.sql()} IS NULL')
+                    elif op in ('<>', '!=', 'IS NOT'):
+                        sqls.append(f'{column.sql()} IS NOT NULL')
+                    else:
+                        raise RuntimeError('Invalid operator for NULL (None) value')
+            return (' AND ' if is_and else ' OR ').join(['(%s)' % sql for sql in sqls]), prms
+
+        where_sql, where_params = _proc_where_ops(
+            where_ops,
+            sqls = [where_sql] if where_sql else None,
+            prms = [*where_params] if where_params is not None else None,
+            is_and=True,
+        )
         
         return self._construct_select_query(
             base_table    = self.db.table(tables[0]),
             join_tables   = _join_tables,
             join_ons      = {self.db.table(table): (expr, params) for table, (expr, params) in join_ons.items()},
             extra_columns = [(ExtraColumnExpr(cexpr), ColumnAlias(alias)) for cexpr, alias in extra_columns],
-            where_sql     = ' AND '.join(_where_sqls),
-            where_params  = _where_params,
+            where_sql     = where_sql,
+            where_params  = where_params,
             groups        = [self.db.column(col, pr_tables) for col in groups],
             orders        = [(self.db.column(col, pr_tables), OrderType(odt)) for col, odt in orders],
             limit         = limit,
