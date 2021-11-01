@@ -243,6 +243,8 @@ class QueryExecutor(BasicQueryExecutor):
         where_params   : Optional[list]                               = None, # Where SQL parameters
         where_eq       : Optional[Tuple[ColumnLike, Any]]             = None, # Where equal formula
         where_eqs      : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where equal formulas
+        where_not_eq   : Optional[Tuple[ColumnLike, Any]]             = None, # Where not equal formula
+        where_not_eqs  : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where not equal formulas
         group          : Optional[ColumnLike]                         = None, # Grouping column
         groups         : Optional[List[ColumnLike]]                   = None, # Grouping columns
         order          : Optional[Tuple[ColumnLike, OrderLike]]       = None, # Ordering column and its kind (ASC or DESC)
@@ -256,13 +258,14 @@ class QueryExecutor(BasicQueryExecutor):
             returns (SQL statement string, parameter values)    
         """
         return self._select_query_by_list(
-            tables     = list(self._one_or_more(table, tables)),
-            opt_tables = list(self._one_or_more(opt_table, opt_tables)),
-            where_eqs  = list(self._one_or_more(where_eq, where_eqs)),
-            groups     = list(self._one_or_more(group, groups)),
-            orders     = list(self._one_or_more(order, orders)),
-            join_tables= join_tables or [], extra_columns=extra_columns or [], where_sql=where_sql, where_params=where_params, limit=limit, offset=offset,
-            join_ons   = {} if join_ons is None else join_ons,
+            tables        = list(self._one_or_more(table, tables)),
+            opt_tables    = list(self._one_or_more(opt_table, opt_tables)),
+            where_eqs     = list(self._one_or_more(where_eq, where_eqs)),
+            where_not_eqs = list(self._one_or_more(where_not_eq, where_not_eqs)),
+            groups        = list(self._one_or_more(group, groups)),
+            orders        = list(self._one_or_more(order, orders)),
+            join_tables   = join_tables or [], extra_columns=extra_columns or [], where_sql=where_sql, where_params=where_params, limit=limit, offset=offset,
+            join_ons      = {} if join_ons is None else join_ons,
             skip_same_alias=skip_same_alias
         )
 
@@ -273,6 +276,7 @@ class QueryExecutor(BasicQueryExecutor):
         join_ons       : Dict[TableLike, Tuple[str, list]] , # Terms on joion `ON` clause
         extra_columns  : List[Tuple[str, str]]             , # Extra select column expression and its aliases
         where_eqs      : List[Tuple[ColumnLike, Any]]      , # Where equal formulas
+        where_not_eqs  : List[Tuple[ColumnLike, Any]]      , # Where not equal formulas
         groups         : List[ColumnLike]                  , # Grouping columns
         orders         : List[Tuple[ColumnLike, OrderLike]], # Ordering columns and its kinds
         where_sql      : Optional[str]               = None, # Where SQL
@@ -296,12 +300,22 @@ class QueryExecutor(BasicQueryExecutor):
 
         pr_tables = [*tables, *opt_tables, *(table for table, _ in join_tables)]
 
+        # Process where equals
         _where_eqs = [(self.db.column(columnlike, pr_tables), value) for columnlike, value in where_eqs]
         for column, value in _where_eqs:
             if value is None:
                 _where_sqls.append(f'{column.sql()} IS NULL')
             else:
                 _where_sqls.append(f'{column.sql()} = %s')
+                _where_params.append(value)
+
+        # Process where not equals
+        _where_not_eqs = [(self.db.column(columnlike, pr_tables), value) for columnlike, value in where_not_eqs]
+        for column, value in _where_not_eqs:
+            if value is None:
+                _where_sqls.append(f'{column.sql()} IS NOT NULL')
+            else:
+                _where_sqls.append(f'{column.sql()} <> %s')
                 _where_params.append(value)
         
         return self._construct_select_query(
