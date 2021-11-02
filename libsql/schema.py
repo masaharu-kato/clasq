@@ -26,6 +26,9 @@ class ColumnNotFoundError(NotFoundError):
 class TableNotFoundError(NotFoundError):
     """ Table not found error """
 
+class InvalidFormatError(ValueError):
+    """ Invalid Format error """
+
 
 def asobj(_objname) -> str:
     """ Format single object name """
@@ -34,7 +37,7 @@ def asobj(_objname) -> str:
     name = str(_objname)
     if _IS_DEBUG:
         if '`' in name:
-            raise RuntimeError('Invalid character(s) found in the object name: %s' % name)
+            raise InvalidFormatError('Invalid character(s) found in the object name: %s' % name)
     return '`' + name + '`'
 
 def joinobjs(*objs) -> str:
@@ -51,14 +54,14 @@ def astext(_text) -> str:
     name = '' if _text is None else str(_text)
     if _IS_DEBUG:
         if '"' in name:
-            raise RuntimeError('Invalid character(s) found in the text.')
+            raise InvalidFormatError('Invalid character(s) found in the text.')
     return '"' + name + '"'
 
 def astype(typename) -> str:
     """ Format SQL type """
     if _IS_DEBUG:
         if not re.match(r'\w+(\(\w*\))?', typename):
-            raise RuntimeError('Invalid typename "{}".'.format(typename))
+            raise InvalidFormatError('Invalid typename "{}".'.format(typename))
     return typename
 
 def asop(opname) -> str:
@@ -66,7 +69,7 @@ def asop(opname) -> str:
     if op in keywords.OP_ALIASES:
         op = keywords.OP_ALIASES[op]
     if op not in keywords.OPS:
-        raise RuntimeError('Invalid operator `%s`' % op)
+        raise InvalidFormatError('Invalid operator `%s`' % op)
     return op
 
 class SQLSchemaObjABC(SQLExprType):
