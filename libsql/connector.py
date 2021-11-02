@@ -126,5 +126,5 @@ class MySQLCursor(CursorABC):
     def close(self):
         try:
             return self.cursor.close()
-        except mysql.connector.errors.InternalError:
+        except (mysql.connector.errors.InternalError, ReferenceError):
             pass
