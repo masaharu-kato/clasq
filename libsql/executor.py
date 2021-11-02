@@ -207,9 +207,6 @@ class QueryExecutor(BasicQueryExecutor):
 #       SELECT query methods
 #   ================================================================================================================================
 
-    def select(self, *args, **kwargs):
-        return self.query(*self._select_query(*args, **kwargs))
-
     def select_one(self, *args, **kwargs):
         """ Unique select: Execute select query, assuming one result"""
         return self.query_one(*self._select_query(*args, **kwargs))
@@ -231,11 +228,11 @@ class QueryExecutor(BasicQueryExecutor):
             raise RuntimeError('Multiple results.')
         return _result[0]
 
-    def _select_query(self, *,
+    def select(self,
+        *tables        : TableLike,                                           # Tables to join
         table          : Optional[TableLike]                          = None, # Base table
         join_tables    : Optional[List[Tuple[TableLike, JoinLike]]]   = None, # Tables to join
         join_ons       : Optional[Dict[TableLike, Tuple[str, list]]]  = None, # Terms in join `ON` clause
-        tables         : Optional[List[TableLike]]                    = None, # Tables to join
         opt_table      : Optional[TableLike]                          = None, # Optional table to join
         opt_tables     : Optional[List[TableLike]]                    = None, # Optional tables to join
         extra_columns  : Optional[List[Tuple[str, str]]]              = None, # Extra select column expression and its aliases
@@ -249,15 +246,16 @@ class QueryExecutor(BasicQueryExecutor):
         groups         : Optional[List[ColumnLike]]                   = None, # Grouping columns
         order          : Optional[Tuple[ColumnLike, OrderLike]]       = None, # Ordering column and its kind (ASC or DESC)
         orders         : Optional[List[Tuple[ColumnLike, OrderLike]]] = None, # Ordering columns and its kinds
-        limit          : Optional[int]                                = None, # Limit of results
-        offset         : Optional[int]                                = None, # Offset of results
-        skip_same_alias: bool = True,
+        limit          : Optional[int] = None, # Limit of results
+        offset         : Optional[int] = None, # Offset of results
+        skip_same_alias: bool = True,          # Skip the error(s) of same alias name(s)
+        dump           : bool = False,         # Dump a constructed SQL statement and parameters to the stderr
     ) -> Tuple[str, list]:
         """
             Calculate SQL SELECT query
             returns (SQL statement string, parameter values)    
         """
-        return self._select_query_by_list(
+        return self.query(*self._select_query_by_list(
             tables        = list(self._one_or_more(table, tables)),
             opt_tables    = list(self._one_or_more(opt_table, opt_tables)),
             where_eqs     = list(self._one_or_more(where_eq, where_eqs)),
@@ -266,8 +264,9 @@ class QueryExecutor(BasicQueryExecutor):
             orders        = list(self._one_or_more(order, orders)),
             join_tables   = join_tables or [], extra_columns=extra_columns or [], where_sql=where_sql, where_params=where_params, limit=limit, offset=offset,
             join_ons      = {} if join_ons is None else join_ons,
-            skip_same_alias=skip_same_alias
-        )
+            skip_same_alias=skip_same_alias,
+            dump=dump
+        ))
 
     def _select_query_by_list(self, *,
         tables         : List[TableLike]                   , # Tables
@@ -284,6 +283,7 @@ class QueryExecutor(BasicQueryExecutor):
         limit          : Optional[int]               = None, # Limit of results
         offset         : Optional[int]               = None, # Offset of results
         skip_same_alias: bool = True,
+        dump           : bool = False,
     ) -> Tuple[str, list]:
 
         if not tables:
