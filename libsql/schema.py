@@ -8,12 +8,27 @@ import re
 import weakref
 
 from enum import Enum
+
+from libsql.syntax import keywords
 from .syntax.sql_expression import SQLExprType
 
 import sqlparse # type: ignore
 import ddlparse # type: ignore
 
 _IS_DEBUG = True
+
+class NotFoundError(KeyError):
+    """ Not Found Error """
+
+class ColumnNotFoundError(NotFoundError):
+    """ Column not found error """
+
+class TableNotFoundError(NotFoundError):
+    """ Table not found error """
+
+class InvalidFormatError(ValueError):
+    """ Invalid Format error """
+
 
 def asobj(_objname) -> str:
     """ Format single object name """
@@ -22,7 +37,7 @@ def asobj(_objname) -> str:
     name = str(_objname)
     if _IS_DEBUG:
         if '`' in name:
-            raise RuntimeError('Invalid character(s) found in the object name: %s' % name)
+            raise InvalidFormatError('Invalid character(s) found in the object name: %s' % name)
     return '`' + name + '`'
 
 def joinobjs(*objs) -> str:
@@ -39,16 +54,23 @@ def astext(_text) -> str:
     name = '' if _text is None else str(_text)
     if _IS_DEBUG:
         if '"' in name:
-            raise RuntimeError('Invalid character(s) found in the text.')
+            raise InvalidFormatError('Invalid character(s) found in the text.')
     return '"' + name + '"'
 
 def astype(typename) -> str:
     """ Format SQL type """
     if _IS_DEBUG:
         if not re.match(r'\w+(\(\w*\))?', typename):
-            raise RuntimeError('Invalid typename "{}".'.format(typename))
+            raise InvalidFormatError('Invalid typename "{}".'.format(typename))
     return typename
 
+def asop(opname) -> str:
+    op = str(opname).upper()
+    if op in keywords.OP_ALIASES:
+        op = keywords.OP_ALIASES[op]
+    if op not in keywords.OPS:
+        raise InvalidFormatError('Invalid operator `%s`' % op)
+    return op
 
 class SQLSchemaObjABC(SQLExprType):
     """ SQL Schema object abstract class """
@@ -166,6 +188,13 @@ class TableLink:
     def rcol(self) -> Column:
         return self.destcol
 
+    def __repr__(self) -> str:
+        return '<TableLink %s -> %s %s %s>' % (
+            self.origcol,
+            self.destcol,
+            'nullable' if self.is_nullable else 'not_null',
+            'parent' if self.is_parent else 'child',
+        )   
 
 class Table(SQLSchemaObjABC):
     """ Table schema class """          
@@ -187,12 +216,15 @@ class Table(SQLSchemaObjABC):
         
         # find primary key columns (assume single primary key)
         _keycols = [col for col in self._coldict.values() if col.is_primary]
-        if len(_keycols) > 1:
-            raise RuntimeError('Multiple primary keys on table %s' % table_name)
-        if not len(_keycols):
-            raise RuntimeError('No primary keys on table %s' % table_name)
+        if len(_keycols) == 1:
+            self._keycol = _keycols[0]
+        else:
+            self._keycol = None
+            # if len(_keycols) > 1:
+            #     raise RuntimeError('Multiple primary keys on table %s' % table_name)
+            if not len(_keycols):
+                raise RuntimeError('No primary keys on table %s' % table_name)
 
-        self._keycol = _keycols[0]
 
         self.tables_links:Dict[Table, List[TableLink]] = DefaultDict(lambda: [])   # linked tables
         self.only_on_dbs = True  # The only table name in the databases or not
@@ -206,6 +238,8 @@ class Table(SQLSchemaObjABC):
     @property
     def keycol(self) -> Column:
         """ Get primary key column """
+        if self._keycol is None:
+            raise RuntimeError('No single primary key on this table.')
         return self._keycol
 
     def _set_db_and_finalize(self, db:'Database'):
@@ -234,16 +268,20 @@ class Table(SQLSchemaObjABC):
         """ Get column by column name / Check if column is valid
             When the Column object specified:
                 The column is in this table: return the Column object
-                Else: raise Error
+                Else: raise ColumnNotFoundError
             When the column name (assume string) specified:
                 If the name of column exists: return the Column object
-                Else: raise KeyError
+                Else: raise ColumnNotFoundError
         """
         if isinstance(column, Column):
             if id(column.table) != id(self):
-                raise RuntimeError(f'Unknown column `{column}`')
+                raise ColumnNotFoundError(f'Unknown column `{column}`')
             return column
-        return self._coldict[ColumnName(column)]
+
+        try:
+            return self._coldict[ColumnName(column)]
+        except KeyError:
+            raise ColumnNotFoundError('Column `%s` not found.' % column)
 
     def col(self, column:ColumnLike) -> Column:
         """ Get column objects (alias of `self.column`) """
@@ -321,23 +359,31 @@ class Database(SQLSchemaObjABC):
         """ Get table object by table name / Check if table is valid """
         if isinstance(table, Table):
             if id(table.db) != id(self):
-                raise RuntimeError(f'Unknown table `{table}`.')
+                raise TableNotFoundError(f'Unknown table `{table}`.')
             return table
 
         # assert isinstance(table, str)
         # table = table.split('.')[-1]
-        return self._tbldict[TableName(table)]
+        try:
+            return self._tbldict[TableName(table)]
+        except KeyError:
+            raise TableNotFoundError('Table `%s` not found.' % table)
     
     def __getitem__(self, table:TableLike) -> Table:
         return self.table(table)
 
-    def column(self, column:ColumnLike, *, tables:Optional[Sequence[TableLike]]=None) -> Column:
-        """ Get column object by column name (Assume just one column) / Check if column is valid """
-        # TODO: Implement `tables` option
+    def column(self, column:ColumnLike, pr_tables:Optional[Sequence[TableLike]]=None) -> Column:
+        """ Get column object by column name (Assume just one column) / Check if column is valid
+            pr_tables: Priority tables
+        """
+
+        p_tables = [self.table(t) for t in pr_tables] if pr_tables is not None else None
 
         if isinstance(column, Column):
             if id(column.table.db) != id(self):
-                raise RuntimeError(f'Unknown column `{column}`.')
+                raise KeyError(f'Unknown column `{column}`.')
+            # if t_tables is not None and not any(column in table.columns for table in tables):
+            #     raise RuntimeError(f'Column `{column}` is not in the target tables.')
             return column
 
         if not isinstance(column, str):
@@ -345,8 +391,19 @@ class Database(SQLSchemaObjABC):
 
         col_s = column.split('.')
         if len(col_s) >= 2: # Specified like 'database.table.column' or 'table.column'
-            return self.table(col_s[-2]).column(col_s[-1])
+            table = self.table(col_s[-2])
+            # if p_tables is not None and table not in p_tables:
+            #     raise RuntimeError(f'Column `{column}` is not in the target tables.')
+            return table.column(col_s[-1])
 
+        if p_tables:
+            for table in p_tables:
+                try:
+                    return table.column(column)
+                except ColumnNotFoundError:
+                    pass
+            # raise KeyError(f'Column `{column}` not found in the target tables.')
+            
         if column not in self._coldict:
             raise KeyError(f'Undefined column `{column}`.')
 

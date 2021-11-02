@@ -3,8 +3,8 @@
 """
 from abc import abstractmethod, abstractproperty
 from typing import List, Optional, Sequence, Union
-import mysql.connector
-from mysql.connector import errors # type: ignore
+import mysql.connector # type: ignore
+import mysql.connector.errors # type: ignore
 import mysql.connector.abstracts # type: ignore
 from .schema import Database as DBSchema
 
@@ -117,16 +117,14 @@ class MySQLCursor(CursorABC):
     def executemany(self, sql:str, seq_params:Sequence[Union[list, tuple]]):
         return self.cursor.executemany(sql, seq_params)
 
-    @abstractmethod
     def fetch(self):
         return self.cursor.fetch()
 
-    @abstractmethod
     def fetchall(self) -> list:
         return self.cursor.fetchall()
 
     def close(self):
         try:
             return self.cursor.close()
-        except errors.InternalError as e:
+        except (mysql.connector.errors.InternalError, ReferenceError):
             pass
