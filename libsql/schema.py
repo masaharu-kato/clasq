@@ -8,6 +8,8 @@ import re
 import weakref
 
 from enum import Enum
+
+from libsql.syntax import keywords
 from .syntax.sql_expression import SQLExprType
 
 import sqlparse # type: ignore
@@ -59,6 +61,13 @@ def astype(typename) -> str:
             raise RuntimeError('Invalid typename "{}".'.format(typename))
     return typename
 
+def asop(opname) -> str:
+    op = str(opname).upper()
+    if op in keywords.OP_ALIASES:
+        op = keywords.OP_ALIASES[op]
+    if op not in keywords.OPS:
+        raise RuntimeError('Invalid operator `%s`' % op)
+    return op
 
 class SQLSchemaObjABC(SQLExprType):
     """ SQL Schema object abstract class """
