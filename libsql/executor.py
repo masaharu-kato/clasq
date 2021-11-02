@@ -27,7 +27,7 @@ class BasicQueryExecutor:
     @property
     def cursor(self) -> CursorABC:
         if self._cursor is None:
-            raise RuntimeError('Cursor is already closed.')
+            raise BasicQueryExecutorError('Cursor is already closed.')
         return self._cursor
 
     def __enter__(self):
@@ -39,7 +39,7 @@ class BasicQueryExecutor:
             self.execute(f'SELECT {procname}(' + ', '.join(['%s'] * len(args)) + ') as `id`', args)
             return self.fetchjustone().id
         except mysql_error.DataError as e:
-            raise RuntimeError('Errors in arguments on the function `{}` (args={})'.format(procname, repr(args))) from e
+            raise BasicQueryExecutorError('Errors in arguments on the function `{}` (args={})'.format(procname, repr(args))) from e
 
     def query(self, sql:SQLLike, params:Optional[list]=None, *, fetch_one:bool=False) -> list:
         """ Run sql with parameters """
@@ -47,7 +47,7 @@ class BasicQueryExecutor:
             self.execute(sql, params)
             return self.fetchall() if not fetch_one else self.fetchone()
         except Exception as e:
-            raise RuntimeError('Failed to query SQL: %s, Args: %s' % (sql, ', '.join(map(str, params)) if params is not None else 'None')) from e
+            raise BasicQueryExecutorError('Failed to query SQL: %s, Args: %s' % (sql, ', '.join(map(str, params)) if params is not None else 'None')) from e
 
     def query_one(self, sql:SQLLike, params:Optional[list]=None) -> Any:
         return self.query(sql, params, fetch_one=True)
@@ -72,14 +72,14 @@ class BasicQueryExecutor:
         """ Fetch just one record in result (if not, raise exception) """
         result = self.fetchall()
         if len(result) != 1:
-            raise RuntimeError('Not just one result.')
+            raise BasicQueryExecutorError('Not just one result.')
         return result[0]
 
     def fetchone(self) -> Any:
         """ Fetch only one record in result (or no result as None) (if multiple, raise exception) """
         result = self.fetchall()
         if len(result) > 1:
-            raise RuntimeError('Multiple result.')
+            raise BasicQueryExecutorError('Multiple result.')
         if result:
             return result[0]
         return None
@@ -284,8 +284,8 @@ class QueryExecutor(BasicQueryExecutor):
         id             : Optional[Any]                                = None, # Where id = value formula
         group          : Optional[ColumnLike]                         = None, # Grouping column
         groups         : Optional[List[ColumnLike]]                   = None, # Grouping columns
-        order          : Optional[Tuple[ColumnLike, OrderLike]]       = None, # Ordering column and its kind (ASC or DESC)
-        orders         : Optional[List[Tuple[ColumnLike, OrderLike]]] = None, # Ordering columns and its kinds
+        order          : Optional[Union[ColumnLike, Tuple[ColumnLike, OrderLike]]] = None, # Ordering column and its kind (ASC or DESC)
+        orders         : Optional[List[Union[ColumnLike, Tuple[ColumnLike, OrderLike]]]] = None, # Ordering columns and its kinds
         limit          : Optional[int] = None, # Limit of results
         offset         : Optional[int] = None, # Offset of results
         one            : bool = False,         # Expect a just one result, and return it
@@ -389,6 +389,32 @@ class QueryExecutor(BasicQueryExecutor):
 
                 * The not equal term with the `None` value (Python None) will be a `IS NOT NULL` term.
 
+
+        order(s) arguments examples:
+
+            ex1. (ASC order) 
+                self.select(..., order='age')           (recommended)
+                self.select(..., order='+age')
+                self.select(..., order=('age', 'ASC'))
+                self.select(..., orders=['age'])
+                self.select(..., orders=['+age'])
+                self.select(..., orders=[('age', 'ASC')])
+                    ==> "... ORDER BY `age` ASC"
+
+            ex2. (DESC order) 
+                self.select(..., order='-age')           (recommended)
+                self.select(..., order=('age', 'DESC'))
+                self.select(..., orders=['-age'])
+                self.select(..., orders=[('age', 'DESC')])
+                    ==> "... ORDER BY `age` DESC"
+
+            ex3. multiple orders
+                self.select(..., orders=['-age', 'name', '-id'])                             (recommended)
+                self.select(..., orders=['-age', '+name', '-id'])
+                self.select(..., orders=[('age', 'DESC'), 'name', ('id', 'DESC')])
+                self.select(..., orders=[('age', 'DESC'), ('name', 'ASC'), ('id', 'DESC')])
+                    ==> "... ORDER BY `age` DESC, `name` ASC, `id` DESC"
+
         """
         return self.query(*self._select_query_by_list(
             tables        = list(self._one_or_more(table, _tables, tables)),
@@ -414,7 +440,7 @@ class QueryExecutor(BasicQueryExecutor):
         where_eqs      : List[Tuple[ColumnLike, Any]]      , # Where equal formulas
         where_not_eqs  : List[Tuple[ColumnLike, Any]]      , # Where not equal formulas
         groups         : List[ColumnLike]                  , # Grouping columns
-        orders         : List[Tuple[ColumnLike, OrderLike]], # Ordering columns and its kinds
+        orders         : List[Union[ColumnLike, Tuple[ColumnLike, OrderLike]]], # Ordering columns (and its kinds: 'ASC' (default) or 'DESC')
         where_sql      : Optional[str]               = None, # Where SQL
         where_params   : Optional[list]              = None, # Where SQL parameters
         limit          : Optional[int]               = None, # Limit of results
@@ -427,7 +453,7 @@ class QueryExecutor(BasicQueryExecutor):
         """
 
         if not tables:
-            raise RuntimeError('No tables specified.')
+            raise SelectQueryError('No tables specified.')
 
         # Process join tables 
         _join_tables = [(self.db.table(tablelike), JoinType(jointype)) for tablelike, jointype in join_tables]
@@ -441,7 +467,7 @@ class QueryExecutor(BasicQueryExecutor):
             where_ops.extend((columnlike, '=', value) for columnlike, value in where_eqs)
             where_ops.extend((columnlike, '<>', value) for columnlike, value in where_not_eqs)
         except ValueError as e:
-            raise RuntimeError('Invalid eq or not_eq parameters: ', where_eqs, where_not_eqs) from e
+            raise SelectQueryError('Invalid eq or not_eq parameters: ', where_eqs, where_not_eqs) from e
 
         def _proc_where_ops(_where_ops:list, *, sqls:Optional[list]=None, prms:Optional[list]=None, is_and:bool):
             sqls = [] if sqls is None else sqls
@@ -456,7 +482,7 @@ class QueryExecutor(BasicQueryExecutor):
                 try:
                     columnlike, _op, value = _where_op
                 except ValueError as e:
-                    raise RuntimeError('Invalid operator expression: %s' % _where_op) from e
+                    raise SelectQueryError('Invalid operator expression: %s' % _where_op) from e
                 op = asop(_op)
                 column = self.db.column(columnlike, pr_tables)
                 if value is not None:
@@ -468,7 +494,7 @@ class QueryExecutor(BasicQueryExecutor):
                     elif op in ('<>', '!=', 'IS NOT'):
                         sqls.append(f'{column.sql()} IS NOT NULL')
                     else:
-                        raise RuntimeError('Invalid operator for NULL (None) value')
+                        raise SelectQueryError('Invalid operator for NULL (None) value')
             return (' AND ' if is_and else ' OR ').join(['(%s)' % sql for sql in sqls]), prms
 
         where_sql, where_params = _proc_where_ops(
@@ -477,6 +503,24 @@ class QueryExecutor(BasicQueryExecutor):
             prms = [*where_params] if where_params is not None else None,
             is_and=True,
         )
+
+        _orders = []
+        for order_expr in orders:
+            if isinstance(order_expr, tuple):
+                try:
+                    col, odt = order_expr
+                except ValueError as e:
+                    raise SelectQueryError('Invalid order expression: %s' % order_expr) from e
+                _orders.append((self.db.column(col, pr_tables), OrderType(odt)))
+
+            else:
+                if isinstance(order_expr, str) and order_expr and order_expr[0] in ('+', '-'):
+                    _orders.append((
+                        self.db.column(order_expr[1:], pr_tables),
+                        OrderType.ASC if order_expr[0] == '+' else OrderType.DESC)
+                    )
+                else:
+                    _orders.append((self.db.column(order_expr, pr_tables), OrderType.ASC))
         
         return self._construct_select_query(
             base_table    = self.db.table(tables[0]),
@@ -486,7 +530,7 @@ class QueryExecutor(BasicQueryExecutor):
             where_sql     = where_sql,
             where_params  = where_params,
             groups        = [self.db.column(col, pr_tables) for col in groups],
-            orders        = [(self.db.column(col, pr_tables), OrderType(odt)) for col, odt in orders],
+            orders        = _orders,
             limit         = limit,
             offset        = offset,
             skip_same_alias = skip_same_alias,
@@ -526,7 +570,7 @@ class QueryExecutor(BasicQueryExecutor):
                     _alias = self.AUTO_ALIAS_FUNC(column)
                     if _alias in used_column_names:
                         if not skip_same_alias:
-                            raise RuntimeError('Alias `{}` already used.'.format(_alias))
+                            raise SelectQueryError('Alias `{}` already used.'.format(_alias))
                     else:
                         select_columns.append((column, _alias))
                         used_column_names.add(_alias)
@@ -535,7 +579,7 @@ class QueryExecutor(BasicQueryExecutor):
         select_extra_columns:List[Tuple[ExtraColumnExpr, ColumnAlias]] = []
         for column_expr, alias in extra_columns:
             if alias in used_column_names:
-                raise RuntimeError('Alias `{}` already used.'.format(alias))
+                raise SelectQueryError('Alias `{}` already used.'.format(alias))
             select_extra_columns.append((column_expr, alias))
             used_column_names.add(alias)
 
@@ -551,10 +595,10 @@ class QueryExecutor(BasicQueryExecutor):
         for target_table, jointype in join_tables:
             clink:Sequence[TableLink] = list(target_table.find_tables_links(_loaded_tables))
             if not len(clink):
-                raise RuntimeError('No links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
+                raise SelectQueryError('No links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
             if len(clink) > 1:
                 warnings.warn(RuntimeWarning('Multiple links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables))))
-                # raise RuntimeError('Multiple links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
+                # raise SelectQueryError('Multiple links found between table `{}` from tables {}.'.format(target_table, ', '.join('`{}`'.format(t) for t in _loaded_tables)))
             joins.append((jointype, clink[0]))
             _loaded_tables.insert(0, target_table)
 
@@ -573,7 +617,7 @@ class QueryExecutor(BasicQueryExecutor):
                 join_on_used[_target_table] = True
             sql += '\n'
         if not all(join_on_used.values()):
-            raise RuntimeError('Unused join_on setting(s) exist: %s' % ', '.join(table.name for table, used in join_on_used.items() if not used))
+            raise SelectQueryError('Unused join_on setting(s) exist: %s' % ', '.join(table.name for table, used in join_on_used.items() if not used))
 
         if where_sql:
             sql += ' WHERE ' + where_sql + '\n'
@@ -610,13 +654,13 @@ class QueryExecutor(BasicQueryExecutor):
     @staticmethod
     def _fmt_jointype(jointype:JoinType):
         if not isinstance(jointype, JoinType):
-            raise RuntimeError('Invalid join type %s' % jointype)
+            raise SelectQueryError('Invalid join type %s' % jointype)
         return jointype.name
 
     @staticmethod
     def _fmt_ordertype(ordertype:OrderType):
         if not isinstance(ordertype, OrderType):
-            raise RuntimeError('Invalid ordertype %s' % ordertype)
+            raise SelectQueryError('Invalid ordertype %s' % ordertype)
         return ordertype.name
 
     @staticmethod
@@ -648,24 +692,24 @@ class TableInserts:
         """ Prepare a insertion of new record """
         if self.colnames is None:
             if args:
-                raise RuntimeError('Positional arguments cannot be used without specifying column names in initialization.')
+                raise TableInsertsError('Positional arguments cannot be used without specifying column names in initialization.')
             self.colnames = list(kwargs.keys())
 
         if args and kwargs:
-            raise RuntimeError('Positional arguments and keyword arguments cannot be used at the same time.')
+            raise TableInsertsError('Positional arguments and keyword arguments cannot be used at the same time.')
 
         if args:
             if len(args) != len(self.colnames):
-                raise RuntimeError('The number of values does not match.')
+                raise TableInsertsError('The number of values does not match.')
             values = args
         elif kwargs:
             values = []
             for colname in self.colnames:
                 if colname not in kwargs:
-                    raise RuntimeError('Key `{}` is not specified.'.format(colname))
+                    raise TableInsertsError('Key `{}` is not specified.'.format(colname))
                 values.append(kwargs[colname])
         else:
-            raise RuntimeError('No arguments are specified.')
+            raise TableInsertsError('No arguments are specified.')
 
         assert(isinstance(values, list))
         self.records.append(values)
@@ -687,3 +731,19 @@ class TableInserts:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.execute()
+
+
+class ExecutorError(Exception):
+    """ Executor error """
+
+class BasicQueryExecutorError(ExecutorError):
+    """ Basic Execute Query error """
+
+class QueryExecutorError(BasicQueryExecutorError):
+    """ Query Executor error """
+
+class SelectQueryError(QueryExecutorError):
+    """ SELECT Query error """
+
+class TableInsertsError(ExecutorError):
+    """ Table Inserts error """
