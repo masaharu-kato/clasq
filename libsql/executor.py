@@ -3,6 +3,8 @@
 """
 from typing import Any, Callable, Dict, IO, Iterable, Iterator, List, Optional, Sequence, Set, Tuple, TypeVar, Union
 import warnings
+import sys
+
 from libsql.connector import CursorABC
 import mysql.connector.errors as mysql_error # type: ignore
 from .schema import Column, ColumnAlias, ColumnLike, Database, ExtraColumnExpr, JoinLike, JoinType, OrderLike, OrderType, Table, TableLike, TableLink, asobj, asop, astext, astype
@@ -168,69 +170,104 @@ class QueryExecutor(BasicQueryExecutor):
         self.drop_table(name)
         self.create_table(name, colname_types)
     
-    def insert(self, tablename:str, **kwargs:Any) -> int:
-        """ Execute insert query """
+    def insert(self, tablelike: TableLike, **kwargs:Any) -> int:
+        """ Execute insert query
+        
+            example:
+                `self.insert('students', name="New name", age=26)`
+                    ==> SQL: `INSERT students(name, age) VALUES(%s, %s)`, parameters: `["New name", 26]`
+                
+                * Returns a id value of the inserted record 
+        """
+        table = self.db.table(tablelike)
         self.execute(
-            f'INSERT INTO {asobj(tablename)}(' + ', '.join(map(asobj, kwargs)) + ')'
-             + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
+            f'INSERT INTO {table.sql()}(' + ', '.join('`%s`' % table[colname].name for colname in kwargs) + ')'
+                + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
             list(kwargs.values())
         )
         # self.execute('INSERT INTO ' + tablename + ' VALUES(' + ', '.join(['%s'] * len(args)) + ')', args) # In case of using normal list
         return self.cursor.last_row_id()
 
-    def insert_to_table(self, tablename:str, colnames:Optional[List[str]]=None):
-        return TableInserts(self, tablename, colnames)
+    def insertmany(self, tablelike: TableLike, rows: Iterable[list], _unpack=False, **kwargs: Any) -> int:
+        """ Execute insert query many time
+        
+            ex1:
+                ```
+                    data = [('hoge name', 24), ('fugar nome', 22), ...]
+                    self.insert('students', data,
+                        name = lambda row: row[0],
+                        age  = lambda row: row[1],
+                    )
+                ```
+                    ==> SQL: `INSERT students(name, age) VALUES(%s, %s)`,
+                        parameters for executemany: `[["hoge name", 26], ["fugar nome", 22], ...]`
+                
+                * Returns a id value of the first inserted record (if the MySQL/MariaDB environment)
+                
+        
+            ex2:
+                ```
+                    plan_id = 76
+                    data = [('action 1', 30), ('action 2', 15), ...]
+                    self.insert('plan_actions', enumerate(data, 1), _unpack=True,
+                        plan_id = plan_id,
+                        index   = lambda i, row: i,
+                        action  = lambda i, row: row[0],
+                        time    = lambda i, row: row[1],
+                    )
+                ```
+                    ==> SQL: `INSERT plan_actions(plan_id, index, action, time) VALUES(%s, %s, %s, %s)`,
+                        parameters for executemany: `[[76, 1, "action 1", 30], [76, 2, "action 2", 15], ...]`
+        """
+        table = self.db.table(tablelike)
 
-    def exists(self, tablename:str, **kwargs):
-        """ Check if exists specific record in the table """
-        res = self.select_eq_one(tablename, ['COUNT(*) AS n'], **kwargs)
-        return res.n != 0
+        # row_maker = {}
+        # for colname, v in kwargs.items():
+        #     print('colname:', colname)
+        #     # breakpoint()
+        #     # v = (lambda i, row: 'i=%d, row=%s' % (i, repr(row)))
+        #     row_maker[colname] = lambda _row, v=v: (v(*_row))
 
-
-    def update(self, tablename:str, _id_colname:str='id', *, id:int, **kwargs:Any): # pylint: disable=redefined-builtin
-        """ Execute update query """
-        self.execute(
-            f'UPDATE {asobj(tablename)} SET ' + ', '.join(asobj(k) + ' = %s' for k in kwargs) + f' WHERE {asobj(_id_colname)} = %s',
-             [*kwargs.values(), id]
-        )
-
-    def insertmany(self, tablename:str, rows:Iterable[list], _index_start:int=0, **kwargs:Callable) -> int:
-        """ Execute insert query many time """
+        row_maker = {
+            colname: ((lambda row, v=v: v(*row)) if _unpack else v) if callable(v) else lambda _, v=v: v  # capture the current `v` in `v=v
+            for colname, v in kwargs.items()
+        }
         self.executemany(
-            f'INSERT INTO {asobj(tablename)}(' + ', '.join(map(asobj, kwargs)) + ')'
-             + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
-            ([func(i, row) for func in kwargs.values()] for i, row in enumerate(rows, _index_start)),
+            f'INSERT INTO {table.sql()}(' + ', '.join('`%s`' % table[colname].name for colname in kwargs) + ')'
+                + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
+            ([row_maker[colname](row) for colname in kwargs] for row in rows),
         )
         return self.cursor.last_row_id()
 
-#   ================================================================================================================================
-#       SELECT query methods
-#   ================================================================================================================================
+    def insert_to_table(self, tablename:str, colnames:Optional[List[str]]=None):
+        return TableInserts(self, tablename, colnames)
 
-    def select_one(self, *args, **kwargs):
-        """ Unique select: Execute select query, assuming one result"""
-        return self.query_one(*self._select_query(*args, **kwargs))
-    
-    def select_eq(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
-        """ Execute select query for a single table with equivalence conditions """
-        sql = 'SELECT ' + (', '.join(map(asobj, colnames)) if colnames else '*') + ' FROM ' + asobj(tablename)
-        if kwargs:
-            sql += ' WHERE ' + ' AND '.join(asobj(k) + ' = %s' for k in kwargs)
-        self.execute(sql, list(kwargs.values()))
-        return self.fetchall()
+    def exists(self, tablelike: TableLike, **options):
+        """ Check if exists specific record in the table """
+        res = self.select(tablelike, extra_columns=[('COUNT(*)', 'n')], **options)
+        return res.n != 0
 
-    def select_eq_one(self, tablename:str, colnames:Optional[List[str]]=None, **kwargs:Any):
-        """ Execute select query for a single table with equivalence conditions, assuming one result """
-        _result = self.select_eq(tablename, colnames, **kwargs)
-        if not _result:
-            return None
-        if len(_result) != 1:
-            raise RuntimeError('Multiple results.')
-        return _result[0]
+    def update(self, tablelike: TableLike, *, id: int, **kwargs: Any) -> None: # pylint: disable=redefined-builtin
+        """ Execute update query
+            
+            example:
+                `self.update('students', id=105, name="New name", age=26)`
+                    ==> SQL: `UPDATE students SET name = %s AND age = %s WHERE id = %s`, parameters: `["New name", 26, 105]`
+        """
+        table = self.db.table(tablelike)
+        self.execute(
+            f'UPDATE {table.sql()} SET ' + ', '.join(('`%s`' % table[colname].name) + ' = %s' for colname in kwargs) + f' WHERE {table.keycol.name} = %s',
+             [*kwargs.values(), id]
+        )
+
+#   ================================================================================================================================
+#       SELECT query method
+#   ================================================================================================================================
 
     def select(self,
-        *tables        : TableLike,                                           # Tables to join
+        *_tables       : TableLike,                                           # Tables to join
         table          : Optional[TableLike]                          = None, # Base table
+        tables         : Optional[List[TableLike]]                    = None, # Tables to join
         join_tables    : Optional[List[Tuple[TableLike, JoinLike]]]   = None, # Tables to join
         join_ons       : Optional[Dict[TableLike, Tuple[str, list]]]  = None, # Terms in join `ON` clause
         opt_table      : Optional[TableLike]                          = None, # Optional table to join
@@ -244,24 +281,120 @@ class QueryExecutor(BasicQueryExecutor):
         where_eqs      : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where equal formulas
         where_not_eq   : Optional[Tuple[ColumnLike, Any]]             = None, # Where not equal formula
         where_not_eqs  : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where not equal formulas
+        id             : Optional[Any]                                = None, # Where id = value formula
         group          : Optional[ColumnLike]                         = None, # Grouping column
         groups         : Optional[List[ColumnLike]]                   = None, # Grouping columns
         order          : Optional[Tuple[ColumnLike, OrderLike]]       = None, # Ordering column and its kind (ASC or DESC)
         orders         : Optional[List[Tuple[ColumnLike, OrderLike]]] = None, # Ordering columns and its kinds
         limit          : Optional[int] = None, # Limit of results
         offset         : Optional[int] = None, # Offset of results
+        one            : bool = False,         # Expect a just one result, and return it
         skip_same_alias: bool = True,          # Skip the error(s) of same alias name(s)
         dump           : bool = False,         # Dump a constructed SQL statement and parameters to the stderr
-    ) -> Tuple[str, list]:
+    ) -> Any:
         """
-            Calculate SQL SELECT query
-            returns (SQL statement string, parameter values)    
+            SQL SELECT query
+            returns: query result
+                If `one` option is True, return a record
+                If `one` option is False, return a list of records
+
+
+            Table specification examples:
+
+            ex1. (single table) 
+                self.select('students', ...)           (recommended)  ┐     
+                self.select(table='students', ...)                    │
+                self.select(tables=('students',), ...)                ├─┐ These notations have the same effect 
+                self.select(tables=['students'], ...)                 ┘ │
+                    ==> SELECT * FROM `students` ...                 <──┘
+
+                * `*` in the `SELECT *` will be replaced with the all columns specification, based on the schema.
+                  If the `students` table has columns of `id`, `name`, `args`,
+                  SELECT * FROM `students`  will be  SELECT `id`, `name`, `args` FROM `students` . 
+
+            ex2. (multiple tables)
+                self.select('students', 'classes', ...)                     (recommended)  
+                self.select(tables=('students', 'classes', ...), ...)
+                self.select(tables=['students', 'classes', ...], ...)
+                self.select(table='students', tables=('classes', ...), ...)
+                self.select(table='students', tables=['classes', ...], ...)
+                    ==> SELECT * FROM `students` INNER JOIN `classes` ON ...
+
+                * Table Joins are performed based on the schema.
+
+
+            `id` argument example:
+
+            ex. self.select('students', id=105)
+                    ==> SQL: "SELECT * FROM `students` WHERE (`id` = %s)", parameters: [105]
+
+                * `one` option will be automatically set to True if `id` argument is specified.
+                  Therefore, returns a just one record. (If not exists, returns None.)
+
+                * This specification is available only the column named `id`.
+                  (For the other column(s), use the where_eq or where_eqs arguments.)
+
+
+            Where arguments examples:
+
+            ex1. (single equal term)
+                self.select('students', where_eq=('name', 'hogename'))                     (recommended)
+                self.select('students', where_eqs=[('name', 'hogename')])
+                self.select('students', where_op=('name', '=', 'hogename'))
+                self.select('students', where_ops=[('name', '=', 'hogename')])
+                self.select('students', where_sql='name = %s', where_params=['hogename'])  (not recommended)
+                    ==> SQL: "SELECT * FROM `students` WHERE (`name` = %s)", parameters: ['hogename']
+
+            ex1. (single not equal term)
+                self.select('students', where_not_eq=('name', 'hogename'))                     (recommended)
+                self.select('students', where_not_eqs=[('name', 'hogename')])
+                self.select('students', where_op=('name', '<>', 'hogename'))
+                self.select('students', where_ops=[('name', '<>', 'hogename')])
+                self.select('students', where_sql='name <> %s', where_params=['hogename'])  (not recommended)
+                    ==> SQL: "SELECT * FROM `students` WHERE (`name` <> %s)", parameters: ['hogename']
+
+            ex3. (multiple equal term)
+                self.select('students', where_eqs=[('name', 'hogename'), ('age', 23)])                      (recommended)
+                self.select('students', where_ops=[('name', '=', 'hogename'), ('age', '=', 23)])
+                self.select('students', where_sql='name = %s AND age = %s', where_params=['hogename', 23])  (not recommended)
+                    ==> SQL: "SELECT * FROM `students` WHERE (`name` = %s) AND (`age` = %s)", parameters: ['hogename', 23]
+
+            ex4. (multiple less/more than terms)
+                self.select('students', where_ops=[('age', '>=', 19), ('age', '<=', 22)])
+                    ==> SQL: "SELECT * FROM `students` WHERE (age >= %s) AND (age <= %s)", parameters: [19, 22]
+
+            ex5. (and/or terms) 
+                                           ┌───────────────────────────────────────────────────────────────── AND ──────────────────────────────────────────────────────────────────┐
+                                             ┌───────────────────────────── OR ───────────────────────────────┐  ┌───────────────────────────── OR ───────────────────────────────┐
+                                                                   ┌───────────────── AND ──────────────────┐                          ┌───────────────── AND ──────────────────┐
+                self.select(..., where_ops=[ [('year', '>', 2020), [('year', '=', 2020), ('month', '>=', 6))] ], [('year', '<', 2022), [('year', '=', 2022), ('month', '<=', 8))] ] ])
+
+                ==> SQL: "SELECT ... WHERE ((year > %s) OR ((year = %s) AND (month >= %s))) AND ((year < %s) OR ((year = %s) AND (month <= %s)))", parameters: [2020, 2020, 6, 2022, 2022, 8]
+
+                * The nested lists (Python list objects) will be joined in AND -> OR -> AND -> ... order.
+                * This and/or specification is only valid on `where_op` or `where_ops` arguments.
+                    (If the list is specified to `where_op` argument, its list will be joined in OR -> AND -> OR -> ... order.)
+
+            ex6. (IS NULL term)
+                self.select('students', where_eq=('age', None))           (recommended)
+                self.select('students', where_ops=[('age', 'IS', None)])
+                    ==> SQL: "SELECT * FROM `students` WHERE `age` IS NULL", parameters: []
+
+                * The equal term with the `None` value (Python None) will be a `IS NULL` term.
+
+            ex7. (IS NOT NULL term)
+                self.select('students', where_not_eq=('age', None))       (recommended)
+                self.select('students', where_ops=[('age', 'IS NOT', None)])
+                    ==> SQL: "SELECT * FROM `students` WHERE `age` IS NOT NULL", parameters: []
+
+                * The not equal term with the `None` value (Python None) will be a `IS NOT NULL` term.
+
         """
         return self.query(*self._select_query_by_list(
-            tables        = list(self._one_or_more(table, tables)),
+            tables        = list(self._one_or_more(table, _tables, tables)),
             opt_tables    = list(self._one_or_more(opt_table, opt_tables)),
             where_ops     = list(self._one_or_more(where_op, where_ops)),
-            where_eqs     = list(self._one_or_more(where_eq, where_eqs)),
+            where_eqs     = list(self._one_or_more(('id', id) if id is not None else None, self._one_or_more(where_eq, where_eqs))),
             where_not_eqs = list(self._one_or_more(where_not_eq, where_not_eqs)),
             groups        = list(self._one_or_more(group, groups)),
             orders        = list(self._one_or_more(order, orders)),
@@ -269,7 +402,7 @@ class QueryExecutor(BasicQueryExecutor):
             join_ons      = {} if join_ons is None else join_ons,
             skip_same_alias=skip_same_alias,
             dump=dump
-        ))
+        ), fetch_one=(id is not None or one))
 
     def _select_query_by_list(self, *,
         tables         : List[TableLike]                   , # Tables
@@ -291,12 +424,6 @@ class QueryExecutor(BasicQueryExecutor):
     ) -> Tuple[str, list]:
         """
             Construct SELECT SQL query
-
-            where_ops examples:
-            ex1. [('name', '=', 'hogename')] -> 'name = %s', ['hogename']
-            ex2. [('num', '>=', 123), ('num', '<=', 456)] -> '(num >= %s) AND (num <= %s)', [123, 456]
-            ex3. [ [('year', '>', 2020), [('year', '=', 2020), ('month', '>=', 6))] ], [('year', '<', 2022), [('year', '=', 2022), ('month', '<=', 8))] ] ]
-                 -> '((year > 2020) OR ((year = 2020) AND (month >= 6))) AND ((year < 2022) OR ((year = 2022) AND (month <= 8)))'
         """
 
         if not tables:
@@ -363,6 +490,7 @@ class QueryExecutor(BasicQueryExecutor):
             limit         = limit,
             offset        = offset,
             skip_same_alias = skip_same_alias,
+            dump = dump,
         )
 
 
@@ -378,6 +506,7 @@ class QueryExecutor(BasicQueryExecutor):
         limit           : Optional[int],
         offset          : Optional[int],
         skip_same_alias : bool,
+        dump            : bool = False,
     ) -> Tuple[str, list]:
 
         # Prepare columns to select
@@ -464,15 +593,19 @@ class QueryExecutor(BasicQueryExecutor):
             sql += ' OFFSET %s\n'
             params.append(offset)
 
+        if dump:
+            print(sql, params, file=sys.stderr)
+
         # Return a tuple of (SQL statement, list of parameter values)
         return sql, params
 
     @staticmethod
-    def _one_or_more(one:Optional[T], more:Optional[Iterable[T]]) -> Iterator[T]:
+    def _one_or_more(one:Optional[T], *mores:Optional[Iterable[T]]) -> Iterator[T]:
         if one is not None:
             yield one
-        if more is not None:
-            yield from more
+        for more in mores:
+            if more is not None:
+                yield from more
 
     @staticmethod
     def _fmt_jointype(jointype:JoinType):
