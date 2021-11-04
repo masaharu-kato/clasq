@@ -72,6 +72,14 @@ def asop(opname) -> str:
         raise InvalidFormatError('Invalid operator `%s`' % op)
     return op
 
+def tosql(obj) -> str:
+    if isinstance(obj, SQLSchemaObjABC):
+        return obj.sql()
+    if isinstance(obj, str): # ColumnAlias
+        return str(obj)
+    raise TypeError('Invalid type of SQL object.')
+
+
 class SQLSchemaObjABC(SQLExprType):
     """ SQL Schema object abstract class """
 
