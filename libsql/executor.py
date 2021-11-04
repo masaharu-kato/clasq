@@ -7,7 +7,7 @@ import sys
 
 from libsql.connector import CursorABC
 import mysql.connector.errors as mysql_error # type: ignore
-from .schema import Column, ColumnAlias, ColumnLike, Database, ExtraColumnExpr, JoinLike, JoinType, OrderLike, OrderType, Table, TableLike, TableLink, asobj, asop, astext, astype
+from .schema import Column, ColumnAlias, ColumnLike, Database, ExtraColumnExpr, JoinLike, JoinType, OrderLike, OrderType, Table, TableLike, TableLink, asobj, asop, astext, astype, tosql
 
 T = TypeVar('T')
 SQLLike = str
@@ -181,7 +181,7 @@ class QueryExecutor(BasicQueryExecutor):
         """
         table = self.db.table(tablelike)
         self.execute(
-            f'INSERT INTO {table.sql()}(' + ', '.join('`%s`' % table[colname].name for colname in kwargs) + ')'
+            f'INSERT INTO {tosql(table)}(' + ', '.join('`%s`' % table[colname].name for colname in kwargs) + ')'
                 + ' VALUES(' + ', '.join('%s' for _ in kwargs) + ')',
             list(kwargs.values())
         )
@@ -233,7 +233,7 @@ class QueryExecutor(BasicQueryExecutor):
             for colname, v in kwargs.items()
         }
         self.executemany(
-            f'INSERT INTO {table.sql()}(' + ', '.join('`%s`' % table[colname].name for colname in kwargs) + ')'
+            f'INSERT INTO {tosql(table)}(' + ', '.join('`%s`' % table[colname].name for colname in kwargs) + ')'
                 + ' VALUES(' + ', '.join(['%s'] * len(kwargs)) + ')',
             ([row_maker[colname](row) for colname in kwargs] for row in rows),
         )
@@ -256,7 +256,7 @@ class QueryExecutor(BasicQueryExecutor):
         """
         table = self.db.table(tablelike)
         self.execute(
-            f'UPDATE {table.sql()} SET ' + ', '.join(('`%s`' % table[colname].name) + ' = %s' for colname in kwargs) + f' WHERE {table.keycol.name} = %s',
+            f'UPDATE {tosql(table)} SET ' + ', '.join(('`%s`' % table[colname].name) + ' = %s' for colname in kwargs) + f' WHERE {table.keycol.name} = %s',
              [*kwargs.values(), id]
         )
 
@@ -266,24 +266,24 @@ class QueryExecutor(BasicQueryExecutor):
 
     def select(self,
         *_tables       : TableLike,                                           # Tables to join
-        table          : Optional[TableLike]                          = None, # Base table
-        tables         : Optional[List[TableLike]]                    = None, # Tables to join
-        join_tables    : Optional[List[Tuple[TableLike, JoinLike]]]   = None, # Tables to join
-        join_ons       : Optional[Dict[TableLike, Tuple[str, list]]]  = None, # Terms in join `ON` clause
-        opt_table      : Optional[TableLike]                          = None, # Optional table to join
-        opt_tables     : Optional[List[TableLike]]                    = None, # Optional tables to join
-        extra_columns  : Optional[List[Tuple[str, str]]]              = None, # Extra select column expression and its aliases
-        where_sql      : Optional[str]                                = None, # Where SQL
-        where_params   : Optional[list]                               = None, # Where SQL parameters
-        where_op       : Optional[Tuple[ColumnLike, Any]]             = None, # Where binary operator formula
-        where_ops      : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where binary operator formulas
-        where_eq       : Optional[Tuple[ColumnLike, Any]]             = None, # Where equal formula
-        where_eqs      : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where equal formulas
-        where_not_eq   : Optional[Tuple[ColumnLike, Any]]             = None, # Where not equal formula
-        where_not_eqs  : Optional[List[Tuple[ColumnLike, Any]]]       = None, # Where not equal formulas
-        id             : Optional[Any]                                = None, # Where id = value formula
-        group          : Optional[ColumnLike]                         = None, # Grouping column
-        groups         : Optional[List[ColumnLike]]                   = None, # Grouping columns
+        table          : Optional[TableLike]                         = None, # Base table
+        tables         : Optional[List[TableLike]]                   = None, # Tables to join
+        join_tables    : Optional[List[Tuple[TableLike, JoinLike]]]  = None, # Tables to join
+        join_ons       : Optional[Dict[TableLike, Tuple[str, list]]] = None, # Terms in join `ON` clause
+        opt_table      : Optional[TableLike]                         = None, # Optional table to join
+        opt_tables     : Optional[List[TableLike]]                   = None, # Optional tables to join
+        extra_columns  : Optional[List[Tuple[str, str]]]             = None, # Extra select column expression and its aliases
+        where_sql      : Optional[str]                               = None, # Where SQL
+        where_params   : Optional[list]                              = None, # Where SQL parameters
+        where_op       : Union[ColumnLike, Tuple[str, ColumnLike], Tuple[ColumnLike, str, Any], list] = None, # Where operator formula
+        where_ops      : List[Union[ColumnLike, Tuple[str, ColumnLike], Tuple[ColumnLike, str, Any], list]] = None, # Where operator formulas
+        where_eq       : Optional[Union[ColumnLike, Tuple[ColumnLike, Any]]]       = None, # Where equal formula
+        where_eqs      : Optional[List[Union[ColumnLike, Tuple[ColumnLike, Any]]]] = None, # Where equal formulas
+        where_not_eq   : Optional[Union[ColumnLike, Tuple[ColumnLike, Any]]]       = None, # Where not equal formula
+        where_not_eqs  : Optional[List[Union[ColumnLike, Tuple[ColumnLike, Any]]]] = None, # Where not equal formulas
+        id             : Optional[Any]                                             = None, # Where id = value formula
+        group          : Optional[ColumnLike]                                      = None, # Grouping column
+        groups         : Optional[List[ColumnLike]]                                = None, # Grouping columns
         order          : Optional[Union[ColumnLike, Tuple[ColumnLike, OrderLike]]] = None, # Ordering column and its kind (ASC or DESC)
         orders         : Optional[List[Union[ColumnLike, Tuple[ColumnLike, OrderLike]]]] = None, # Ordering columns and its kinds
         limit          : Optional[int] = None, # Limit of results
@@ -389,6 +389,20 @@ class QueryExecutor(BasicQueryExecutor):
 
                 * The not equal term with the `None` value (Python None) will be a `IS NOT NULL` term.
 
+            ex8. (Column only term)
+                self.select('students', where_eq='is_active')     (recommended)
+                self.select('students', where_eqs=['is_active'])
+                self.select('students', where_op='is_active')
+                self.select('students', where_ops=['is_active'])
+                    ==> SQL: "SELECT * FROM `students` WHERE (is_active)", parameters: []
+
+            ex9. (Column only NOT term)
+                self.select('students', where_not_eq='is_active')              (recommended)
+                self.select('students', where_not_eqs=['is_active'])
+                self.select('students', where_not_op=('NOT', 'is_active'))
+                self.select('students', where_not_ops=[('NOT', 'is_active')])
+                    ==> SQL: "SELECT * FROM `students` WHERE (NOT is_active)", parameters: []
+
 
         order(s) arguments examples:
 
@@ -416,6 +430,15 @@ class QueryExecutor(BasicQueryExecutor):
                     ==> "... ORDER BY `age` DESC, `name` ASC, `id` DESC"
 
         """
+
+        assert tables        is None or isinstance(tables       , (list, tuple)), "Argument `tables` is not a list or tuple."
+        assert opt_tables    is None or isinstance(opt_tables   , (list, tuple)), "Argument `opt_tables` is not a list or tuple."
+        assert where_ops     is None or isinstance(where_ops    , (list, tuple)), "Argument `where_ops` is not a list or tuple."
+        assert where_eqs     is None or isinstance(where_eqs    , (list, tuple)), "Argument `where_eqs` is not a list or tuple."
+        assert where_not_eqs is None or isinstance(where_not_eqs, (list, tuple)), "Argument `where_not_eqs` is not a list or tuple."
+        assert groups        is None or isinstance(groups       , (list, tuple)), "Argument `groups` is not a list or tuple."
+        assert orders        is None or isinstance(orders       , (list, tuple)), "Argument `orders` is not a list or tuple."
+
         return self.query(*self._select_query_by_list(
             tables        = list(self._one_or_more(table, _tables, tables)),
             opt_tables    = list(self._one_or_more(opt_table, opt_tables)),
@@ -436,9 +459,9 @@ class QueryExecutor(BasicQueryExecutor):
         join_tables    : List[Tuple[TableLike, JoinLike]]  , # Tables to join
         join_ons       : Dict[TableLike, Tuple[str, list]] , # Terms on joion `ON` clause
         extra_columns  : List[Tuple[str, str]]             , # Extra select column expression and its aliases
-        where_ops      : List[Union[Tuple[ColumnLike, str, Any], list]] , # Where binary operator formulas (list for OR operator)
-        where_eqs      : List[Tuple[ColumnLike, Any]]      , # Where equal formulas
-        where_not_eqs  : List[Tuple[ColumnLike, Any]]      , # Where not equal formulas
+        where_ops      : List[Union[ColumnLike, Tuple[str, ColumnLike], Tuple[ColumnLike, str, Any], list]]  , # Where binary operator formulas (list for OR operator)
+        where_eqs      : List[Union[ColumnLike, Tuple[ColumnLike, Any]]] , # Where equal formulas
+        where_not_eqs  : List[Union[ColumnLike, Tuple[ColumnLike, Any]]] , # Where not equal formulas
         groups         : List[ColumnLike]                  , # Grouping columns
         orders         : List[Union[ColumnLike, Tuple[ColumnLike, OrderLike]]], # Ordering columns (and its kinds: 'ASC' (default) or 'DESC')
         where_sql      : Optional[str]               = None, # Where SQL
@@ -462,10 +485,32 @@ class QueryExecutor(BasicQueryExecutor):
 
         pr_tables = [*tables, *opt_tables, *(table for table, _ in join_tables)]
 
+        excol_aliases = [alias for _, alias in extra_columns]
+        def _proc_column(columnlike: ColumnLike) -> Union[Column, ColumnAlias]:
+            if columnlike in excol_aliases:
+                return columnlike
+            return self.db.column(columnlike, pr_tables)
+
         # Process where equals
         try:
-            where_ops.extend((columnlike, '=', value) for columnlike, value in where_eqs)
-            where_ops.extend((columnlike, '<>', value) for columnlike, value in where_not_eqs)
+            for where_eq in where_eqs:
+                if isinstance(where_eq, tuple):
+                    columnlike, value = where_eq
+                    where_ops.append((columnlike, '=', value))
+                else:
+                    if not isinstance(where_eq, (Column, str)):
+                        raise SelectQueryError('Invalid operator expression: %s' % where_eq) 
+                    where_ops.append(where_eq)
+            
+            for where_not_eq in where_not_eqs:
+                if isinstance(where_not_eq, tuple):
+                    columnlike, value = where_not_eq
+                    where_ops.append((columnlike, '<>', value))
+                else:
+                    if not isinstance(where_not_eq, (Column, str)):
+                        raise SelectQueryError('Invalid operator expression: %s' % where_not_eq) 
+                    where_ops.append(('NOT', where_not_eq))
+
         except ValueError as e:
             raise SelectQueryError('Invalid eq or not_eq parameters: ', where_eqs, where_not_eqs) from e
 
@@ -478,23 +523,32 @@ class QueryExecutor(BasicQueryExecutor):
                     sqls.append(_sql)
                     prms.extend(_prms)
                     continue
-                
-                try:
+
+                if isinstance(_where_op, tuple) and len(_where_op) == 3:
                     columnlike, _op, value = _where_op
-                except ValueError as e:
-                    raise SelectQueryError('Invalid operator expression: %s' % _where_op) from e
-                op = asop(_op)
-                column = self.db.column(columnlike, pr_tables)
-                if value is not None:
-                    sqls.append(f'{column.sql()} {op} %s')
-                    prms.append(value)
-                else:
-                    if op in ('=', 'IS'):
-                        sqls.append(f'{column.sql()} IS NULL')
-                    elif op in ('<>', '!=', 'IS NOT'):
-                        sqls.append(f'{column.sql()} IS NOT NULL')
+                    op = asop(_op)
+                    column = _proc_column(columnlike)
+                    if value is not None:
+                        sqls.append(f'{tosql(column)} {op} %s')
+                        prms.append(value)
                     else:
-                        raise SelectQueryError('Invalid operator for NULL (None) value')
+                        if op in ('=', 'IS'):
+                            sqls.append(f'{tosql(column)} IS NULL')
+                        elif op in ('<>', '!=', 'IS NOT'):
+                            sqls.append(f'{tosql(column)} IS NOT NULL')
+                        else:
+                            raise SelectQueryError('Invalid operator for NULL (None) value')
+
+                elif isinstance(_where_op, tuple) and len(_where_op) == 2:
+                    _op, columnlike = _where_op
+                    sqls.append(f'{asop(_op)} {tosql(_proc_column(columnlike))}')
+
+                else:
+                    columnlike = _where_op
+                    if not isinstance(columnlike, (Column, str)):
+                        raise SelectQueryError('Invalid operator expression: %s' % _where_op) 
+                    sqls.append(tosql(_proc_column(columnlike)))
+
             return (' AND ' if is_and else ' OR ').join(['(%s)' % sql for sql in sqls]), prms
 
         where_sql, where_params = _proc_where_ops(
@@ -511,16 +565,16 @@ class QueryExecutor(BasicQueryExecutor):
                     col, odt = order_expr
                 except ValueError as e:
                     raise SelectQueryError('Invalid order expression: %s' % order_expr) from e
-                _orders.append((self.db.column(col, pr_tables), OrderType(odt)))
+                _orders.append((_proc_column(col), OrderType(odt)))
 
             else:
                 if isinstance(order_expr, str) and order_expr and order_expr[0] in ('+', '-'):
-                    _orders.append((
-                        self.db.column(order_expr[1:], pr_tables),
-                        OrderType.ASC if order_expr[0] == '+' else OrderType.DESC)
-                    )
+                    colname = order_expr[1:]
+                    ordertype = OrderType.ASC if order_expr[0] == '+' else OrderType.DESC
                 else:
-                    _orders.append((self.db.column(order_expr, pr_tables), OrderType.ASC))
+                    colname = order_expr
+                    ordertype = OrderType.ASC
+                _orders.append((_proc_column(colname), ordertype))
         
         return self._construct_select_query(
             base_table    = self.db.table(tables[0]),
@@ -529,7 +583,7 @@ class QueryExecutor(BasicQueryExecutor):
             extra_columns = [(ExtraColumnExpr(cexpr), ColumnAlias(alias)) for cexpr, alias in extra_columns],
             where_sql     = where_sql,
             where_params  = where_params,
-            groups        = [self.db.column(col, pr_tables) for col in groups],
+            groups        = [_proc_column(col) for col in groups],
             orders        = _orders,
             limit         = limit,
             offset        = offset,
@@ -545,8 +599,8 @@ class QueryExecutor(BasicQueryExecutor):
         extra_columns   : List[Tuple[ExtraColumnExpr, ColumnAlias]],
         where_sql       : Optional[str],
         where_params    : list,
-        groups          : List[Column],
-        orders          : List[Tuple[Column, OrderType]],
+        groups          : List[Union[Column, ColumnAlias]],
+        orders          : List[Tuple[Union[Column, ColumnAlias], OrderType]],
         limit           : Optional[int],
         offset          : Optional[int],
         skip_same_alias : bool,
@@ -554,8 +608,8 @@ class QueryExecutor(BasicQueryExecutor):
     ) -> Tuple[str, list]:
 
         # Prepare columns to select
-        select_columns:List[Tuple[Column, Optional[ColumnAlias]]] = []
-        used_column_names:Set[ColumnAlias] = set()
+        select_columns: List[Tuple[Column, Optional[ColumnAlias]]] = []
+        used_column_names: Set[ColumnAlias] = set()
 
         for column in self.db[base_table].columns:
             select_columns.append((column, None))
@@ -585,7 +639,7 @@ class QueryExecutor(BasicQueryExecutor):
 
         select_col_exprs = []
         for column, opt_alias in select_columns:
-            select_col_exprs.append(column.sql() + ((' AS ' + astext(opt_alias)) if opt_alias is not None else ''))
+            select_col_exprs.append(tosql(column) + ((' AS ' + astext(opt_alias)) if opt_alias is not None else ''))
         for column_expr, alias in select_extra_columns:
             select_col_exprs.append(column_expr + ' AS ' + astext(alias))
 
@@ -603,13 +657,13 @@ class QueryExecutor(BasicQueryExecutor):
             _loaded_tables.insert(0, target_table)
 
         # Construct SQL statement
-        sql = 'SELECT ' + ', '.join(select_col_exprs) + ' FROM ' + base_table.sql() + '\n'
+        sql = 'SELECT ' + ', '.join(select_col_exprs) + ' FROM ' + tosql(base_table) + '\n'
         params:List[Any] = []
 
         join_on_used = {table: False for table in join_ons}
         for jointype, tlink in joins:
             _target_table = tlink.lcol.table
-            sql += f' {self._fmt_jointype(jointype)} JOIN {_target_table.sql()} ON {tlink.lcol.sql()} = {tlink.rcol.sql()}'
+            sql += f' {self._fmt_jointype(jointype)} JOIN {tosql(_target_table)} ON {tosql(tlink.lcol)} = {tosql(tlink.rcol)}'
             if join_ons.get(_target_table):
                 _on_sql, _on_params = join_ons[_target_table]
                 sql += ' AND (' + _on_sql + ')'
@@ -624,10 +678,10 @@ class QueryExecutor(BasicQueryExecutor):
             params.extend(where_params)
 
         if groups:
-            sql += ' GROUP BY ' + ', '.join(g.sql() for g in groups) + '\n'
+            sql += ' GROUP BY ' + ', '.join(tosql(g) for g in groups) + '\n'
 
         if orders:
-            sql += ' ORDER BY ' + ', '.join(f'{column.sql()} {self._fmt_ordertype(ordertype)}' for column, ordertype in orders) + '\n'
+            sql += ' ORDER BY ' + ', '.join(f'{tosql(column)} {self._fmt_ordertype(ordertype)}' for column, ordertype in orders) + '\n'
 
         if limit is not None:
             sql += ' LIMIT %s\n'
