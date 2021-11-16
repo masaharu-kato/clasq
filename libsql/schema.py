@@ -6,6 +6,7 @@ from typing import Any, DefaultDict, Dict, Iterator, List, NewType, Optional, Un
 import sys
 import re
 import weakref
+import warnings
 
 from enum import Enum
 
@@ -17,7 +18,10 @@ import ddlparse # type: ignore
 
 _IS_DEBUG = True
 
-class NotFoundError(KeyError):
+class SchemaError(Exception):
+    """ Schema Error """
+
+class NotFoundError(KeyError, SchemaError):
     """ Not Found Error """
 
 class ColumnNotFoundError(NotFoundError):
@@ -26,8 +30,14 @@ class ColumnNotFoundError(NotFoundError):
 class TableNotFoundError(NotFoundError):
     """ Table not found error """
 
-class InvalidFormatError(ValueError):
+class InvalidFormatError(ValueError, SchemaError):
     """ Invalid Format error """
+
+class TableSchemaError(SchemaError):
+    """ Table schema parsing error """
+
+class ColumnSchemaError(SchemaError):
+    """ Column schema parsing error """
 
 
 def asobj(_objname) -> str:
@@ -115,7 +125,7 @@ class ColumnRef:
             return arg
         if isinstance(arg, (tuple, list)):
             if len(arg) > 2:
-                raise RuntimeError('Invalid initialize argument.')
+                raise ColumnSchemaError('Invalid initialize argument.')
             if len(arg) == 2:
                 return  cls(arg[0], arg[1])
             return cls(arg[0])
@@ -229,9 +239,9 @@ class Table(SQLSchemaObjABC):
         else:
             self._keycol = None
             # if len(_keycols) > 1:
-            #     raise RuntimeError('Multiple primary keys on table %s' % table_name)
+            #     raise TableSchemaError('Multiple primary keys on table %s' % table_name)
             if not len(_keycols):
-                raise RuntimeError('No primary keys on table %s' % table_name)
+                raise TableSchemaError('No primary keys on table %s' % table_name)
 
 
         self.tables_links:Dict[Table, List[TableLink]] = DefaultDict(lambda: [])   # linked tables
@@ -389,7 +399,7 @@ class Database(SQLSchemaObjABC):
 
         if isinstance(column, Column):
             if id(column.table.db) != id(self):
-                raise KeyError(f'Unknown column `{column}`.')
+                raise ColumnNotFoundError(f'Unknown column `{column}`.')
             # if t_tables is not None and not any(column in table.columns for table in tables):
             #     raise RuntimeError(f'Column `{column}` is not in the target tables.')
             return column
@@ -401,7 +411,7 @@ class Database(SQLSchemaObjABC):
         if len(col_s) >= 2: # Specified like 'database.table.column' or 'table.column'
             table = self.table(col_s[-2])
             # if p_tables is not None and table not in p_tables:
-            #     raise RuntimeError(f'Column `{column}` is not in the target tables.')
+            #     raise ColumnNotFoundError(f'Column `{column}` is not in the target tables.')
             return table.column(col_s[-1])
 
         if p_tables:
@@ -410,14 +420,14 @@ class Database(SQLSchemaObjABC):
                     return table.column(column)
                 except ColumnNotFoundError:
                     pass
-            # raise KeyError(f'Column `{column}` not found in the target tables.')
+            # raise ColumnNotFoundError(f'Column `{column}` not found in the target tables.')
             
         if column not in self._coldict:
-            raise KeyError(f'Undefined column `{column}`.')
+            raise ColumnNotFoundError(f'Undefined column `{column}`.')
 
         cols = self._coldict[ColumnName(column)]
         if len(cols) > 1:
-            raise RuntimeError('Multiple columns found for `%s`' % column)
+            raise ColumnNotFoundError('Multiple columns found for `%s`' % column)
 
         return cols[0]
 
@@ -493,19 +503,22 @@ def database_from_ddls(ddlstext:str) -> 'Database':
             continue
         ddlparser = ddlparse.DdlParse(ddltext)
         ddl = ddlparser.parse()
-        tables.append(Table(
-            ddl.name, [
-                Column(
-                    dcol.name,
-                    dcol.data_type,
-                    not_null = dcol.not_null,
-                    is_primary = dcol.primary_key,
-                    default = dcol.default,
-                    comment = dcol.comment,
-                    link_column_refs = [ColumnRef(dcol.fk_ref_table, dcol.fk_ref_column)] if dcol.foreign_key else None,
-                ) for dcol in ddl.columns.values()
-            ]
-        ))
+        try:
+            tables.append(Table(
+                ddl.name, [
+                    Column(
+                        dcol.name,
+                        dcol.data_type,
+                        not_null = dcol.not_null,
+                        is_primary = dcol.primary_key,
+                        default = dcol.default,
+                        comment = dcol.comment,
+                        link_column_refs = [ColumnRef(dcol.fk_ref_table, dcol.fk_ref_column)] if dcol.foreign_key else None,
+                    ) for dcol in ddl.columns.values()
+                ]
+            ))
+        except SchemaError as e:
+            warnings.warn('SchemaError on table `%s`: %s' % (ddl.name, str(e)))
 
     return Database(dbname or '', tables)
 
