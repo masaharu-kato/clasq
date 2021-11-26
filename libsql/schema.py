@@ -21,6 +21,9 @@ _IS_DEBUG = True
 class SchemaError(Exception):
     """ Schema Error """
 
+class NotFinalizedError(SchemaError):
+    """ Not Finalized Error """
+
 class NotFoundError(KeyError, SchemaError):
     """ Not Found Error """
 
@@ -156,7 +159,7 @@ class Column(SQLSchemaObjABC):
         self.default_value = default
         self.comment = comment
         self.link_column_refs = [] if link_column_refs is None else [ColumnRef.from_tuple(cref) for cref in link_column_refs]
-        self.link_columns:weakref.WeakSet[Column] = weakref.WeakSet()
+        self.link_columns:Set[Column] = weakref.WeakSet()
         self.only_on_db = False
 
     def _set_table_and_finalize(self, table:'Table') -> None:
@@ -168,7 +171,7 @@ class Column(SQLSchemaObjABC):
     @property
     def table(self) -> 'Table':
         if self._table is None:
-            raise RuntimeError('Table is not set.')
+            raise NotFinalizedError('Table is not set.')
         return self._table
 
     def unique_alias(self) -> str:
@@ -279,7 +282,7 @@ class Table(SQLSchemaObjABC):
     @property
     def db(self) -> 'Database':
         if self._db is None:
-            raise RuntimeError('Database is not set.')
+            raise NotFinalizedError('Database is not set.')
         return self._db
 
     def column(self, column:ColumnLike) -> Column:
@@ -385,7 +388,7 @@ class Database(SQLSchemaObjABC):
         try:
             return self._tbldict[TableName(table)]
         except KeyError:
-            raise TableNotFoundError('Table `%s` not found.' % table)
+            raise TableNotFoundError('Table `%s` not found.' % table) from None
     
     def __getitem__(self, table:TableLike) -> Table:
         return self.table(table)
@@ -431,9 +434,9 @@ class Database(SQLSchemaObjABC):
 
         return cols[0]
 
-    def col(self, column:ColumnLike, *, tables:Optional[Sequence[TableLike]]=None) -> Column:
+    def col(self, column:ColumnLike, *, pr_tables:Optional[Sequence[TableLike]]=None) -> Column:
         """ Get column objects (alias of `self.column`) """
-        return self.column(column, tables=tables)
+        return self.column(column, pr_tables=pr_tables)
 
     def get_column_by_ref(self, column_ref:ColumnRef) -> Column:
         """ Get table-column entity by its reference object """
@@ -456,16 +459,16 @@ class Database(SQLSchemaObjABC):
         if base_table in self.table(dest_table).tables_links:
             yield from self.table(dest_table).tables_links[self.table(base_table)]
  
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<Database `{self.name}`>'
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.name)
 
     def sql(self) -> str:
         return asobj(self.name)
 
-    def create_tables_sql(self, *, exist_ok:bool=True):
+    def create_tables_sql(self, *, exist_ok: bool = True) -> str:
         """ Get tables creation SQL """
         return ''.join(table.create_table_sql(exist_ok=exist_ok) + ';\n' for table in self.tables)
 
@@ -475,6 +478,7 @@ ColumnAs = Union[ColumnLike, Tuple[ColumnLike, ColumnAlias]]
 ExtraColumnExpr = NewType('ExtraColumnExpr', str)
 
 class JoinType(Enum):
+    """ Table JOIN types """
     NONE = None
     INNER = 'INNER'
     LEFT  = 'LEFT'
@@ -483,6 +487,7 @@ class JoinType(Enum):
     CROSS = 'CROSS'
 
 class OrderType(Enum):
+    """ Table Order types """
     NONE = None
     ASC  = 'ASC'
     DESC = 'DESC'
@@ -528,7 +533,7 @@ def main():
     with open(sys.argv[1], mode='r') as f:
         db = database_from_ddls(f.read())
 
-    db.dump()
+    print(db.create_tables_sql())
 
 
 if __name__ == "__main__":
