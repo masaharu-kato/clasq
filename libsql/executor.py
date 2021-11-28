@@ -496,7 +496,7 @@ class QueryExecutor(BasicQueryExecutor):
             for where_eq in where_eqs:
                 if isinstance(where_eq, tuple):
                     columnlike, value = where_eq
-                    where_ops.append((columnlike, '=', value))
+                    where_ops.append((columnlike, '<=>', value))
                 else:
                     if not isinstance(where_eq, (Column, str)):
                         raise SelectQueryError('Invalid operator expression: %s' % where_eq) 
@@ -528,7 +528,7 @@ class QueryExecutor(BasicQueryExecutor):
                     columnlike, _op, value = _where_op
                     op = asop(_op)
                     column = _proc_column(columnlike)
-                    if value is not None:
+                    if op == '<=>' or value is not None:
                         sqls.append(f'{tosql(column)} {op} %s')
                         prms.append(value)
                     else:
