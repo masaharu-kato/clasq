@@ -90,14 +90,17 @@ class MySQLConnectionABC(ConnectionABC):
 
     def create_cursor(self, *args, **options) -> 'MySQLCursor':
         """ Get cursor object """
-        return MySQLCursor(self, self.cnx.cursor(*args, **self._cursor_options(**options)))
-
-    def _cursor_options(self, **options) -> dict:
         if self.cursor_dict:
             options['dictionary'] = True
         if self.cursor_ntpl:
             options['named_tuple'] = True
-        return options
+        try:
+            return MySQLCursor(self, self.cnx.cursor(*args, **options))
+        except mysql.connector.errors.Error as e:
+            warnings.warn(str(e))
+            self.close()
+            self.cnx = self.cnx_maker()
+            return MySQLCursor(self, self.cnx.cursor(*args, **options))
 
     def close(self) -> None:
         """ Close cursor """
