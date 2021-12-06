@@ -549,7 +549,7 @@ class QueryExecutor(BasicQueryExecutor):
                     colsql = tosql(column)
                     if isinstance(value, Column):
                         sqls.append(f'{colsql} {op} {tosql(value)}')
-                    elif value in (None, True, False):
+                    elif value is None or value is True or value is False:
                         if op in ('<=>', '=', 'IS'):
                             if value is True:
                                 sqls.append(colsql)
