@@ -609,28 +609,28 @@ class QueryExecutor(BasicQueryExecutor):
 
 
 
-        # Process where equals
-        try:
-            for where_eq in where_eqs:
-                if isinstance(where_eq, tuple):
-                    columnlike, value = where_eq
-                    where_ops.append((columnlike, '=', value))
-                else:
-                    if not isinstance(where_eq, (Column, str)):
-                        raise SelectQueryError('Invalid operator expression: %s' % where_eq) 
-                    where_ops.append(where_eq)
+        # # Process where equals
+        # try:
+        #     for where_eq in where_eqs:
+        #         if isinstance(where_eq, tuple):
+        #             columnlike, value = where_eq
+        #             where_ops.append((columnlike, '=', value))
+        #         else:
+        #             if not isinstance(where_eq, (Column, str)):
+        #                 raise SelectQueryError('Invalid operator expression: %s' % where_eq) 
+        #             where_ops.append(where_eq)
             
-            for where_not_eq in where_not_eqs:
-                if isinstance(where_not_eq, tuple):
-                    columnlike, value = where_not_eq
-                    where_ops.append((columnlike, '<>', value))
-                else:
-                    if not isinstance(where_not_eq, (Column, str)):
-                        raise SelectQueryError('Invalid operator expression: %s' % where_not_eq) 
-                    where_ops.append(('NOT', where_not_eq))
+        #     for where_not_eq in where_not_eqs:
+        #         if isinstance(where_not_eq, tuple):
+        #             columnlike, value = where_not_eq
+        #             where_ops.append((columnlike, '<>', value))
+        #         else:
+        #             if not isinstance(where_not_eq, (Column, str)):
+        #                 raise SelectQueryError('Invalid operator expression: %s' % where_not_eq) 
+        #             where_ops.append(('NOT', where_not_eq))
 
-        except ValueError as e:
-            raise SelectQueryError('Invalid eq or not_eq parameters: ', where_eqs, where_not_eqs) from e
+        # except ValueError as e:
+        #     raise SelectQueryError('Invalid eq or not_eq parameters: ', where_eqs, where_not_eqs) from e
 
         where_sql, where_params = _proc_op_term(
             where_ops,
