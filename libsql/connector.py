@@ -74,7 +74,8 @@ class MySQLConnectionABC(ConnectionABC):
 
     def __init__(self, *args, db_schema:DBSchema, dictionary:bool=False, named_tuple:bool=False, **kwargs):
         super().__init__(db_schema=db_schema)
-        self.cnx         = self.new_cnx(*args, **kwargs)
+        self.cnx_maker   = lambda: self.new_cnx(*args, **kwargs)
+        self.cnx         = self.cnx_maker()
         self.cursor_dict = dictionary
         self.cursor_ntpl = named_tuple
 
@@ -96,7 +97,7 @@ class MySQLConnectionABC(ConnectionABC):
             options['named_tuple'] = True
         try:
             return MySQLCursor(self, self.cnx.cursor(*args, **options))
-        except mysql.connector.errors.Error as e:
+        except (AttributeError, mysql.connector.errors.Error) as e:
             warnings.warn(str(e))
             self.close()
             self.cnx = self.cnx_maker()
