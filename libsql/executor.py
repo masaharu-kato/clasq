@@ -181,7 +181,7 @@ class QueryExecutor(BasicQueryExecutor):
                 `self.insert('students', name="New name", age=26)`
                     ==> SQL: `INSERT students(name, age) VALUES(%s, %s)`, parameters: `["New name", 26]`
                 
-                * Returns a id value of the inserted record 
+                * Returns an id value of the inserted record 
         """
         table = self.db.table(tablelike)
         self.execute(
@@ -263,6 +263,24 @@ class QueryExecutor(BasicQueryExecutor):
             f'UPDATE {tosql(table)} SET ' + ', '.join(('`%s`' % table[colname].name) + ' = %s' for colname in kwargs) + f' WHERE {table.keycol.name} = %s',
              [*kwargs.values(), id]
         )
+
+    def upsert(self, tablelike: TableLike,  where_eqs: dict, **kwargs: Any) -> int: # pylint: disable=redefined-builtin
+        """ Execute upsert query (UPDATE if exists, or INSERT)
+            
+            example:
+                `self.upsert('students', where_eqs=[('id': 105)], name="New name", age=26)`
+                    ==> (If student(id=105) exists) SQL: `UPDATE students SET name = %s AND age = %s WHERE id = %s`, parameters: `["New name", 26, 105]`
+                    ==> (else) SQL: `INSERT students(name, age) VALUES(%s, %s)`, parameters: `["New name", 26]`
+
+            Returns an id value of the updated or inserted record
+        """
+        if record := self.select(tablelike, where_eqs=where_eqs, one=True):
+            kwargs['id'] = (record_id := record.id)
+            self.update(tablelike, **kwargs)
+            return record_id
+
+        return self.insert(tablelike, **kwargs)
+
 
 #   ================================================================================================================================
 #       SELECT query method
