@@ -290,7 +290,10 @@ class QueryExecutor(BasicQueryExecutor):
         *_tables       : TableLike,                                           # Tables to join
         table          : Optional[TableLike]                         = None, # Base table
         tables         : Optional[List[TableLike]]                   = None, # Tables to join
-        join_tables    : Optional[List[Union[Tuple[TableLike, JoinLike], Tuple[TableLike, JoinLike, OpTerm]]]] = None, # Tables to join
+        join_tables    : Optional[List[Union[
+                            Tuple[TableLike, JoinLike],
+                            Tuple[TableLike, JoinLike, OpTerm],
+                            Tuple[TableLike, JoinLike, OpTerm, bool]]]] = None, # Tables to join
         opt_table      : Optional[TableLike]                         = None, # Optional table to join
         opt_tables     : Optional[List[TableLike]]                   = None, # Optional tables to join
         extra_columns  : Optional[List[Tuple[str, str]]]             = None, # Extra select column expression and its aliases
