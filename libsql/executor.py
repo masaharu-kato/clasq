@@ -777,7 +777,9 @@ class QueryExecutor(BasicQueryExecutor):
 
 
     @staticmethod
-    def _one_or_more(one:Optional[T], *mores:Optional[Iterable[T]]) -> Iterator[T]:
+    def _one_or_more(one: Optional[T], *mores: Optional[Iterable[T]]) -> Iterator[T]:
+        if isinstance(one, list):
+            raise TypeError('Cannot specify list type for this argument.')
         if one is not None:
             yield one
         for more in mores:
