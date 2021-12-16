@@ -281,6 +281,10 @@ class QueryExecutor(BasicQueryExecutor):
 
         return self.insert(tablelike, **kwargs)
 
+    def selsert(self, tablelike: TableLike, **kwargs: Any) -> int:
+        if res := self.select(tablelike, where_eqs=[(k, v) for k, v in kwargs.items()], one=True):
+            return res.id
+        return self.insert(tablelike, **kwargs)
 
 #   ================================================================================================================================
 #       SELECT query method
