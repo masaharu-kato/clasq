@@ -592,8 +592,16 @@ class QueryExecutor(BasicQueryExecutor):
                         else:
                             raise SelectQueryError('Invalid operator for NULL(None) / Boolean value')
                     else:
-                        sqls.append(f'{colsql} {op} %s')
-                        prms.append(value)
+                        if op == 'IN':
+                            if value:
+                                _holders = ', '.join('%s' for _ in range(len(value)))
+                                sqls.append(f'{colsql} {op} ({_holders})')
+                                prms.extend(value)
+                            else:
+                                sqls.append('FALSE')
+                        else:
+                            sqls.append(f'{colsql} {op} %s')
+                            prms.append(value)
 
                 # Unary operation
                 elif isinstance(_where_op, tuple) and len(_where_op) == 2:
