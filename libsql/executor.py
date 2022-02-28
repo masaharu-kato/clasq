@@ -17,7 +17,7 @@ OpTerm = Union[ColumnLike, Tuple[str, ColumnLike], Tuple[ColumnLike, str, Any], 
 EqTerm = Tuple[ColumnLike, Any]
 
 class BasicQueryExecutor:
-    """ SQL実行クラス """
+    """ Basic SQL Execution class """
 
     def __init__(self, cursor:CursorABC):
         """ Initialize a instance with a cursor to the Database """
@@ -109,6 +109,7 @@ class BasicQueryExecutor:
 
 
 class QueryExecutor(BasicQueryExecutor):
+    """ SQL Execution class """
 
     def drop_database(self, name:str) -> None:
         """ Drop database """
@@ -459,6 +460,7 @@ class QueryExecutor(BasicQueryExecutor):
 
         """
 
+        # Check argument types
         assert tables        is None or isinstance(tables       , (list, tuple)), "Argument `tables` is not a list or tuple."
         assert opt_tables    is None or isinstance(opt_tables   , (list, tuple)), "Argument `opt_tables` is not a list or tuple."
         assert where_ops     is None or isinstance(where_ops    , (list, tuple)), "Argument `where_ops` is not a list or tuple."
@@ -467,6 +469,7 @@ class QueryExecutor(BasicQueryExecutor):
         assert groups        is None or isinstance(groups       , (list, tuple)), "Argument `groups` is not a list or tuple."
         assert orders        is None or isinstance(orders       , (list, tuple)), "Argument `orders` is not a list or tuple."
 
+        # Formulate the data type, and generate and execute the query
         return self.query(*self._select_query_by_list(
             tables        = list(self._one_or_more(table, _tables, tables)),
             opt_tables    = list(self._one_or_more(opt_table, opt_tables)),
@@ -790,13 +793,18 @@ class QueryExecutor(BasicQueryExecutor):
 
     @staticmethod
     def _one_or_more(one: Optional[T], *mores: Optional[Iterable[T]]) -> Iterator[T]:
+        """ Returns a combined iterator from one optional element and optional list of elements """
+
         if isinstance(one, list):
             raise TypeError('Cannot specify list type for this argument.')
+        
         if one is not None:
             yield one
+        
         for more in mores:
             if more is not None:
                 yield from more
+
 
     @staticmethod
     def _as_iterable(val) -> Iterator[T]:

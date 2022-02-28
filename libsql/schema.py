@@ -350,6 +350,8 @@ class Database(SQLSchemaObjABC):
         database_name : str,         # Database name
         tables        : List[Table], # List of Table schema objects
     ):
+        """ Create a new Database schema object """
+        
         assert tables is None or all(isinstance(t, Table) for t in tables)
 
         self.name = database_name
@@ -367,7 +369,7 @@ class Database(SQLSchemaObjABC):
                     self._coldict[column.name] = []
                 self._coldict[column.name].append(column)
         
-        for columns in self._coldict.values():
+        # Set whether each column name is unique in the database
             if len(columns) == 1:
                 columns[0].only_on_db = True
 
@@ -390,7 +392,7 @@ class Database(SQLSchemaObjABC):
         except KeyError:
             raise TableNotFoundError('Table `%s` not found.' % table) from None
     
-    def __getitem__(self, table:TableLike) -> Table:
+        """ Alias of self.table() """
         return self.table(table)
 
     def column(self, column:ColumnLike, pr_tables:Optional[Sequence[TableLike]]=None) -> Column:
@@ -466,11 +468,13 @@ class Database(SQLSchemaObjABC):
         return hash(self.name)
 
     def sql(self) -> str:
+        """ Returns a SQL expression of this database """
         return asobj(self.name)
 
     def create_tables_sql(self, *, exist_ok: bool = True) -> str:
         """ Get tables creation SQL """
         return ''.join(table.create_table_sql(exist_ok=exist_ok) + ';\n' for table in self.tables)
+
 
 ColumnAlias = NewType('ColumnAlias', str)
 ColumnAs = Union[ColumnLike, Tuple[ColumnLike, ColumnAlias]]
