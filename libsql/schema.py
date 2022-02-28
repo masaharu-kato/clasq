@@ -347,8 +347,8 @@ class Database(SQLSchemaObjABC):
     """ Database schema class """
 
     def __init__(self,
-        database_name : str,         # Database name
-        tables        : List[Table], # List of Table schema objects
+        database_name : str, # Database name
+        tables        : Optional[List[Table]]=None, # List of Table schema objects
     ):
         """ Create a new Database schema object """
         
@@ -379,7 +379,7 @@ class Database(SQLSchemaObjABC):
         """ Iterate all table objects """
         return self._table_dict.values()  
                 
-    def table(self, table:TableLike) -> Table:
+    def table(self, table: TableLike) -> Table:
         """ Get table object by table name / Check if table is valid """
         if isinstance(table, Table):
             if id(table.db) != id(self):
@@ -393,6 +393,7 @@ class Database(SQLSchemaObjABC):
         except KeyError:
             raise TableNotFoundError('Table `%s` not found.' % table) from None
     
+    def __getitem__(self, table: TableLike) -> Table:
         """ Alias of self.table() """
         return self.table(table)
 
