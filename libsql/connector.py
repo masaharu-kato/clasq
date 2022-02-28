@@ -55,12 +55,12 @@ class CursorABC:
         """ Execute many """
 
     @abstractmethod
-    def fetch(self):
-        """ Fetch next result """
+    def fetchone(self):
+        """ Returns next row of a query result set """
 
     @abstractmethod
     def fetchall(self) -> list:
-        """ Fetch all results """
+        """ Returns list of all result rows """
 
     @abstractmethod
     def close(self):
@@ -171,7 +171,9 @@ class MySQLCursor(CursorABC):
         """ Execute the given operation multiple times """
         return self.cursor.executemany(sql, seq_params)
 
+    def fetchone(self):
         """ Returns next row of a query result set """
+        return self.cursor.fetchone()
 
     def fetchall(self) -> list:
         """ Returns list of all result rows """
