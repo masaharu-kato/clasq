@@ -160,7 +160,7 @@ class Column(SQLSchemaObjABC):
         self.comment = comment
         self.link_column_refs = [] if link_column_refs is None else [ColumnRef.from_tuple(cref) for cref in link_column_refs]
         self.link_columns:Set[Column] = weakref.WeakSet()
-        self.only_on_db = False
+        self.unique_name_on_db = False
 
     def _set_table_and_finalize(self, table:'Table') -> None:
         """ Set the parent table and finalize (resolve references in self.link columns) """
@@ -176,7 +176,7 @@ class Column(SQLSchemaObjABC):
 
     def unique_alias(self) -> str:
         """ Get a unique alias on the database """
-        if self.only_on_db:
+        if self.unique_name_on_db:
             return self.name
         return self.table.name + '.' + self.name
 
@@ -355,8 +355,8 @@ class Database(SQLSchemaObjABC):
         assert tables is None or all(isinstance(t, Table) for t in tables)
 
         self.name = database_name
-        self._tbldict = {table.name: table for table in tables} if tables else {}
-        self._coldict:Dict[ColumnName, List[Column]] = {}
+        self._table_dict = {table.name: table for table in tables} if tables else {}
+        self._column_dict:Dict[ColumnName, List[Column]] = {}
 
         # Resolve references in _tbldict
         for table in self.tables:
@@ -365,18 +365,19 @@ class Database(SQLSchemaObjABC):
 
             # Search columns in the tables
             for column in table.columns:
-                if not column.name in self._coldict:
-                    self._coldict[column.name] = []
-                self._coldict[column.name].append(column)
+                if not column.name in self._column_dict:
+                    self._column_dict[column.name] = []
+                self._column_dict[column.name].append(column)
         
         # Set whether each column name is unique in the database
+        for columns in self._column_dict.values():
             if len(columns) == 1:
-                columns[0].only_on_db = True
+                columns[0].unique_name_on_db = True
 
     @property
     def tables(self):
         """ Iterate all table objects """
-        return self._tbldict.values()  
+        return self._table_dict.values()  
                 
     def table(self, table:TableLike) -> Table:
         """ Get table object by table name / Check if table is valid """
@@ -388,7 +389,7 @@ class Database(SQLSchemaObjABC):
         # assert isinstance(table, str)
         # table = table.split('.')[-1]
         try:
-            return self._tbldict[TableName(table)]
+            return self._table_dict[TableName(table)]
         except KeyError:
             raise TableNotFoundError('Table `%s` not found.' % table) from None
     
@@ -427,10 +428,10 @@ class Database(SQLSchemaObjABC):
                     pass
             # raise ColumnNotFoundError(f'Column `{column}` not found in the target tables.')
             
-        if column not in self._coldict:
+        if column not in self._column_dict:
             raise ColumnNotFoundError(f'Undefined column `{column}`.')
 
-        cols = self._coldict[ColumnName(column)]
+        cols = self._column_dict[ColumnName(column)]
         if len(cols) > 1:
             raise ColumnNotFoundError('Multiple columns found for `%s`' % column)
 
