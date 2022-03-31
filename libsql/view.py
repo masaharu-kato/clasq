@@ -2,253 +2,453 @@
     SQL query module
 """
 
-from re import A
-from typing import Any, Dict, List, Sequence, Optional, Union, Tuple, NewType
+from abc import abstractmethod, abstractproperty
+from enum import Enum
+from typing import Iterable, Iterator, List, NamedTuple, NewType, Optional, Sequence, Union
 
-from .schema import Column, ColumnName, ColumnLike, Table, TableName, TableLike, Database
-from .syntax import sql_expression as sqlex
-from . import executor
+from .connector import ConnectionABC, CursorABC
+from .meta import SQLObjABC, tosql
+from .syntax.format import astext
+from .syntax.sql_expression import SQLExprType
 
-COp = NewType('COp', str) # SQL comparison operator type
 
-class DataView(sqlex.SQLExprType):
-    """ Data-view class
-        e.g. 
-        dv = DataView(...)
+TableName  = NewType('TableName', str)
+ColumnName = NewType('ColumnName', str)
 
-        # basic
-        list(dv.new('students')) # list all student records
-        list(dv.new('students').eq('students', age=18)) # list students whose age is 18
-        dv.new('students').id(123).one() # get a student whose id is 123
 
-        # orders
-        list(dv.new('students').order(+name, -age)) # list students with order of name ASC, age DESC
-        list(dv.new('students')[+name, -age]) # same
 
-        # groups
-        list(dv.new('students').group('age')) # list of count of students grouped by `age` column
+class Join(Enum):
+    """ Table JOIN types """
+    NONE = None
+    INNER = 'INNER'
+    LEFT  = 'LEFT'
+    RIGHT = 'RIGHT'
+    OUTER = 'OUTER'
+    CROSS = 'CROSS'
 
-        # offset and limit
-        dv.new('students')[100:] # list students (offset = 100)
-        dv.new('students')[100:150] # list students (offset = 100, limit = 50)
-        dv.new('students')[100::50] # list students (offset = 100, limit = 50)
-    """
-    def __init__(self,
-        qe:executor.BasicQueryExecutor,
-        db:Database,
-        table:Optional[TableLike]=None,
-        # full:bool=True
-    ):
-        self.qe : executor.BasicQueryExecutor = qe
-        self.db : Database = db
 
-        self._table    : Optional[Table]                    = None
-        self._joins    : List[Tuple[Table, Tuple[Column, Column]]] = []
-        self._colexprs : List[sqlex.SQLExprType]          = []
-        self._terms    : Optional[sqlex.SQLExprType]          = None
-        self._groups   : List[Column] = []
-        self._orders   : List[sqlex.SQLExprType]          = []
-        self._limit    : Optional[int]                          = None
-        self._offset   : Optional[int]                          = None
+class Order(Enum):
+    """ Table Order types """
+    NONE = None
+    ASC  = 'ASC'
+    DESC = 'DESC'
 
-        self._result:Optional[List[Any]] = None
 
-        if table:
-            self.table(table) #, full=full)
+class Where(Enum):
+    """ Where operations """
+    NOT_NONE = 'NOT_NONE'
+    EVAL_TRUE = 'EVAL_TRUE'
+    EVAL_FALSE = 'EVAL_FALSE'
 
-    def new(self, table:Optional[TableLike]=None): # , *, full:bool=True):
-        """ Generate a new view instance with table """
-        return DataView(self.qe, self.db, table) # , full=full)
 
-    def table(self, table:TableLike): # , *, full:bool=True):
-        """ Set a base table """
-        self._table = self.db.table(table)
-        # if full:
-        #     self.join(*self._table.get_parent_table_links())
-        return self
+JoinLike = Union[Join, str]
+OrderLike = Union[Order, str]
+
+
+class ViewColumnABC(SQLObjABC):
+    """ Column on View """
 
     @property
-    def tables(self):
-        return DataViewTables(self)
-
-    def join(self, table:TableLike, lcol:ColumnLike, rcol:ColumnLike):
-        """ Join other tables """
-        self._joins.append((self.db.table(table), (self.db.column(lcol), self.db.column(rcol))))
-        return self
-
-    def join_new(self, *tables:TableLike):
-        """ Generate a new view instance with table joined with other tables """
-        return self.new(self._table, *self._joins, *tables)
-
-    def where(self, *exprs) -> 'DataView':
-        """ Append terms """
-        for expr in exprs:
-            self._terms = expr if self._terms is None else self._terms & expr
-        return self
-
-    def column(self, *colexprs) -> 'DataView':
-        """ Add extra column """
-        self._colexprs.extend(colexprs)
-        return self
-
-    def group(self, *columns:Column) -> 'DataView':
-        """ Append group column(s) or table(s) """
-        self._groups.extend(columns)
-        return self
-
-    def orders(self, *colexprs) -> 'DataView':
-        """ Append order(s) """
-        self._orders.extend(colexprs)
-        return self
-
-    def limit(self, limit:Optional[int]) -> 'DataView':
-        """ Set limit """
-        self._limit = limit
-        return self
-
-    def offset(self, offset:Optional[int]) -> 'DataView':
-        """ Set offset """
-        self._offset = offset
-        return self
-
-    def term(self, l, op, r) -> 'DataView':
-        """ Append term for WHERE clause """
-        lexpr = l if isinstance(l, sqlex.SQLExprType) else self.db.column(l)
-        return self.where(sqlex.BinaryExpr(op, lexpr, r))
-
-    def eq(self, table:TableLike, **kwargs) -> 'DataView':
-        """ Append equal terms on WHERE clause """
-        table = self.db.table(table)
-        for column_name, value in kwargs.items():
-            self.where(table.column(column_name) == value)
-        return self
-        
-    def id(self, idval:int):
-        """ Append `id` equal term on WHERE clause """
-        assert self._table is not None
-        return self.eq(self._table, id=idval)
-
-
-    def __getitem__(self, key):
-        """ Append various terms """
-        if isinstance(key, sqlex.SQLExprType):
-            return self.where(key)
-
-        if isinstance(key, slice):
-            if key.start is not None:
-                self.offset(key.start)
-            if key.stop is not None:
-                self.limit(key.stop - (key.start or 0))
-            if key.step is not None:
-                self.limit(key.step)
-            return self
-
-        if isinstance(key, int): # id value
-            return self.id(key)
-
-        raise TypeError('Unexpected type.')
-
-    def execute(self) -> 'DataView':
-        """ Execute SQL """
-        self._result = self.qe.query(*self.sql_with_params())
-        return self
-
-    def prepare(self) -> 'DataView':
-        """ Prepare result (Execute SQL if not executed yet) """
-        if self._result is None:
-            self.execute()
-        return self
-
-    def refresh(self) -> 'DataView':
-        """ Re-execute SQL """
-        return self.execute()
-
-    @property
-    def result(self):
-        """ Get result """
-        self.prepare()
-        return self._result
-
-    def __iter__(self):
-        """ Iterate the result """
-        return iter(self.result)
-
-    def __len__(self):
-        """ Get length of the result """
-        return len(self.result)
-
-    def one(self):
-        """ Assume one result and get it """
-        self.prepare()
-        if len(self._result) != 1:
-            raise RuntimeError('Length of result is not just one.')
-        return self._result[0]
-
-    def one_or_none(self):
-        """ Assume one result or None and get it """
-        self.prepare()
-        if self._result:
-            return self.one()
+    def alias(self) -> Optional[str]:
+        """ Get alias stirng """
         return None
 
-    def exists(self):
-        """ Get existence of result """
-        return bool(self.__len__())
+ColumnLike = Union[ViewColumnABC, ColumnName, str]
 
 
-    def pages(self) -> List['DataView']:
-        # TODO: Implementation
-        raise NotImplementedError()
+class ExtraViewColumn(ViewColumnABC):
+    """ Extra Column on View """
+    def __init__(self, expr: SQLExprType):
+        super().__init__()
+        self._expr = expr
+
+    def sql(self) -> str:
+        return tosql(self._expr)
+
+class AliasedViewColumn(ViewColumnABC):
+    """ Column with alias """
+    def __init__(self, column: ViewColumnABC, alias: Optional[str] = None):
+        super().__init__()
+        assert isinstance(column, ViewColumnABC), "Invalid type of column."
+        self.column = column
+        self._alias = alias
+
+    @property
+    def alias(self) -> str:
+        return self._alias
+
+    def sql(self) -> str:
+        col_sql = self.column.sql()
+        if self.alias:
+            return col_sql + " AS " + astext(self.alias)
+        return col_sql
 
 
-    def sql_with_params(self) -> Tuple[str, list]:
-        """ Generate SQL and parameters to SQLWithParams object """
-
-        if self._table is None:
-            raise RuntimeError('Table is not set.')
-
-        # clarify target columns
-        target_columns = [*self._table.columns]
-        for table, _ in self._joins:
-            target_columns.extend(self.db.table(table).columns)
-        for colexpr in self._colexprs:
-            assert isinstance(colexpr, (Column, str)) 
-            target_columns.append(self.db.column(colexpr))
-
-        sql, params = '', []
-
-        def append_clause(clause_name:str, *vals, end:str='\n'):
-            """ Append new clause """
-            nonlocal sql, params
-            if vals[0] is None or (isinstance(vals[0], (tuple, list)) and not vals[0]):
-                return self
-            csql, cparams = sqlex.sql_with_params(sqlex.RawExpr(clause_name), *vals, end=end)
-            sql += csql
-            params.extend(cparams)
-
-        # construct query
-        append_clause('SELECT', [(col, sqlex.RawExpr('AS'), sqlex.QuotedName(col.unique_alias())) for col in target_columns])
-        append_clause('FROM'  , self._table)
-
-        for table, (lcol, rcol) in self._joins:
-            append_clause(('INNER' if lcol.not_null and rcol.not_null else 'LEFT') + ' JOIN', table, end=' ')
-            append_clause('ON', lcol == rcol)
-
-        append_clause('WHERE'   , self._terms)
-        append_clause('GROUP BY', self._groups)
-        append_clause('ORDER BY', [
-            (colexpr, sqlex.RawExpr('DESC' if isinstance(colexpr, sqlex.UnaryExpr) and colexpr.op == '-' else 'ASC'))
-            for colexpr in self._orders
-        ])
-        append_clause('LIMIT'   , self._limit)
-        append_clause('OFFSET'  , self._offset)
-        
-        return sql, params
+class OrderedViewColumn(SQLObjABC):
+    """ Column with Order """
+    def __init__(self, column: ViewColumnABC, order: Order) -> None:
+        super().__init__()
+        self.column = column
+        self.order = order
 
 
-class DataViewTables:
-    def __init__(self, dv:DataView):
-        self.dv = dv
+class ViewABC(SQLObjABC):
+    """ Table View """
 
-    def __getattr__(self, tablename:Union[str, TableName]):
-        return self.dv.table(TableName(tablename))
+    # ----------------------------------------------------------------
+    #   Database connection methods
+    # ----------------------------------------------------------------
+    @classmethod
+    def create_db_connection(cls):
+        """ Create a new Database Connection """
+        # TODO: Implement
+
+    @classmethod
+    def create_db_cursor(cls):
+        """ Create a new Database Cursor """
+
+    @classmethod
+    def db_connection(cls) -> ConnectionABC:
+        """ Get the Database Connection """
+        # TODO: Implement
+
+    @classmethod
+    def db_cursor(cls) -> CursorABC:
+        """ Get the Database Cursor """
+
+    # ----------------------------------------------------------------
+    #   Query methods
+    # ----------------------------------------------------------------
+
+    def fetch(self):
+        """ Fetch a single result row """
+        # TODO: Implement
+
+    def fetchall(self):
+        """ Fetch all reuslt rows """
+        # TODO: Implement
+
+    def select(self, *args, **kwargs):
+        """ Run SELECT query """
+        self.db_cursor().select(*args, **kwargs) # TODO: Implement
+
+    def insert(self, *args, **kwargs):
+        """ Run INSERT query """
+        self.db_cursor().insert(*args, **kwargs) # TODO: Implement
+
+    def insertmany(self, *args, **kwargs):
+        """ Run multiple INSERT queries """
+        self.db_cursor().insertmany(*args, **kwargs) # TODO: Implement
+
+    def update(self, *args, **kwargs):
+        """ Run UPDATE query """
+        self.db_cursor().update(*args, **kwargs) # TODO: Implement
+
+    def delete(self, *args, **kwargs):
+        """ Run DELETE query """
+        self.db_cursor().delete(*args, **kwargs) # TODO: Implement
+
+    def selsert(self, *args, **kwargs):
+        """ Run SELECT or INSERT query """
+        self.db_cursor().selsert(*args, **kwargs) # TODO: Implement
+
+    def upsert(self, *args, **kwargs):
+        """ Run UPDATE or INSERT query """
+        self.db_cursor().upsert(*args, **kwargs) # TODO: Implement
+
+
+    # ----------------------------------------------------------------
+    #   View creation methods
+    # ----------------------------------------------------------------
+
+    def select_column(self, *ops, **kwargs) -> 'TableColumnsView':
+        """ Make a View object with columns """
+
+    def where(self, *ops, **kwargs) -> 'WheredView':
+        """ Make a View object with WHERE clause """
+        return WheredView(self, []) # TODO: Implement
+
+    def __call__(self, *ops, **kwargs):
+        """ Make a View object with WHERE clause (alias of `where` method) """
+        return self.where(*ops, **kwargs)
+
+    def key(self, *ops, **kwargs) -> 'WheredView':
+        """ Make a View object with WHERE clause (Returns a unique row) """
+        return WheredView(self, []) # TODO: Implement
+
+    def group_by(self, *columns: ViewColumnABC) -> 'GroupedView':
+        return GroupedView(self, columns) # TODO: Implement
+
+    def order_by(self, *orders: SQLExprType) -> 'OrderedView':
+        """ Make a View object with ORDER BY clause """
+        return OrderedView(self, orders) # TODO: Implement
+
+    def limit(self, limit: int) -> 'LimitedView':
+        """ Make a View object with LIMIT OFFSET clause """
+        return LimitedView(self, limit)
+
+    def offset(self, offset: int) -> 'OffsetView':
+        """ Make a View object with LIMIT OFFSET clause """
+        return OffsetView(self, offset)
+
+    def single(self) -> 'SingleView':
+        """ Make a View object with a single result """
+        return SingleView(self)
+
+    def join(self, type: Join, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
+        """ Make a Joined View """
+        # TODO: cond_eqs
+        return JoinedView(type, self, factor, cond)
+
+    def sql(self) -> str:
+        """ Generate SQL string """
+        return self.table_sql()
+
+    def inner_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
+        return self.join(Join.INNER, factor, cond, **cond_eqs)
+
+    def left_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
+        return self.join(Join.LEFT, factor, cond, **cond_eqs)
+
+    def right_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
+        return self.join(Join.RIGHT, factor, cond, **cond_eqs)
+
+    def outer_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
+        return self.join(Join.OUTER, factor, cond, **cond_eqs)
+
+    def cross_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
+        return self.join(Join.CROSS, factor, cond, **cond_eqs)
+
+
+    # ----------------------------------------------------------------
+    #   System view methods
+    # ----------------------------------------------------------------
+
+    @property
+    def table_view(self) -> 'TableViewABC':
+        return self
+
+    @abstractmethod
+    def table_sql(self) -> str:
+        """ Get SQL of Table """
+
+    @property
+    def where_cond(self) -> SQLExprType:
+        """ Get WHERE conds """
+        return None # Default Implementation
+
+    @abstractmethod
+    def iter_orders(self) -> Iterator[OrderedViewColumn]:
+        """ Iterate ORDER columns """
+
+
+    # ----------------------------------------------------------------
+    #   System column methods
+    # ----------------------------------------------------------------
+
+    @property
+    def columns(self) -> List[ViewColumnABC]:
+        """ Get all columns """
+        return list(self.iter_columns())
+
+    @abstractmethod
+    def iter_columns(self) -> Iterator[ViewColumnABC]:
+        """ Iterate columns """
+
+    @abstractmethod
+    def column(self, column: ColumnLike) -> ViewColumnABC:
+        """ Search a specific column """
+
+    def col(self, column: ColumnLike) -> ViewColumnABC:
+        """ Search a specific column (alias of `self.column()`) """
+        return self.column(column)
+
+    # def __getitem__(self, column: ColumnLike) -> ViewColumnABC:
+    #     """ Search a specific column (alias of `self.column()`) """
+    #     return self.column(column)
+
+    
+
+
+
+TableLike = Union[ViewABC, TableName, str]
+
+
+class LimitedViewABC(ViewABC):
+    """ Limited View ABC """
+
+class OrderedViewABC(LimitedViewABC):
+    """ Ordered View ABC """
+
+class GroupedViewABC(OrderedViewABC):
+    """ Grouped View ABC """
+
+class WheredViewABC(GroupedViewABC):
+    """ Whered View ABC """
+
+class TableViewABC(WheredViewABC):
+    """ Table View ABC """
+
+
+class TableColumnsView(TableViewABC):
+    """ Table view with columns """
+    def __init__(self,
+        view: ViewABC,
+        columns: Union[None, bool, Sequence[Union[ColumnLike, ViewColumnABC]]] = True,
+        **aliased_columns: Union[bool, ColumnLike, SQLExprType]
+    ):
+        super().__init__()
+        self._view = view
+        self._columns: List[ViewColumnABC] = []
+
+        # If `columns` is True (All columns), extend all columns except specific columns set by `aliased_columns`
+        if columns is True:
+            self._columns.extend(column for column in view.iter_columns() if aliased_columns.get(column.name, True))
+
+        # If `columns` is a list, extend specified columns
+        elif columns is not None and columns is not False:
+            self._columns.extend(column if isinstance(column, ViewColumnABC) else view.column(column) for column in columns)
+
+        for alias, column in aliased_columns:
+            if column is True:
+                self._columns.append(ViewColumnABC(view.column(alias), alias))
+            elif column is not False:
+                self._columns.append(ExtraViewColumn(column, alias) if isinstance(column, SQLExprType) else AliasedViewColumn(view.column(column), alias))
+
+    def iter_columns(self) -> Iterator[ViewColumnABC]:
+        yield from self._columns
+
+
+class JoinedView(TableViewABC):
+    """ Joined view (view with JOIN clause) """
+
+    def __init__(self, type: Join, origin: ViewABC, factor: ViewABC, cond: SQLExprType):
+        super().__init__()
+        self.type = type
+        self.origin = origin
+        self.factor = factor
+        self.cond = cond
+
+    def iter_columns(self) -> Iterator[ViewColumnABC]:
+        yield from self.origin.table_view.iter_columns()
+        yield from self.factor.table_view.iter_columns()
+
+    @property
+    def where_cond(self) -> SQLExprType:
+        return self.origin.where_cond & self.factor.where_cond
+
+    def iter_orders(self) -> Iterator[OrderedViewColumn]:
+        yield from self.origin.iter_orders()
+        yield from self.factor.iter_orders()
+
+    def table_sql(self):
+        return '%s %s JOIN %s ON %s' % (self.origin.table_view.table_sql(), self.type.name, self.factor.table_view.table_sql(), tosql(self.cond))
+
+
+class WheredView(WheredViewABC):
+    """ View with WHERE clause """
+
+    def __init__(self, view: OrderedViewABC, cond: SQLExprType):
+        super().__init__()
+        assert isinstance(view, OrderedViewABC), "Invalid type of view."
+        self.view = view
+        self.cond = cond
+
+    @property
+    def table_view(self) -> ViewABC:
+        return self.view
+
+    @property
+    def where_cond(self) -> SQLExprType:
+        return self.view.where_cond & self.cond
+
+
+class GroupedView(GroupedViewABC):
+    """ View with GROUP BY clause """
+
+    def __init__(self, view: OrderedViewABC, columns: Iterable[ViewColumnABC]):
+        super().__init__()
+        assert isinstance(view, OrderedViewABC), "Invalid type of view."
+        self.view = view
+        self.columns = list(columns)
+    
+
+class OrderedView(OrderedViewABC):
+    """ View with ORDER """
+
+    def __init__(self, view: OrderedViewABC, orders: Iterable[OrderedViewColumn]):
+        super().__init__()
+        assert isinstance(view, OrderedViewABC), "Invalid type of view."
+        self.view = view
+        self.orders = list(orders)
+
+    @property
+    def table_view(self) -> ViewABC:
+        return self.view
+
+    def iter_orders(self) -> Iterator[OrderedViewColumn]:
+        yield from self.view.iter_orders()
+        yield from self.orders
+    
+
+class LimitedView(ViewABC):
+    """ View with LIMIT, OFFSET clause """
+
+    def __init__(self, view: OrderedViewABC, limit: int):
+        super().__init__()
+        assert isinstance(view, OrderedViewABC), "Invalid type of view."
+        self.view = view
+        self._limit = limit
+
+
+class OffsetView(ViewABC):
+    """ View with LIMIT, OFFSET clause """
+
+    def __init__(self, view: LimitedViewABC, offset: int):
+        super().__init__()
+        assert isinstance(view, LimitedViewABC), "Invalid type of view."
+        self.view = view
+        self._offset = offset
+
+
+class SingleView(ViewABC):
+    """ Single result view """
+
+    def __init__(self, view: GroupedViewABC) -> None:
+        super().__init__()
+        self.view = view
+
+    def where(self, *args, **kwargs):
+        """ (override) """
+        return Record() # TODO: Implement
+
+
+class Record():
+    """ Record Object """
+
+    # ----------------------------------------------------------------
+    #   Data methods
+    # ----------------------------------------------------------------
+
+    @property
+    def data(self) -> Optional[NamedTuple]:
+        """ Get a data (Named-tuple of column values) """
+
+    def __getitem__(self, column):
+        """ Get a value of specific column """
+
+    def __bool__(self):
+        """ Return whether the actual data exists or not """
+
+
+    # ----------------------------------------------------------------
+    #   Query methods
+    # ----------------------------------------------------------------
+
+    def update(self, *args, **kwargs):
+        """ Run UPDATE query """
+
+    def delete(self):
+        """ Run DELETE query """
+
+

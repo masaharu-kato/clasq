@@ -1,22 +1,18 @@
 """
     Database schema module
 """
-from abc import abstractmethod
 from typing import Any, DefaultDict, Dict, Iterator, List, NewType, Optional, Union, Set, Sequence, Tuple, Type
 import sys
 import re
 import weakref
 import warnings
 
-from enum import Enum
-
-from libsql.syntax import keywords
-from .syntax.sql_expression import SQLExprType
+from libsql.meta import SQLObjABC
+from libsql.syntax.format import asobj, joinobjs
+from libsql.view import ColumnLike, ColumnName, TableLike, TableName, ViewABC, ViewColumnABC
 
 import sqlparse # type: ignore
 import ddlparse # type: ignore
-
-_IS_DEBUG = True
 
 class SchemaError(Exception):
     """ Schema Error """
@@ -33,9 +29,6 @@ class ColumnNotFoundError(NotFoundError):
 class TableNotFoundError(NotFoundError):
     """ Table not found error """
 
-class InvalidFormatError(ValueError, SchemaError):
-    """ Invalid Format error """
-
 class TableSchemaError(SchemaError):
     """ Table schema parsing error """
 
@@ -43,82 +36,14 @@ class ColumnSchemaError(SchemaError):
     """ Column schema parsing error """
 
 
-def asobj(_objname) -> str:
-    """ Format single object name """
-    if _objname is None:
-        return ''
-    name = str(_objname)
-    if _IS_DEBUG:
-        if '`' in name:
-            raise InvalidFormatError('Invalid character(s) found in the object name: %s' % name)
-    return '`' + name + '`'
+class SQLSchemaObjABC(SQLObjABC):
+    """ SQL Schema Obj ABC """
 
-def joinobjs(*objs) -> str:
-    return '.'.join(objs)
-
-def joinasobjs(*objs) -> str:
-    return joinobjs(*map(asobj, objs))
-
-def asmultiobj(_objname) -> str:
-    return joinasobjs(str(_objname).split('.'))
-
-def astext(_text) -> str:
-    """ Format single object name """
-    name = '' if _text is None else str(_text)
-    if _IS_DEBUG:
-        if '"' in name:
-            raise InvalidFormatError('Invalid character(s) found in the text.')
-    return '"' + name + '"'
-
-def astype(typename) -> str:
-    """ Format SQL type """
-    if _IS_DEBUG:
-        if not re.match(r'\w+(\(\w*\))?', typename):
-            raise InvalidFormatError('Invalid typename "{}".'.format(typename))
-    return typename
-
-def asop(opname) -> str:
-    op = str(opname).upper()
-    if op in keywords.OP_ALIASES:
-        op = keywords.OP_ALIASES[op]
-    if op not in keywords.OPS:
-        raise InvalidFormatError('Invalid operator `%s`' % op)
-    return op
-
-def tosql(obj) -> str:
-    if isinstance(obj, SQLSchemaObjABC):
-        return obj.sql()
-    if isinstance(obj, str): # ColumnAlias
-        return str(obj)
-    raise TypeError('Invalid type of SQL object.')
-
-
-class SQLSchemaObjABC(SQLExprType):
-    """ SQL Schema object abstract class """
-
-    @abstractmethod
-    def __hash__(self) -> int:
-        """ Get the hash value """
-    
-    @abstractmethod
-    def sql(self) -> str:
-        """ Get SQL expression of this schema object """
-
-    def sql_with_params(self) -> Tuple[str, List]:
-        """ Output sql and its placeholder parameters """
-        return self.sql(), []
-
-
-TableName  = NewType('TableName', str)
-ColumnName = NewType('ColumnName', str)
-
-TableLike = Union['Table', TableName, str]
-ColumnLike = Union['Column', ColumnName, str]
 
 class ColumnRef:
     """ Reference of the column in the table """
 
-    def __init__(self, table_name:TableName, column_name:Optional[ColumnName]=None):
+    def __init__(self, table_name: TableName, column_name: Optional[ColumnName] = None):
         self.table_name = table_name
         self.column_name = column_name
 
@@ -140,7 +65,7 @@ class ColumnRef:
         return '<ColumnRef `%s`.`%s`>' % (self.table_name, self.column_name)
 
 
-class Column(SQLSchemaObjABC):
+class Column(SQLSchemaObjABC, ViewColumnABC):
     """ Column schema class """
 
     def __init__(self,
@@ -195,7 +120,7 @@ class Column(SQLSchemaObjABC):
 
 class TableLink:
     """ Linked table information """
-    def __init__(self, origcol:Column, destcol:Column, is_nullable:bool, is_parent:bool):
+    def __init__(self, origcol: Column, destcol: Column, is_nullable: bool, is_parent: bool):
         self.origcol = origcol
         self.destcol = destcol
         self.is_nullable = is_nullable
@@ -217,7 +142,7 @@ class TableLink:
             'parent' if self.is_parent else 'child',
         )   
 
-class Table(SQLSchemaObjABC):
+class Table(SQLSchemaObjABC, ViewABC):
     """ Table schema class """          
 
     def __init__(self,
@@ -251,10 +176,9 @@ class Table(SQLSchemaObjABC):
         self.only_on_dbs = True  # The only table name in the databases or not
         self.record_class = record_type # Record class type
 
-    @property
-    def columns(self):
-        """ Iterate all column objects """
-        return self._coldict.values()
+    def iter_columns(self):
+        """ Iterate all column objects (Override) """
+        return iter(self._coldict.values())
 
     @property
     def keycol(self) -> Column:
@@ -285,8 +209,8 @@ class Table(SQLSchemaObjABC):
             raise NotFinalizedError('Database is not set.')
         return self._db
 
-    def column(self, column:ColumnLike) -> Column:
-        """ Get column by column name / Check if column is valid
+    def column(self, column: ColumnLike) -> ViewColumnABC:
+        """ Get column by column name / Check if column is valid (Override)
             When the Column object specified:
                 The column is in this table: return the Column object
                 Else: raise ColumnNotFoundError
@@ -304,13 +228,6 @@ class Table(SQLSchemaObjABC):
         except KeyError:
             raise ColumnNotFoundError('Column `%s` not found.' % column)
 
-    def col(self, column:ColumnLike) -> Column:
-        """ Get column objects (alias of `self.column`) """
-        return self.column(column)
-
-    def __getitem__(self, column:ColumnLike) -> Column:
-        return self.column(column)
-
     def find_tables_links(self, target_tables:Optional[Sequence[TableLike]]=None) -> Iterator[TableLink]:
         """ Get links (pairs of two table-_coldict) between this table and specific tables """
         return self.db.find_tables_links(self.name, target_tables)
@@ -321,7 +238,7 @@ class Table(SQLSchemaObjABC):
     def __hash__(self) -> int:
         return hash((hash(self.db), self.name))
 
-    def sql(self) -> str:
+    def table_sql(self) -> str:
         _o = asobj(self.name)
         return joinobjs(self.db.sql(), _o) if not self.only_on_dbs else _o
 
@@ -482,24 +399,6 @@ ColumnAlias = NewType('ColumnAlias', str)
 ColumnAs = Union[ColumnLike, Tuple[ColumnLike, ColumnAlias]]
 
 ExtraColumnExpr = NewType('ExtraColumnExpr', str)
-
-class JoinType(Enum):
-    """ Table JOIN types """
-    NONE = None
-    INNER = 'INNER'
-    LEFT  = 'LEFT'
-    RIGHT = 'RIGHT'
-    OUTER = 'OUTER'
-    CROSS = 'CROSS'
-
-class OrderType(Enum):
-    """ Table Order types """
-    NONE = None
-    ASC  = 'ASC'
-    DESC = 'DESC'
-
-JoinLike = Union[JoinType, str]
-OrderLike = Union[OrderType, str]
 
 
 
