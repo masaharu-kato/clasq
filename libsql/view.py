@@ -36,9 +36,11 @@ class Order(Enum):
 
 class Where(Enum):
     """ Where operations """
-    NOT_NONE = 'NOT_NONE'
+    NULL = None
+    NOT_NULL = 'NOT_NULL'
     EVAL_TRUE = 'EVAL_TRUE'
     EVAL_FALSE = 'EVAL_FALSE'
+    EVAL_FALSE_OR_NULL = 'EVAL_FALSE_OR_NULL'
 
 
 JoinLike = Union[Join, str]
