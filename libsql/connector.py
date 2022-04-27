@@ -55,12 +55,12 @@ class CursorABC:
         """ Execute many """
 
     @abstractmethod
-    def fetch(self):
-        """ Fetch next result """
+    def fetchone(self):
+        """ Returns next row of a query result set """
 
     @abstractmethod
     def fetchall(self) -> list:
-        """ Fetch all results """
+        """ Returns list of all result rows """
 
     @abstractmethod
     def close(self):
@@ -104,7 +104,7 @@ class MySQLConnectionABC(ConnectionABC):
             return MySQLCursor(self, self.cnx.cursor(*args, **options))
 
     def close(self) -> None:
-        """ Close cursor """
+        """ Close the cursor """
         if self.cnx is not None:
             try:
                 self.cnx.close()
@@ -156,24 +156,31 @@ class MySQLCursor(CursorABC):
 
     @property
     def con(self):
+        """ Return the connection instance """
         return self._con
 
     def last_row_id(self):
+        """ Returns the value generated for an AUTO_INCREMENT column """
         return self.cursor.lastrowid
 
     def execute(self, sql:str, params:Optional[Union[list, tuple]]=()):
+        """ Executes the given operation """
         return self.cursor.execute(sql, params)
 
     def executemany(self, sql:str, seq_params:Sequence[Union[list, tuple]]):
+        """ Execute the given operation multiple times """
         return self.cursor.executemany(sql, seq_params)
 
-    def fetch(self):
-        return self.cursor.fetch()
+    def fetchone(self):
+        """ Returns next row of a query result set """
+        return self.cursor.fetchone()
 
     def fetchall(self) -> list:
+        """ Returns list of all result rows """
         return self.cursor.fetchall()
 
     def close(self):
+        """ Close the cursor """
         try:
             return self.cursor.close()
         except (mysql.connector.errors.InternalError, ReferenceError):
