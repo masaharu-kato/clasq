@@ -8,13 +8,9 @@ import sys
 
 from libsql.connector import CursorABC
 import mysql.connector.errors as mysql_error # type: ignore
-from .schema import Column, ColumnAlias, ColumnLike, Database, ExtraColumnExpr, JoinLike, JoinType, OrderLike, OrderType, Table, TableLike, TableLink, asobj, asop, astext, astype, tosql
 
 T = TypeVar('T')
 SQLLike = str
-
-OpTerm = Union[ColumnLike, Tuple[str, ColumnLike], Tuple[ColumnLike, str, Any], list]
-EqTerm = Tuple[ColumnLike, Any]
 
 class BasicQueryExecutor:
     """ Basic SQL Execution class """
