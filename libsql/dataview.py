@@ -220,7 +220,7 @@ class DataView(sqlex.SQLExprType):
             nonlocal sql, params
             if vals[0] is None or (isinstance(vals[0], (tuple, list)) and not vals[0]):
                 return self
-            csql, cparams = sqlex.sql_with_params(sqlex.RawExpr(clause_name), *vals, end=end)
+            csql, cparams = sqlex.expr_to_sql(sqlex.RawExpr(clause_name), *vals, end=end)
             sql += csql
             params.extend(cparams)
 
@@ -235,7 +235,7 @@ class DataView(sqlex.SQLExprType):
         append_clause('WHERE'   , self._terms)
         append_clause('GROUP BY', self._groups)
         append_clause('ORDER BY', [
-            (colexpr, sqlex.RawExpr('DESC' if isinstance(colexpr, sqlex.UnaryExpr) and colexpr.op == '-' else 'ASC'))
+            (colexpr, sqlex.RawExpr('DESC' if isinstance(colexpr, sqlex.UnaryExpr) and colexpr._op == '-' else 'ASC'))
             for colexpr in self._orders
         ])
         append_clause('LIMIT'   , self._limit)

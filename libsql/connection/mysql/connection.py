@@ -8,19 +8,27 @@ import mysql.connector
 from mysql.connector.abstracts import MySQLConnectionAbstract
 import mysql.connector.pooling
 
-from ..utils.tabledata import TableData
-from .prepared_connection_abc import ConnectionABC, PreparedConnectionABC, PreparedStatementABC
+from ...utils.tabledata import TableData
+from ..abstracts.prepared_connection import ConnectionABC, PreparedConnectionABC, PreparedStatementExecutorABC
 
 class MySQLConnectionABC(ConnectionABC):
 
     def __init__(self) -> None:
         super().__init__()
         self.cnx: MySQLConnectionAbstract = self.new_cnx()
-        self._prepared_stmts: Dict[bytes, PreparedStatementABC] = {}
+        self._prepared_stmts: Dict[bytes, PreparedStatementExecutorABC] = {}
 
     @abstractmethod
     def new_cnx(self, *args, **kwargs) -> MySQLConnectionAbstract:
         """ Create a new connection """
+
+    def commit(self):
+        """ Commit the current transaction (Override) """
+        return self.cnx.commit()
+
+    ### =========================================================================================================== ###
+    #    Execute and Query
+    ### =========================================================================================================== ###
 
     def execute_plain(self, stmt: bytes) -> None:
         """ Execute a query using prepared statement """
@@ -28,12 +36,10 @@ class MySQLConnectionABC(ConnectionABC):
 
     def query_plain(self, stmt: bytes) -> TableData:
         """ Execute a query using prepared statement, and get result """
-        self.cnx.cmd_query(stmt)
-        return self.cnx.get_rows()
-
-    def commit(self):
-        """ Commit the current transaction (Override) """
-        return self.cnx.commit()
+        qres = self.cnx.cmd_query(stmt)
+        rows, eof = self.cnx.get_rows()
+        column_names = [c[0] for c in qres['columns']]
+        return TableData(column_names, rows)
 
     def execute(self, stmt: bytes, params: Optional[list] = None) -> None:
         """ Execute a query using prepared statement """
@@ -51,14 +57,13 @@ class MySQLConnectionABC(ConnectionABC):
         """ Execute a query using prepared statement, and get result """
         if not params:
             return self.query_plain(stmt)
-        pstmt = self._get_or_make_pstmt(stmt)
-        pstmt.execute_params(params)
+        return self._get_or_make_pstmt(stmt).query_params(params)
     
     def query_many(self, stmt: bytes, params_list: Iterable[list]) -> Iterator[TableData]:
         """ Execute a query using prepared statement, and get result """
         pstmt = self._get_or_make_pstmt(stmt)
         for params in params_list:
-            pstmt.execute_params(params)
+            yield pstmt.query_params(params)
 
     def close_all_prepared_stmts(self):
         """ Close all prepared statements """
@@ -76,13 +81,10 @@ class MySQLConnectionABC(ConnectionABC):
         #     self.cnx = None
 
 
-    def _get_or_make_pstmt(self, stmt: bytes) -> PreparedStatementABC:
+    def _get_or_make_pstmt(self, stmt: bytes) -> PreparedStatementExecutorABC:
         if not (pstmt := self._prepared_stmts.get(stmt)):
             pstmt = self._prepared_stmts[stmt] = MySQLPreparedStatement(self.cnx, stmt)
         return pstmt
-
-    def _get_results_by_pstmt(self) -> TableData:
-        ...
 
 
 class MySQLConnection(MySQLConnectionABC):
@@ -90,33 +92,6 @@ class MySQLConnection(MySQLConnectionABC):
 
     def new_cnx(self, *args, **kwargs):
         return mysql.connector.connect(*args, **kwargs) # MySQL connection 
-
-
-
-class MySQLPreparedStatement(PreparedStatementABC):
-
-    def __init__(self, cnx: MySQLConnectionAbstract, stmt: bytes):
-        super().__init__(stmt)
-        self._cnx = cnx
-    
-    def _new(self) -> Tuple[int, int]:
-        """ Create a new prepared statement (Override)
-            Return: stmt_id, number of params
-        """
-        res = self._cnx.cmd_stmt_prepare(self._stmt)
-        return res['statement_id'], res['num_params']
-
-    def _send_params_list(self, params_list: List[list]) -> Optional[TableData]:
-        """ Execute a specific prepared statement (Override) """
-
-
-    def _reset(self) -> None:
-        """ Close a specific prepared statement (Override) """
-        return self._cnx.cmd_stmt_reset(self._stmt_id)
-
-    def _close(self) -> None:
-        """ Close a specific prepared statement (Override) """
-        return self._cnx.cmd_stmt_close(self._stmt_id)
 
 
 # class MySQLPooledConnection(MySQLConnectionABC):
