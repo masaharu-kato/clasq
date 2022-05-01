@@ -1,11 +1,9 @@
 """
     MySQL Functions
 """
-from enum import Enum
 from typing import Optional, Union
 import datetime
-from .operators import OP
-from .expr_class import ExprABC as Ext, Func, NoArgsFunc
+from .expr_type import ExprABC as Ext, Func, NoArgsFunc, OP, MathBaseFunc as MathBase
 
 class FunctionsABC():
     """ Functions ABC """
@@ -24,11 +22,11 @@ class Math(FunctionsABC):
     DIV      = OP.DIV
     MOD_OP   = OP.MOD
     MOD_OP_  = OP.MOD_
-    ABS      = Func(b'ABS'    , [float], float)
+    ABS      = MathBase.ABS
     ACOS     = Func(b'ACOS'   , [float], float)
     ATAN     = Func(b'ATAN'   , [float, Optional[float]], float)
     ATAN2    = Func(b'ATAN2'  , [float, float], float)
-    CEIL     = Func(b'CEIL'   , [float], float)
+    CEIL     = MathBase.CEIL
     CEILING  = Func(b'CEILING', [float], float)
     CONV     = Func(b'CONV'   , [Ext, int, int], float)
     COS      = Func(b'COS'    , [float], float)
@@ -36,7 +34,7 @@ class Math(FunctionsABC):
     CRC32    = Func(b'CRC32'  , [float], float)
     DEGREES  = Func(b'DEGREES', [float], float)
     EXP      = Func(b'EXP'    , [float], float)
-    FLOOR    = Func(b'FLOOR'  , [float], float)
+    FLOOR    = MathBase.FLOOR
     LN       = Func(b'LN'     , [float], float)
     LOG      = Func(b'LOG'    , [float, Optional[float]], float)
     LOG10    = Func(b'LOG10'  , [float], float)
@@ -52,7 +50,7 @@ class Math(FunctionsABC):
     SIN      = Func(b'SIN'    , [float], float)
     SQRT     = Func(b'SQRT'   , [float], float)
     TAN      = Func(b'TAN'    , [float], float)
-    TRUNCATE = Func(b'TRUNCATE', [float, int], float)
+    TRUNCATE = MathBase.TRUNCATE
 
 class DateTime(FunctionsABC):
     ADDDATE         = Func(b'ADDDATE')
@@ -95,7 +93,7 @@ class DateTime(FunctionsABC):
     SEC_TO_TIME     = Func(b'SEC_TO_TIME')
     STR_TO_DATE     = Func(b'STR_TO_DATE')
     SUBTIME         = Func(b'SUBTIME')
-    TIME            = Func(b'TIME', Union[datetime.datetime, datetime.time], datetime.time)
+    TIME            = Func(b'TIME', [Union[datetime.datetime, datetime.time]], datetime.time)
     TIMEDIFF        = Func(b'TIMEDIFF')
     TIMESTAMP       = Func(b'TIMESTAMP')
     TIMESTAMPADD    = Func(b'TIMESTAMPADD')

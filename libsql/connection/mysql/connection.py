@@ -8,18 +8,22 @@ import mysql.connector
 from mysql.connector.abstracts import MySQLConnectionAbstract
 import mysql.connector.pooling
 
+
 from ...utils.tabledata import TableData
-from ..abstracts.prepared_connection import ConnectionABC, PreparedConnectionABC, PreparedStatementExecutorABC
+from ..common.prepared_connection import ConnectionABC, PreparedConnectionABC, PreparedStatementExecutorABC
+from .prepared_statement import MySQLPreparedStatementExecutor
 
 class MySQLConnectionABC(ConnectionABC):
 
-    def __init__(self) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__()
+        self.cnx_args = args
+        self.cnx_kwargs = kwargs
         self.cnx: MySQLConnectionAbstract = self.new_cnx()
         self._prepared_stmts: Dict[bytes, PreparedStatementExecutorABC] = {}
 
     @abstractmethod
-    def new_cnx(self, *args, **kwargs) -> MySQLConnectionAbstract:
+    def new_cnx(self) -> MySQLConnectionAbstract:
         """ Create a new connection """
 
     def commit(self):
@@ -83,15 +87,15 @@ class MySQLConnectionABC(ConnectionABC):
 
     def _get_or_make_pstmt(self, stmt: bytes) -> PreparedStatementExecutorABC:
         if not (pstmt := self._prepared_stmts.get(stmt)):
-            pstmt = self._prepared_stmts[stmt] = MySQLPreparedStatement(self.cnx, stmt)
+            pstmt = self._prepared_stmts[stmt] = MySQLPreparedStatementExecutor(self.cnx, stmt)
         return pstmt
 
 
 class MySQLConnection(MySQLConnectionABC):
     """ MySQL Connection Class """
 
-    def new_cnx(self, *args, **kwargs):
-        return mysql.connector.connect(*args, **kwargs) # MySQL connection 
+    def new_cnx(self):
+        return mysql.connector.connect(*self.cnx_args, **self.cnx_kwargs) # MySQL connection 
 
 
 # class MySQLPooledConnection(MySQLConnectionABC):

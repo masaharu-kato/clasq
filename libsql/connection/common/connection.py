@@ -2,12 +2,13 @@
     SQL Connection classes and functions
 """
 from abc import abstractmethod
-from typing import Iterable, Iterator, List, Optional, Set, Tuple, Union
+from typing import Iterable, Iterator, List, Optional, Set, Tuple
 
-from mysqlx import Column
+from libsql.syntax.query_data import QueryData
 
 from ...utils.tabledata import TableData
-from ...syntax.expr_type import ExprType, TableExpr, ColumnExpr, OrderedColumnExpr
+from ...syntax.expr_type import ExprType
+from ...syntax.schema_expr import TableExpr, ColumnExpr, OrderedColumnExpr
 from ...syntax.keywords import JoinType
 
 
@@ -96,7 +97,7 @@ class ConnectionABC:
     ) -> TableData:
         """ SELECT query """
 
-        res_prms = []
+        qd = QueryData()
         from_tables = [*(from_tables or [])]
 
         all_tables: Set[TableExpr] = set(*from_tables, *([t for t, _, _ in joins] if joins else []))
@@ -112,32 +113,33 @@ class ConnectionABC:
         if not from_tables:
             raise RuntimeError('No tables specified for `from.`')
 
-        res_stmt = b'SELECT '\
-            + (b', '.join(c.column_expr for c in columns_or_tables) if columns_or_tables else b'*')\
-            + b'\n FROM ' + b', '.join(t.name_expr for t in from_tables) + b'\n'
+        # qd.extend(
+        #     b'SELECT ', [c.column_def_expr() for c in columns_or_tables] if columns_or_tables else b'*',
+        #     b'\n FROM ', from_tables, b'\n'
+        # )
         
-        for table, join_type, expr in joins:
-            stmt, prms = expr.get_statement_data()
-            res_stmt += b'%s JOIN %s ON %s\n' % (join_type.value, table.name_expr, stmt)
-            res_prms.extend(prms)
+        qd.extend(b'SELECT ')
+        qd.extend([c.column_def_expr() for c in columns_or_tables] if columns_or_tables else b'*')
+        qd.extend(b'\n FROM ', from_tables, b'\n')
+        
+        if joins:
+            for table, join_type, expr in joins:
+                qd.extend(join_type.value, b' JOIN ', table, b' ON ', expr, b'\n')
 
         if where:
-            stmt, prms = where.get_statement_data()
-            res_stmt += b'WHERE %s' % stmt
-            res_prms.extend(prms)
+            qd.extend(b'WHERE ', where)
 
         if groups:
-            res_stmt += b'GROUP BY %s\n' % b', '.join(col.column_expr for col in groups)
+            qd.extend(b'GROUP BY ', groups, b'\n')
 
         if orders:
-            res_stmt += b'ORDER BY %s\n' % b', '.join(col.column_expr for col in orders) # TODO: Edit
+            qd.extend(b'ORDER BY ', [c.order_expr() for c in orders], b'\n')
 
-        if limit is None:
-            res_stmt += b'LIMIT ?\n'
-            res_prms.append(limit)
+        if limit is not None:
+            qd.extend(b'LIMIT ', limit)
 
-        if offset is None:
-            res_stmt += b'OFFSET ?\n'
-            res_prms.append(offset)
+        if offset is not None:
+            qd.extend(b'OFFSET ', offset)
 
-        return self.query(res_stmt, res_prms)
+        print(qd)
+        return self.query(qd.stmt, qd.prms)

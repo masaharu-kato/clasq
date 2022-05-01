@@ -1,15 +1,98 @@
 """
     Definition ExprType class and subclasses
 """
-from abc import abstractproperty
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 
-from mysqlx import Column
-from .expr_class import ExprABC, Func, FuncABC
+from .expr_abc import ExprABC, FuncABC
 
-from .operators import OP
-from .functions import Math
-from .keywords import OrderType
+if TYPE_CHECKING:
+    from .query_data import QueryData
+
+
+class FuncType(FuncABC):
+    """ Func Type """
+    def call(self, *args) -> 'FuncExpr':
+        return FuncExpr(self, *args)
+
+
+class NoArgsFuncABC(FuncType):
+    """ Func with no arguments """
+    def __init__(self, name: bytes, returntype=None):
+        super().__init__(name)
+        self._returntype = returntype
+
+    @property
+    def returntype(self):
+        return self._returntype
+
+
+class Func(NoArgsFuncABC):
+    """ Function """
+    def __init__(self, name: bytes, argtypes: Optional[list] = None, returntype=None):
+        super().__init__(name, returntype)
+        self._argtypes = argtypes
+
+    @property
+    def argtypes(self):
+        return self._argtypes
+
+    def check_args(self, args: List[ExprABC]) -> None:
+        """ Check the arguments """
+        # if self._argtypes is not None and len(self._argtypes) != len(args):
+        #     raise RuntimeError('Invalid arguments.')
+        # TODO: Check types
+
+
+    def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
+        """ Get a statement data of this function with a given list of arguments (Override) """
+        self.check_args(args)
+        qd.extend(self._name, b'(', args, b')')
+
+    def __repr__(self):
+        return str(self) + '(' + ','.join(repr(t) for t in self._argtypes) if self._argtypes else '' + ')'
+
+    def repr_with_args(self, args: List[ExprABC]) -> str:
+        """ Get a statement data of this function with a given list of arguments (Override) """
+        self.check_args(args)
+        return str(self) + '(' + ', '.join(map(repr, args)) + ')'
+
+
+class NoArgsFunc(NoArgsFuncABC):
+    """ Func with no arguments """
+
+    def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
+        """ Get a statement data of this function with a given list of arguments (Override) """
+        assert not args
+        qd += self._name
+
+
+class OpABC(Func):
+    """ Operator """
+    def __init__(self, name: bytes, argtypes: Optional[list] = None, returntype=None, priority: Optional[int] = None):
+        super().__init__(name, argtypes, returntype)
+        self._priority = priority
+
+
+class UnaryOp(OpABC):
+    """ Unary Op """
+
+    def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
+        """ Get a statement data of this function with a given list of arguments (Override) """
+        assert len(args) == 1
+        qd += self._name
+        qd += args[0]
+
+
+class BinaryOp(OpABC):
+    """ Binary Op """
+
+    def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
+        """ Get a statement data of this function with a given list of arguments (Override) """
+        assert len(args) >= 2
+        qd += b'('
+        qd.append_joined(args, sep=b' %s ' % self.name)
+        qd += b')'
+        # TODO: Priority
 
 
 class ExprType(ExprABC):
@@ -138,16 +221,16 @@ class ExprType(ExprABC):
     #     return OP.BIT_INV.call(self)
         
     def __abs__(self):
-        return Math.ABS.call(self)
+        return MathBaseFunc.ABS.call(self)
 
     def __ceil__(self):
-        return Math.CEIL.call(self)
+        return MathBaseFunc.CEIL.call(self)
 
     def __floor__(self):
-        return Math.FLOOR.call(self)
+        return MathBaseFunc.FLOOR.call(self)
 
     def __trunc__(self):
-        return Math.TRUNCATE.call(self)
+        return MathBaseFunc.TRUNCATE.call(self)
 
     # def __int__(self):
     #     return self.infunc('int')
@@ -174,7 +257,9 @@ class ExprType(ExprABC):
 class Expr(ExprType):
     """ Expression objerct with any value """
     def __init__(self, val):
+        assert isinstance(val, (Expr, bool, int, float, str))
         self._v = val.v if isinstance(val, Expr) else val
+        
 
     @property
     def v(self):
@@ -183,102 +268,134 @@ class Expr(ExprType):
     def __repr__(self):
         return repr(self._v)
 
-    def get_statement_data(self) -> Tuple[bytes, list]:
-        return b'', [self._v]
+    def append_query_data(self, qd: 'QueryData') -> None:
+        qd.append_as_value(self._v)
 
 
-class ObjectExprABC(ExprType):
-    """ Column expression """
-    def __init__(self, name):
-        assert isinstance(name, bytes)
-        self._name = name
+def make_expr(*vals, **kwargs) -> ExprType:
+    """ """
+    return make_expr_one(list(vals) if not kwargs else [*vals, kwargs], join_ops=[OP.AND, OP.OR], dict_op=OP.EQ)
+    
+
+def make_expr_one(val, *, join_ops: Optional[List[FuncType]]=None, dict_op: Optional[FuncType] = None) -> ExprType:
+    """ """
+
+    if isinstance(val, ExprType):
+        return val
+
+    if join_ops:
+        assert len(join_ops) >= 1
+        c_join_op = join_ops[0]
+        next_make_expr = lambda val: make_expr_one(val, join_ops=[*join_ops[1:], c_join_op], dict_op=dict_op)
+    else:
+        c_join_op = None
+        next_make_expr = lambda val: make_expr_one(val, dict_op=dict_op)
+
+    if c_join_op and isinstance(val, list):
+        if len(val) == 1:
+            return next_make_expr(val[0])
+        return c_join_op.call(*(next_make_expr(v) for v in val))
+
+    if isinstance(val, tuple) and len(val) >= 1:
+        if isinstance(val[0], FuncType):
+            if len(val) == 1:
+                return val[0].call()
+            if len(val) == 2:
+                if isinstance(val[1], list):
+                    return val[0].call(*val[1])
+                return val[0].call(next_make_expr(val[1]))
+            
+        if len(val) == 3 and isinstance(val[1], FuncType):
+            return val[1].call(next_make_expr(val[0]), next_make_expr(val[2]))
+
+        raise RuntimeError('Invalid form of tuple.')
+
+    # if dict_op and isinstance(val, dict):
+    #     return OP.AND.call(*(dict_op.call(ColumnExpr(c.encode()), v) for c, v in val.items()))
+
+    return Expr(val)
+
+
+class FuncExpr(ExprType): 
+    """ General expression class """
+    def __init__(self, func: FuncType, *args):
+        self._func = func
+        self._args: List[ExprType] = [make_expr_one(arg) for arg in args]
 
     @property
-    def name(self):
-        return self._name
-
-    def __bytes__(self):
-        return self._name
-
-    def __str__(self):
-        return self._name.decode()
+    def func(self):
+        return self._func
 
     @property
-    def name_expr(self) -> bytes:
-        assert not '`' in self._name
-        return b'`' + self._name + b'`'
+    def args(self):
+        return self._args
 
-    def get_statement_data(self) -> Tuple[bytes, list]:
-        return self.name_expr(), []
-
-
-class OrderedColumnExprABC(ExprType):
-    """ Ordered Column Expr ABC """
-
-    def order_kind(self) -> OrderType:
-        """ Get a order kind of this column """
-
-    @abstractproperty
-    def column_expr(self) -> 'ColumnExpr':
-        """ Get a original column expr """
-
-
-class ColumnExpr(ObjectExprABC, OrderedColumnExprABC):
-    """ Column expression """
-
-    def order_kind(self) -> OrderType:
-        return OrderType.ASC
-
-    @property
-    def column_expr(self) -> 'ColumnExpr':
-        return self
-
-    @property
-    def table(self) -> Optional['TableExpr']:
-        return None
-
-    @property
-    def column_expr(self) -> bytes:
-        return (self.name_expr + b'.' if self.table else b'') + self.name_expr
+    def append_query_data(self, qd: 'QueryData') -> None:
+        return self._func.append_query_data_with_args(qd, self._args)
 
     def __repr__(self):
-        return 'Col(%s)' % str(self)
+        return self._func.repr_with_args(self._args)
 
 
-class OrderedColumnExpr(OrderedColumnExprABC):
-    """ Ordered Column Expr """
-    def __init__(self, column: ColumnExpr, order: OrderType):
-        self._column = column
-        self._order = order
+class OP:
+    ADD      = BinaryOp(b'+', [ExprType, ExprType], ExprType, 7)
+    SUB      = BinaryOp(b'-', [ExprType, ExprType], ExprType, 7)
+    MUL      = BinaryOp(b'*', [ExprType, ExprType], ExprType, 6)
+    DIV      = BinaryOp(b'/', [ExprType, ExprType], ExprType, 6)
+    MOD      = BinaryOp(b'%', [ExprType, ExprType], ExprType, 6)
+    MOD_     = BinaryOp(b'MOD', [ExprType, ExprType], ExprType, 6)
+    INTDIV   = BinaryOp(b'DIV', [ExprType, ExprType], ExprType, 6)
 
-    def order_kind(self) -> OrderType:
-        return self._order
+    EQ       = BinaryOp(b'=', [ExprType, ExprType], Optional[bool], 11)
+    IS       = BinaryOp(b'IS', [ExprType, ExprType], Optional[bool], 11)
+    IS_NOT   = BinaryOp(b'IS NOT', [ExprType, ExprType], Optional[bool])
+    LT       = BinaryOp(b'<', [ExprType, ExprType], Optional[bool], 11)
+    LT_EQ    = BinaryOp(b'<=', [ExprType, ExprType], Optional[bool], 11)
+    NULL_EQ  = BinaryOp(b'<=>', [ExprType, ExprType], Optional[bool], 11)
+    GT       = BinaryOp(b'>', [ExprType, ExprType], Optional[bool], 11)
+    GT_EQ    = BinaryOp(b'>=', [ExprType, ExprType], Optional[bool], 11)
+    NOT_EQ   = BinaryOp(b'!=', [ExprType, ExprType], Optional[bool], 11)
+    NOT_EQ_  = BinaryOp(b'<>', [ExprType, ExprType], Optional[bool], 11)
 
-    @property
-    def column_expr(self) -> 'ColumnExpr':
-        return self._column
+    BIT_AND_OP  = BinaryOp(b'&', [ExprType, ExprType], ExprType, 9)
+    BIT_OR_OP   = BinaryOp(b'|', [ExprType, ExprType], ExprType, 10)
+    BIT_XOR_OP  = BinaryOp(b'^', [ExprType, ExprType], ExprType, 5)
+    BIT_RSHIFT  = BinaryOp(b'>>', [ExprType, ExprType], ExprType, 8)
+    BIT_LSHIFT  = BinaryOp(b'<<', [ExprType, ExprType], ExprType, 8)
+
+    IN       = BinaryOp(b'IN', [ExprType, ExprType], Optional[bool], 11)
+    LIKE     = BinaryOp(b'LIKE', [ExprType, ExprType], Optional[bool])
+    AND  = BinaryOp(b'AND', [ExprType, ExprType], Optional[bool], 14)
+    AND_ = BinaryOp(b'&&', [ExprType, ExprType], Optional[bool], 14)
+    OR   = BinaryOp(b'OR', [ExprType, ExprType], Optional[bool], 16)
+    OR_  = BinaryOp(b'||', [ExprType, ExprType], Optional[bool], 16)
+    XOR  = BinaryOp(b'XOR', [ExprType, ExprType], Optional[bool], 15)
+    
+    RLIKE    = BinaryOp(b'RLIKE', [ExprType, ExprType], Optional[bool], 11)
+    REGEXP   = BinaryOp(b'REGEXP', [ExprType, ExprType], Optional[bool], 11)
+    SOUNDS_LIKE = BinaryOp(b'SOUNDS_LIKE', [ExprType, ExprType], Optional[bool], 11)
+
+    COLLATE = BinaryOp(b'COLLATE', [ExprType, ExprType], ExprType, 2)
+    
+    BETWEEN = BinaryOp(b'BETWEEN', [ExprType, ExprType, ExprType], ExprType, 12), # TODO: Special
+    CASE    = BinaryOp(b'CASE', [ExprType, ExprType, ExprType], ExprType, 12), # TODO:: Special
+    
+    MINUS    = UnaryOp(b'-', [ExprType], ExprType, 4)
+
+    BIT_INV  = UnaryOp(b'~', [ExprType], ExprType, 4)
+    NOT_OP   = UnaryOp(b'!', [ExprType], ExprType, 3)
+
+    NOT      = UnaryOp(b'NOT', [ExprType], ExprType, 13)
+    BINARY   = UnaryOp(b'BINARY', [ExprType], ExprType, 2)
+
+    JSON_EXTRACT_OP = BinaryOp(b'->', [ExprType, ExprType], str)
+    JSON_UNQUOTE_OP = BinaryOp(b'->>', [ExprType, ExprType], str)
+
+    MEMBER_OF = BinaryOp(b'MEMBER OF', [ExprType, ExprType], Optional[bool], 11)
 
 
-class TableExpr(ObjectExprABC):
-    """ Table Expr """
-
-    def __repr__(self):
-        return 'Table(%s)' % str(self)
-
-    def column(self, name: bytes):
-        return TableColumnExpr(self, name)
-        
-    @property
-    def column_expr(self) -> bytes:
-        return self.name_expr + b'.*'
-
-
-class TableColumnExpr(ColumnExpr):
-    def __init__(self, table: TableExpr, name: bytes):
-        super().__init__(name)
-        self._table = table
-
-    @property
-    def table(self) -> Optional[TableExpr]:
-        return self._table
-
+class MathBaseFunc:
+    ABS      = Func(b'ABS'    , [float], float)
+    CEIL     = Func(b'CEIL'   , [float], float)
+    FLOOR    = Func(b'FLOOR'  , [float], float)
+    TRUNCATE = Func(b'TRUNCATE', [float, int], float)

@@ -13,10 +13,10 @@ class PreparedStatementExecutorABC:
 
     def __init__(self, stmt: bytes):
         self._stmt = stmt
-        self._stmt_id, self.n_params = self._new(stmt)
+        self._stmt_id, self.n_params = self._new()
 
     @abstractmethod
-    def _new(cls) -> Tuple[int, int]:
+    def _new(self) -> Tuple[int, int]:
         """ Create a new prepared statement
             Return: stmt_id, number of params
         """
@@ -42,7 +42,7 @@ class PreparedStatementExecutorABC:
         try:
             self.reset()
         except errors.ProgrammingError:
-            self._stmt_id = self._new(self._stmt)
+            self._stmt_id = self._new()
 
     def _execute_params(self, params: list):
         self.reset_or_new()

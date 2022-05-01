@@ -5,14 +5,19 @@
 from enum import Enum
 
 
-class OrderType(Enum):
-    ASC = 'ASC'
-    DESC = 'DESC'
+class KeywordABC:
+    """ Keyword abstract class """
 
 
-class JoinType(Enum):
-    INNER = 'INNER'
-    LEFT = 'LEFT'
-    RIGHT = 'RIGHT'
-    OUTER = 'OUTER'
-    CROSS = 'CROSS'
+class OrderType(KeywordABC, Enum):
+    ASC = b'ASC'
+    DESC = b'DESC'
+
+
+class JoinType(KeywordABC, Enum):
+    INNER = b'INNER'
+    LEFT  = b'LEFT'
+    RIGHT = b'RIGHT'
+    OUTER = b'OUTER'
+    CROSS = b'CROSS'
+

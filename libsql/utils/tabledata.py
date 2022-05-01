@@ -4,6 +4,7 @@
 
 from typing import Any, Iterator, List, Tuple, Union
 
+TABLE_REPR_LIMIT = 100
 
 class TableData:
     def __init__(self, columns: Union[List[str], 'ColumnMetadata'], rows: List[list]) -> None:
@@ -33,6 +34,22 @@ class TableData:
             raise ValueError('Cannot combine table data with different columns.')
         return TableData(self._col_meta, [*self._rows, *table_data._rows])
 
+    def iter_rows_values(self):
+        return iter(self._rows)
+
+    def iter_rows_dict(self):
+        for row in iter(self):
+            yield dict(row.items())
+
+    def __repr__(self):
+        res = 'TableData#%d\n' % id(self)
+        res += '\t'.join(str(c) for c in self._col_meta.iter_columns()) + '\n'
+        for i, row in enumerate(iter(self)):
+            if i > TABLE_REPR_LIMIT:
+                break
+            res += '\t'.join(str(v) for v in row) + '\n'
+        return res
+
 
 class ColumnMetadata:
     def __init__(self, columns: List[str]) -> None:
@@ -44,7 +61,6 @@ class ColumnMetadata:
         self._cols = columns
         self._col_to_i = {col: i for i, col in enumerate(self._cols)}
 
-    @property
     def iter_columns(self) -> Iterator[str]:
         return iter(self._cols)
 
@@ -116,7 +132,7 @@ class RowData:
         Yields:
             Iterator[Tuple[str, Any]]: Column name and its value
         """
-        return zip(self._col_meta.iter_cols(), self._row)
+        return zip(self._col_meta.iter_columns(), self._row)
 
     def __dict__(self) -> dict:
         """ Generate a dictionary of this row
@@ -124,5 +140,5 @@ class RowData:
         Returns:
             dict: A dictionary of this row
         """
-        return {col: v for col, v in self.items()}
+        return dict(self.items())
 

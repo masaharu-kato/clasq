@@ -6,15 +6,15 @@ from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.constants import ServerFlag
 
 from ...utils.tabledata import TableData
-from ..abstracts.prepared_connection import PreparedStatementExecutorABC
+from ..common.prepared_connection import PreparedStatementExecutorABC
 
 MAX_RESULTS = 4294967295
 
 class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
 
     def __init__(self, cnx: MySQLConnectionAbstract, stmt: bytes):
+        self._cnx = cnx # Prepare before super init
         super().__init__(stmt)
-        self._cnx = cnx
     
     def _new(self) -> Tuple[int, int]:
         """ Create a new prepared statement (Override)
