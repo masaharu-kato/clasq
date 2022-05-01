@@ -2,11 +2,12 @@
     Definition ExprType abstract classes
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from .query_data import QueryData
     from .expr_type import FuncExpr
+    from .schema_expr import TableExpr
 
 
 class ExprABC:
@@ -24,17 +25,17 @@ class ExprABC:
     # def infunc(self, name, *args):
     #     """ In-function operation """
 
-    def column_def_expr(self) -> 'ExprABC':
-        """ Get a column definition version of this expression """
-        return self # Default implementation
+    def table_expr(self) -> Optional['TableExpr']:
+        """ Get a table expression (that is used in this expression) """
+        return None # Default implementation
 
     @property
-    def name_stmt_bytes(self) -> bytes:
-        """ Name Expr """
+    def stmt_bytes(self) -> bytes:
+        """ Get a bytes for statement """
 
     def append_query_data(self, qd: 'QueryData') -> None:
         """ Append this to query data"""
-        qd.append(self.name_stmt_bytes)
+        qd.append_one(self.stmt_bytes)
 
 
 class FuncABC:

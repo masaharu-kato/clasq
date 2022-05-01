@@ -1,6 +1,7 @@
 """
     Query data class
 """
+from enum import Enum
 from typing import Iterable, Optional, Union
 
 from .expr_abc import ExprABC
@@ -11,10 +12,10 @@ class QueryData:
     PLACEHOLDER = b'?'
     DEFAULT_SEP = b', '
 
-    def __init__(self, stmt: Optional[bytes] = None, prms: Optional[list] = None):
-        
-        self._stmt = stmt if stmt else b''
+    def __init__(self, *vals, prms: Optional[list] = None):
+        self._stmt = b''
         self._prms = prms if prms else []
+        self.append(*vals)
 
     @property
     def stmt(self):
@@ -28,7 +29,10 @@ class QueryData:
         return iter(self._prms)
 
     def _append(self, stmt: bytes, prms: Optional[list] = None) -> 'QueryData':
-        self._stmt += stmt
+        if stmt:
+            if stmt[0:1] not in _NOSPACE_SYMBOLS:
+                self._stmt += _SPACE
+            self._stmt += stmt 
         if prms:
             for prm in prms:
                 if not isinstance(prm, (bool, int, float, str)):
@@ -42,9 +46,13 @@ class QueryData:
     def append_as_value(self, val) -> 'QueryData':
         return self._append(self.PLACEHOLDER, [val])
 
-    def append(self, val, prms: Optional[list] = None) -> 'QueryData':
+    def append_one(self, val, prms: Optional[list] = None) -> 'QueryData':
 
         print(type(val), val, ', prms=', prms)
+
+        if val is None:
+            assert prms is None
+            return self
         
         if isinstance(val, QueryData):
             assert prms is None
@@ -55,8 +63,14 @@ class QueryData:
             val.append_query_data(self)
             return self
 
+        if isinstance(val, Enum):
+            return self.append_one(val.value)
+
         if isinstance(val, bytes):
             return self._append(val, prms)
+
+        if isinstance(val, tuple):
+            return self.append(*val)
 
         if isinstance(val, Iterable):
             return self.append_joined(val)
@@ -67,20 +81,24 @@ class QueryData:
         raise TypeError('Invalid value type %s (%s)' % (type(val), repr(val)))
 
 
-    def extend(self, *vals) -> 'QueryData':
+    def append(self, *vals) -> 'QueryData':
         for val in vals:
-            self.append(val)
+            self.append_one(val)
         return self
 
     def __iadd__(self, value) -> 'QueryData':
-        return self.append(value)
+        return self.append_one(value)
 
     def append_joined(self, vals: Iterable, *, sep:bytes = DEFAULT_SEP) -> 'QueryData':
         for i, val in enumerate(vals):
             if i > 0:
-                self.append(sep)
-            self.append(val)
+                self.append_one(sep)
+            self.append_one(val)
         return self
 
     def __repr__(self) -> str:
         return 'QueryData("%r", [%s]' % (self._stmt, ', '.join(map(repr, self._prms)))
+
+
+_NOSPACE_SYMBOLS = {b'(', b')', b',', b'.'}
+_SPACE = b' '

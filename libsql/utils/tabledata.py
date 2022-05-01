@@ -34,6 +34,19 @@ class TableData:
             raise ValueError('Cannot combine table data with different columns.')
         return TableData(self._col_meta, [*self._rows, *table_data._rows])
 
+    def set_columns(self, columns: List[str]):
+        self._col_meta = ColumnMetadata(columns)
+
+    def copy_with_columns(self, columns: List[str]):
+        return TableData(columns, self._rows)
+
+    @property
+    def columns(self):
+        return self._col_meta.columns
+
+    def iter_columns(self):
+        return self._col_meta.iter_columns()
+
     def iter_rows_values(self):
         return iter(self._rows)
 
@@ -61,8 +74,15 @@ class ColumnMetadata:
         self._cols = columns
         self._col_to_i = {col: i for i, col in enumerate(self._cols)}
 
+    @property
+    def columns(self):
+        return self._cols
+
     def iter_columns(self) -> Iterator[str]:
         return iter(self._cols)
+
+    def iter_indexes(self) -> Iterator[int]:
+        return self._col_to_i.values()
 
     def column_to_i(self, column: str) -> int:
         return self._col_to_i[column]
@@ -124,7 +144,7 @@ class RowData:
         Yields:
             Iterator: row value
         """
-        return iter(self._row)
+        return (self._cols[i] for i in self._col_meta.iter_indexes())
 
     def items(self) -> Iterator[Tuple[str, Any]]:
         """ Iterate columns with its name and value

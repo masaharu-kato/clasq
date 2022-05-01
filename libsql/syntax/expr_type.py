@@ -46,7 +46,7 @@ class Func(NoArgsFuncABC):
     def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         self.check_args(args)
-        qd.extend(self._name, b'(', args, b')')
+        qd.append(self._name, b'(', args, b')')
 
     def __repr__(self):
         return str(self) + '(' + ','.join(repr(t) for t in self._argtypes) if self._argtypes else '' + ')'
