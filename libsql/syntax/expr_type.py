@@ -222,16 +222,16 @@ class ExprType(ExprABC):
     #     return OP.BIT_INV.call(self)
         
     def __abs__(self):
-        return MathBaseFunc.ABS.call(self)
+        return BasicFunc.ABS.call(self)
 
     def __ceil__(self):
-        return MathBaseFunc.CEIL.call(self)
+        return BasicFunc.CEIL.call(self)
 
     def __floor__(self):
-        return MathBaseFunc.FLOOR.call(self)
+        return BasicFunc.FLOOR.call(self)
 
     def __trunc__(self):
-        return MathBaseFunc.TRUNCATE.call(self)
+        return BasicFunc.TRUNCATE.call(self)
 
     # def __int__(self):
     #     return self.infunc('int')
@@ -253,6 +253,54 @@ class ExprType(ExprABC):
     #     return self.self('bytes')
     # def __len__(self):
     #     return self.self('len')
+
+
+    def in_(self, expr):
+        return OP.IN.call(self, expr)
+
+    def like(self, expr):
+        return OP.LIKE.call(self, expr)
+
+    def regexp(self, expr):
+        return OP.REGEXP.call(self, expr)
+
+
+    def abs(self):
+        return BasicFunc.ABS.call(self)
+
+    def abs(self):
+        return BasicFunc.ABS.call(self)
+
+    def ceil(self):
+        return BasicFunc.CEIL.call(self)
+
+    def floor(self):
+        return BasicFunc.FLOOR.call(self)
+
+    def truncate(self):
+        return BasicFunc.TRUNCATE.call(self)
+
+    def avg(self):
+        return BasicFunc.AVG.call(self)
+
+    def count(self):
+        return BasicFunc.COUNT.call(self)
+
+    def max(self):
+        return BasicFunc.MAX.call(self)
+
+    def min(self):
+        return BasicFunc.MIN.call(self)
+
+    def stddev(self):
+        return BasicFunc.STDDEV.call(self)
+
+    def sum(self):
+        return BasicFunc.SUM.call(self)
+
+    def variance(self):
+        return BasicFunc.VARIANCE.call(self)
+
         
     def aliased(self, alias: Union[bytes, str]) -> 'Aliased':
         return Aliased(self, alias)
@@ -328,7 +376,7 @@ class FuncExpr(ExprType):
     """ General expression class """
     def __init__(self, func: FuncType, *args):
         self._func = func
-        self._args: List[ExprType] = [make_expr_one(arg) for arg in args]
+        self._args: List[ExprType] = args # [make_expr_one(arg) for arg in args]
 
     @property
     def func(self):
@@ -439,6 +487,17 @@ class OrderedAliased(OrderedABC):
         return self._order_kind
 
 
+class OpIN(BinaryOp):
+
+    def __init__(self):
+        super().__init__(b'IN', [ExprType, ExprType], Optional[bool], 11)
+
+    def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
+        """ Get a statement data of this function with a given list of arguments (Override) """
+        assert len(args) == 2 and isinstance(args[1], list)
+        qd.append(b'(', args[0], b'IN', b'(', args[1], b')', b')')
+        # TODO: Priority
+
 
 class OP:
     ADD      = BinaryOp(b'+', [ExprType, ExprType], ExprType, 7)
@@ -466,7 +525,7 @@ class OP:
     BIT_RSHIFT  = BinaryOp(b'>>', [ExprType, ExprType], ExprType, 8)
     BIT_LSHIFT  = BinaryOp(b'<<', [ExprType, ExprType], ExprType, 8)
 
-    IN       = BinaryOp(b'IN', [ExprType, ExprType], Optional[bool], 11)
+    IN       = OpIN()
     LIKE     = BinaryOp(b'LIKE', [ExprType, ExprType], Optional[bool])
     AND  = BinaryOp(b'AND', [ExprType, ExprType], Optional[bool], 14)
     AND_ = BinaryOp(b'&&', [ExprType, ExprType], Optional[bool], 14)
@@ -497,8 +556,16 @@ class OP:
     MEMBER_OF = BinaryOp(b'MEMBER OF', [ExprType, ExprType], Optional[bool], 11)
 
 
-class MathBaseFunc:
+class BasicFunc:
     ABS      = Func(b'ABS'    , [float], float)
     CEIL     = Func(b'CEIL'   , [float], float)
     FLOOR    = Func(b'FLOOR'  , [float], float)
     TRUNCATE = Func(b'TRUNCATE', [float, int], float)
+
+    AVG = Func(b'AVG')
+    COUNT = Func(b'COUNT')
+    MAX = Func(b'MAX')
+    MIN = Func(b'MIN')
+    STDDEV = Func(b'STDDEV')
+    SUM = Func(b'SUM')
+    VARIANCE = Func(b'VARIANCE')

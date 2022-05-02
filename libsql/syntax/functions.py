@@ -3,7 +3,7 @@
 """
 from typing import Optional, Union
 import datetime
-from .expr_type import ExprABC as Ext, Func, NoArgsFunc, OP, MathBaseFunc as MathBase
+from .expr_type import ExprABC as Ext, Func, NoArgsFunc, OP, BasicFunc
 
 class FunctionsABC():
     """ Functions ABC """
@@ -22,11 +22,11 @@ class Math(FunctionsABC):
     DIV      = OP.DIV
     MOD_OP   = OP.MOD
     MOD_OP_  = OP.MOD_
-    ABS      = MathBase.ABS
+    ABS      = BasicFunc.ABS
     ACOS     = Func(b'ACOS'   , [float], float)
     ATAN     = Func(b'ATAN'   , [float, Optional[float]], float)
     ATAN2    = Func(b'ATAN2'  , [float, float], float)
-    CEIL     = MathBase.CEIL
+    CEIL     = BasicFunc.CEIL
     CEILING  = Func(b'CEILING', [float], float)
     CONV     = Func(b'CONV'   , [Ext, int, int], float)
     COS      = Func(b'COS'    , [float], float)
@@ -34,7 +34,7 @@ class Math(FunctionsABC):
     CRC32    = Func(b'CRC32'  , [float], float)
     DEGREES  = Func(b'DEGREES', [float], float)
     EXP      = Func(b'EXP'    , [float], float)
-    FLOOR    = MathBase.FLOOR
+    FLOOR    = BasicFunc.FLOOR
     LN       = Func(b'LN'     , [float], float)
     LOG      = Func(b'LOG'    , [float, Optional[float]], float)
     LOG10    = Func(b'LOG10'  , [float], float)
@@ -50,7 +50,7 @@ class Math(FunctionsABC):
     SIN      = Func(b'SIN'    , [float], float)
     SQRT     = Func(b'SQRT'   , [float], float)
     TAN      = Func(b'TAN'    , [float], float)
-    TRUNCATE = MathBase.TRUNCATE
+    TRUNCATE = BasicFunc.TRUNCATE
 
 class DateTime(FunctionsABC):
     ADDDATE         = Func(b'ADDDATE')
@@ -248,17 +248,17 @@ class Info(FunctionsABC):
     CURRENT_USER_ = NoArgsFunc(b'CURRENT_USER')
 
 class Agg(FunctionsABC):
-    AVG = Func(b'AVG')
-    COUNT = Func(b'COUNT')
+    AVG = BasicFunc.AVG
+    COUNT = BasicFunc.COUNT
     GROUP_CONCAT = Func(b'GROUP_CONCAT')
-    MAX = Func(b'MAX')
-    MIN = Func(b'MIN')
+    MAX = BasicFunc.MAX
+    MIN = BasicFunc.MIN
     STD = Func(b'STD')
-    STDDEV = Func(b'STDDEV')
+    STDDEV = BasicFunc.STDDEV
     STDDEV_POP = Func(b'STDDEV_POP')
     STDDEV_SAMP = Func(b'STDDEV_SAMP')
-    SUM = Func(b'SUM')
-    VARIANCE = Func(b'VARIANCE')
+    SUM = BasicFunc.SUM
+    VARIANCE = BasicFunc.VARIANCE
     VAR_POP = Func(b'VAR_POP')
     VAR_SAMP = Func(b'VAR_SAMP')
 
