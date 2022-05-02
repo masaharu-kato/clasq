@@ -95,7 +95,8 @@ class MySQLConnection(MySQLConnectionABC):
     """ MySQL Connection Class """
 
     def new_cnx(self):
-        return mysql.connector.connect(*self.cnx_args, **self.cnx_kwargs) # MySQL connection 
+        # TODO: Implementation with Cext of MySQL Connection
+        return mysql.connector.connect(*self.cnx_args, **self.cnx_kwargs, use_pure=True) # MySQL connection 
 
 
 # class MySQLPooledConnection(MySQLConnectionABC):

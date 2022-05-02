@@ -54,6 +54,12 @@ class TableData:
         for row in iter(self):
             yield dict(row.items())
 
+    def __len__(self):
+        return len(self._rows)
+
+    def __getitem__(self, value):
+        return RowData(self._col_meta, self._rows[value])
+
     def make_html(self) -> str:
         return '<TABLE>\n' \
             + '<TR>' + ''.join('<TH>%s</TH>' % c for c in self.iter_columns()) + '</TR>\n' \
@@ -62,11 +68,11 @@ class TableData:
 
     def __repr__(self):
         res = 'TableData#%d\n' % id(self)
-        res += '\t'.join(str(c) for c in self._col_meta.iter_columns()) + '\n'
-        for i, row in enumerate(iter(self)):
-            if i > TABLE_REPR_LIMIT:
-                break
-            res += '\t'.join(str(v) for v in row) + '\n'
+        # res += '\t'.join(str(c) for c in self._col_meta.iter_columns()) + '\n'
+        # for i, row in enumerate(iter(self)):
+        #     if i > TABLE_REPR_LIMIT:
+        #         break
+        #     res += '\t'.join(str(v) for v in row) + '\n'
         return res
 
     def _repr_html_(self):

@@ -18,6 +18,7 @@ class ConnectionABC:
     def __init__(self, *, dbname: bytes) -> None:
         self._dbname = dbname
         self._db = DatabaseExpr(dbname) # TODO: Fetch tables
+        self._last_qd: Optional[QueryData] = None
 
     @abstractmethod
     def execute_plain(self, stmt: bytes) -> None:
@@ -84,7 +85,7 @@ class ConnectionABC:
         """
 
     def execute(self, *args, **kwargs) -> None:
-        qd = QueryData(*args, **kwargs)
+        self._last_qd = qd = QueryData(*args, **kwargs)
         return self.execute_with_stmt_prms(qd.stmt, qd.prms)
 
     def execute_with_prms(self, stmt, prms):
@@ -94,7 +95,7 @@ class ConnectionABC:
         return self.execute_with_stmt_many_prms(QueryData(stmt), prms_list)
 
     def query(self, *args, **kwargs) -> TableData:
-        qd = QueryData(*args, **kwargs)
+        self._last_qd = qd = QueryData(*args, **kwargs)
         return self.query_with_stmt_prms(qd.stmt, qd.prms)
 
     def query_with_prms(self, stmt, prms):
@@ -112,6 +113,10 @@ class ConnectionABC:
     @abstractmethod
     def last_row_id(self) -> int:
         """ Get a last inserted row id """
+
+    @property
+    def last_qd(self) -> Optional[QueryData]:
+        return self._last_qd
 
     @property
     def db(self) -> DatabaseExpr:

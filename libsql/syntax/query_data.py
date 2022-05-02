@@ -122,7 +122,7 @@ class QueryData:
         return self._stmt == value._stmt and self._prms == value._prms
 
     def __repr__(self) -> str:
-        return 'QueryData("%r", [%s]' % (self._stmt, ', '.join(map(repr, self._prms)))
+        return 'QueryData(%s, [%s])' % (self._stmt.decode(), ', '.join(map(repr, self._prms)))
 
 
 _R_NOSP_SYMS = {b' ', b')', b',', b'.'}
