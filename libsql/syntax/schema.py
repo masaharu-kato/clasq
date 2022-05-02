@@ -6,69 +6,19 @@ from typing import Optional, Tuple, Union
 
 from .keywords import OrderType, ReferenceOption
 from .expr_abc import ExprABC
-from .expr_type import ExprType
+from .expr_type import ExprType, ObjectExprABC, ObjectExpr, OrderedABC
 from .sqltypebases import SQLType
 from .query_data import QueryData
 
 
-class ObjectExprABC(ExprType):
-
-    @abstractproperty
-    def name(self) -> bytes:
-        """ Get a name """
-
-    def __bytes__(self):
-        return self.name
-
-    def __str__(self):
-        return self.name.decode()
-
-    def __hash__(self) -> int:
-        return hash(self.name)
-
-    @property
-    def stmt_bytes(self) -> bytes:
-        assert not b'`' in self.name
-        return b'`' + self.name + b'`'
-
-    @abstractmethod
-    def q_select(self) -> tuple:
-        """ Get a query for SELECT """
-
-
-class ObjectExpr(ObjectExprABC):
-    """ Column expression """
-    def __init__(self, name):
-        assert isinstance(name, bytes)
-        self._name = name
-
-    @property
-    def name(self):
-        return self._name
-
-
-class ColumnExprABC(ExprType):
-
-    @abstractproperty
-    def column_expr(self) -> 'ColumnExpr':
-        """ Get a (pure) column expr """
-    
-    @abstractproperty
-    def order_kind(self) -> OrderType:
-        """ Return a order kind (ASC or DESC) """
-
-    def q_order(self) -> tuple:
-        return (self.column_expr, self.order_kind)
-
-
-class ColumnExpr(ObjectExpr, ColumnExprABC):
+class Column(ObjectExpr, OrderedABC):
     """ Column expression """
 
     def __init__(self,
         name: bytes,
         sqltype: Optional[SQLType] = None,
         *,
-        table: Optional['TableExpr'] = None,
+        table: Optional['Table'] = None,
         default = None, 
         # comment: Optional[str] = None,
         unique: bool = False,
@@ -95,11 +45,11 @@ class ColumnExpr(ObjectExpr, ColumnExprABC):
         return OrderType.ASC
 
     @property
-    def column_expr(self) -> ExprABC:
+    def original_expr(self) -> ExprABC:
         return self
 
     @property
-    def table(self) -> Optional['TableExpr']:
+    def table(self) -> Optional['Table']:
         return self._table
 
     def table_expr(self):
@@ -149,38 +99,41 @@ class ColumnExpr(ObjectExpr, ColumnExprABC):
         return (self.table.stmt_bytes + b'.' if self.table else b'') + super().stmt_bytes
 
     def __pos__(self):
-        return OrderedColumnExpr(self, OrderType.ASC)
+        """ Get a ASC ordered expression """
+        return OrderedColumn(self, OrderType.ASC)
 
     def __neg__(self):
-        return OrderedColumnExpr(self, OrderType.DESC)
+        """ Get a DESC ordered expression """
+        return OrderedColumn(self, OrderType.DESC)
 
     def __repr__(self):
         return 'Col(%s)' % str(self)
 
-ColumnLike = Union[str, bytes, ColumnExpr]
+ColumnLike = Union[str, bytes, Column]
 
-class OrderedColumnExpr(ColumnExprABC):
+class OrderedColumn(OrderedABC):
     """ Ordered Column Expr """
-    def __init__(self, column: ColumnExpr, order: OrderType):
-        self._column = column
-        self._order = order
+    def __init__(self, expr: Column, order: OrderType):
+        self._original_expr = expr
+        self._order_kind = order
 
-    @property
-    def column_expr(self) -> ExprABC:
-        return self._column
+    @abstractproperty
+    def original_expr(self) -> ExprType:
+        """ Get a original expr """
+        return self._original_expr
 
     @property
     def order_kind(self) -> OrderType:
-        return self._order
+        return self._order_kind
 
 
-class ViewExpr(ObjectExpr):
+class View(ObjectExpr):
     """ View Expr """
 
     def __init__(self,
         name: bytes,
         *columns: ObjectExprABC,
-        database: Optional['DatabaseExpr'] = None,
+        database: Optional['Database'] = None,
         **options
     ):
         super().__init__(name)
@@ -210,7 +163,7 @@ class ViewExpr(ObjectExpr):
     def column(self, name: bytes):
         if name not in self._column_dict:
             if not self.column_specified:
-                self._column_dict[name] = ColumnExpr(name, table=self)
+                self._column_dict[name] = Column(name, table=self)
             else:
                 raise KeyError('Undefined column name `%r` on table `%r`' % (name, self._name))
         return self._column_dict[name] 
@@ -223,17 +176,17 @@ class ViewExpr(ObjectExpr):
             return self.column(val.encode())
         if isinstance(val, bytes):
             return self.column(val)
-        if isinstance(val, ColumnExpr):
+        if isinstance(val, Column):
             if val.table == self:
                 return val
             raise RuntimeError('Not a column of this table.')
-        raise TypeError('Invalid type of value.')
+        raise TypeError('Invalid type %s (%s)' % (type(val), val))
 
     def table_expr(self):
         return self
 
 
-class TableExpr(ViewExpr):
+class Table(View):
     """ Table Expr """
 
     def __repr__(self):
@@ -253,12 +206,12 @@ class TableExpr(ViewExpr):
         )
         # TODO: Add table options
 
-TableLike = Union[str, bytes, TableExpr]
+TableLike = Union[str, bytes, Table]
 
 class ForeignKeyReference(ObjectExpr):
     def __init__(self,
-        orig_column: Union[ColumnExpr, Tuple[ColumnExpr, ...]],
-        ref_column : Union[ColumnExpr, Tuple[ColumnExpr, ...]],
+        orig_column: Union[Column, Tuple[Column, ...]],
+        ref_column : Union[Column, Tuple[Column, ...]],
         *,
         on_delete: Optional[ReferenceOption] = None,
         on_update: Optional[ReferenceOption] = None,
@@ -291,23 +244,10 @@ class ForeignKeyReference(ObjectExpr):
         )
 
 
-class Aliased(ObjectExpr):
-    def __init__(self, expr: ExprType, name: bytes) -> None:
-        super().__init__(name)
-        self._expr = expr
-
-    @property
-    def expr(self):
-        return self._expr
-
-    def q_select(self) -> tuple:
-        return (self._expr, b'AS', self)
-
-
-class DatabaseExpr(ObjectExpr):
+class Database(ObjectExpr):
     """ Database Expr """
 
-    def __init__(self, name: bytes, *tables: TableExpr, **options):
+    def __init__(self, name: bytes, *tables: Table, **options):
         super().__init__(name)
         self._table_specified = bool(tables)
         self._table_dict = {c.name: c for c in tables} if tables else {}
@@ -330,7 +270,7 @@ class DatabaseExpr(ObjectExpr):
     def table(self, name: bytes):
         if name not in self._table_dict:
             if not self.table_specified:
-                self._table_dict[name] = TableExpr(name, database=self)
+                self._table_dict[name] = Table(name, database=self)
             else:
                 raise KeyError('Undefined column name `%r` on table `%r`' % (name, self._name))
         return self._table_dict[name] 
@@ -340,13 +280,13 @@ class DatabaseExpr(ObjectExpr):
             return self.table(val.encode())
         if isinstance(val, bytes):
             return self.table(val)
-        if isinstance(val, TableExpr):
-            if val.table == self:
+        if isinstance(val, Table):
+            if val.database == self:
                 return val
-            raise RuntimeError('Not a column of this table.')
+            raise RuntimeError('Not a table of this database.')
         raise TypeError('Invalid type of value.')
 
-    def database_expr(self) -> 'DatabaseExpr':
+    def database_expr(self) -> 'Database':
         return self
 
     def q_create(self, *, if_not_exists=False) -> tuple:

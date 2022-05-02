@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from .query_data import QueryData
     from .expr_type import FuncExpr
-    from .schema_expr import TableExpr
+    from .schema import Table
 
 
 class ExprABC:
@@ -25,7 +25,7 @@ class ExprABC:
     # def infunc(self, name, *args):
     #     """ In-function operation """
 
-    def table_expr(self) -> Optional['TableExpr']:
+    def table_expr(self) -> Optional['Table']:
         """ Get a table expression (that is used in this expression) """
         return None # Default implementation
 

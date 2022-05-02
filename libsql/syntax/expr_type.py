@@ -1,9 +1,11 @@
 """
     Definition ExprType class and subclasses
 """
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from abc import abstractmethod, abstractproperty
+from typing import List, Optional, TYPE_CHECKING, Union
 
 from .expr_abc import ExprABC, FuncABC
+from .keywords import OrderType
 
 if TYPE_CHECKING:
     from .query_data import QueryData
@@ -251,6 +253,12 @@ class ExprType(ExprABC):
     #     return self.self('bytes')
     # def __len__(self):
     #     return self.self('len')
+        
+    def aliased(self, alias: Union[bytes, str]) -> 'Aliased':
+        return Aliased(self, alias)
+
+    def as_(self, alias: Union[bytes, str]) -> 'Aliased':
+        return self.aliased(alias)
 
 
 class Expr(ExprType):
@@ -311,7 +319,7 @@ def make_expr_one(val, *, join_ops: Optional[List[FuncType]]=None, dict_op: Opti
         raise RuntimeError('Invalid form of tuple.')
 
     # if dict_op and isinstance(val, dict):
-    #     return OP.AND.call(*(dict_op.call(ColumnExpr(c.encode()), v) for c, v in val.items()))
+    #     return OP.AND.call(*(dict_op.call(Column(c.encode()), v) for c, v in val.items()))
 
     return Expr(val)
 
@@ -335,6 +343,101 @@ class FuncExpr(ExprType):
 
     def __repr__(self):
         return self._func.repr_with_args(self._args)
+
+
+class ObjectExprABC(ExprType):
+
+    @abstractproperty
+    def name(self) -> bytes:
+        """ Get a name """
+
+    def __bytes__(self):
+        return self.name
+
+    def __str__(self):
+        return self.name.decode()
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+    @property
+    def stmt_bytes(self) -> bytes:
+        assert not b'`' in self.name
+        return b'`' + self.name + b'`'
+
+    @abstractmethod
+    def q_select(self) -> tuple:
+        """ Get a query for SELECT """
+
+class ObjectExpr(ObjectExprABC):
+    """ Column expression """
+    def __init__(self, name):
+        assert isinstance(name, bytes)
+        self._name = name
+
+    @property
+    def name(self):
+        return self._name
+
+
+class OrderedABC(ExprType):
+
+    @abstractproperty
+    def original_expr(self) -> ExprType:
+        """ Get a original expr """
+    
+    @abstractproperty
+    def order_kind(self) -> OrderType:
+        """ Return a order kind (ASC or DESC) """
+
+    def q_order(self) -> tuple:
+        return (self.original_expr, self.order_kind)
+
+
+class Aliased(ObjectExpr, OrderedABC):
+    def __init__(self, expr: ExprType, name: Union[bytes, str]) -> None:
+        super().__init__(name if isinstance(name, bytes) else name.encode())
+        self._expr = expr
+
+    @property
+    def expr(self):
+        return self._expr
+
+    def q_select(self) -> tuple:
+        return (self._expr, b'AS', self)
+
+    @property
+    def original_expr(self) -> ExprType:
+        return self
+
+    @property
+    def order_kind(self) -> OrderType:
+        return OrderType.ASC
+
+    def __pos__(self):
+        """ Get a ASC ordered expression """
+        return OrderedAliased(self, OrderType.ASC)
+
+    def __neg__(self):
+        """ Get a DESC ordered expression """
+        return OrderedAliased(self, OrderType.DESC)
+
+
+class OrderedAliased(OrderedABC):
+    """ Ordered Aliased Expr """
+    def __init__(self, expr: Aliased, order: OrderType):
+        self._original_expr = expr
+        self._order_kind = order
+
+    @abstractproperty
+    def original_expr(self) -> ExprType:
+        """ Get a original expr """
+        return self._original_expr
+
+    @property
+    def order_kind(self) -> OrderType:
+        return self._order_kind
+
 
 
 class OP:

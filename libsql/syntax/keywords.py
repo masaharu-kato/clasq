@@ -4,6 +4,7 @@
 
 from enum import Enum
 from tkinter import CASCADE
+from typing import Union
 
 
 class KeywordABC:
@@ -37,3 +38,15 @@ class Value(KeywordABC, Enum):
     EVAL_TRUE = b'EVAL_TRUE'
     EVAL_FALSE = b'EVAL_FALSE'
     EVAL_FALSE_OR_NULL = b'EVAL_FALSE_OR_NULL'
+
+
+JoinLike = Union[JoinType, bytes, str]
+
+def make_join_type(val: JoinLike):
+    if isinstance(val, JoinType):
+        return val
+    if isinstance(val, str):
+        return JoinType(val.encode().upper())
+    if isinstance(val, bytes):
+        return JoinType(val.upper())
+    raise TypeError('Invalid type %s (%s)' % (type(val), val))

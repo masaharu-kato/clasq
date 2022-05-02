@@ -7,18 +7,18 @@ from typing import Iterable, Iterator, List, NamedTuple, NewType, Optional, Sequ
 
 from .syntax.keywords import JoinType
 from .syntax.expr_type import ExprType
-from .syntax.schema_expr import ViewExpr, TableExpr, ColumnExpr, OrderedColumnExpr
+from .syntax.schema import ViewExpr, Table, Column, OrderedColumn
 
 class View(ViewExpr):
     """ Table View """
     def __init__(self):
         super().__init__()
         self._select_exprs: List[ExprType] = []
-        self._from_tables : List[TableExpr] = []
-        self._joins  : List[Tuple[TableExpr, JoinType, ExprType]] = []
+        self._from_tables : List[Table] = []
+        self._joins  : List[Tuple[Table, JoinType, ExprType]] = []
         self._where  : Optional[ExprType] = None
-        self._groups : List[ColumnExpr] = []
-        self._orders : List[OrderedColumnExpr] = []
+        self._groups : List[Column] = []
+        self._orders : List[OrderedColumn] = []
         self._limit  : Optional[int] = None
         self._offset : Optional[int] = None
 

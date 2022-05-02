@@ -1,15 +1,15 @@
 """
     SQL Connection classes and functions
 """
-from abc import abstractmethod, abstractproperty
+from abc import abstractmethod
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
 
 from libsql.syntax.query_data import QueryData
 
 from ...utils.tabledata import TableData
 from ...syntax.expr_type import ExprType
-from ...syntax.schema_expr import DatabaseExpr, TableExpr, TableLike, ColumnExpr, ColumnLike, OrderedColumnExpr
-from ...syntax.keywords import JoinType
+from ...syntax.schema import Database, Table, TableLike, Column, ColumnLike, OrderedColumn
+from ...syntax.keywords import JoinType, make_join_type
 
 
 class ConnectionABC:
@@ -17,7 +17,7 @@ class ConnectionABC:
 
     def __init__(self, *, dbname: bytes) -> None:
         self._dbname = dbname
-        self._db = DatabaseExpr(dbname) # TODO: Fetch tables
+        self._db = Database(dbname) # TODO: Fetch tables
         self._last_qd: Optional[QueryData] = None
 
     @abstractmethod
@@ -119,7 +119,7 @@ class ConnectionABC:
         return self._last_qd
 
     @property
-    def db(self) -> DatabaseExpr:
+    def db(self) -> Database:
         return self._db
 
     def table(self, name: bytes):
@@ -133,15 +133,15 @@ class ConnectionABC:
         from_tables     : Optional[List[TableLike]] = None,
         joins           : Optional[List[Tuple[TableLike, JoinType, ExprType]]] = None,
         where           : Optional[ExprType] = None,
-        groups          : Optional[List[ColumnExpr]] = None,
-        orders          : Optional[List[OrderedColumnExpr]] = None,
+        groups          : Optional[List[Column]] = None,
+        orders          : Optional[List[OrderedColumn]] = None,
         limit           : Optional[int] = None,
         offset          : Optional[int] = None,
     ) -> TableData:
         """ SELECT query """
 
         from_tables = [self.db[t] for t in (from_tables or [])]
-        specified_tables: Set[TableExpr] = set(*from_tables, *([t for t, _, _ in joins] if joins else []))
+        specified_tables: Set[Table] = set([*from_tables, *([t for t, _, _ in joins] if joins else [])])
         used_tables = set(e for e in (e.table_expr() for e in columns_or_tables) if e is not None)
         from_tables.extend(used_tables - specified_tables)
         if not from_tables:
@@ -151,7 +151,7 @@ class ConnectionABC:
             b'SELECT',
             [c.q_select() for c in columns_or_tables] if columns_or_tables else b'*',
             b'FROM', from_tables,
-            *((join_type, b'JOIN', self.db[table], b'ON', expr) for table, join_type, expr in (joins or [])),
+            *((make_join_type(join_type), b'JOIN', self.db[table], b'ON', expr) for table, join_type, expr in (joins or [])),
             (b'WHERE', where) if where else None,
             (b'GROUP', b'BY', groups) if groups else None,
             (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
@@ -199,7 +199,7 @@ class ConnectionABC:
         data: Optional[Union[Dict[ColumnLike, Any], TableData]] = None,
         *,
         where: Optional[ExprType],
-        orders: Optional[List[OrderedColumnExpr]] = None,
+        orders: Optional[List[OrderedColumn]] = None,
         limit: Optional[int] = None,
         **values,
     ):
@@ -240,7 +240,7 @@ class ConnectionABC:
     def delete(self,
         tablelike: TableLike,
         where: Optional[ExprType],
-        orders: Optional[List[OrderedColumnExpr]] = None,
+        orders: Optional[List[OrderedColumn]] = None,
         limit: Optional[int] = None,
     ):
         table = self.db[tablelike]
@@ -252,17 +252,8 @@ class ConnectionABC:
         )
 
 
-    
-    def _insert_stmt(self, table: TableExpr, columns: List[ColumnExpr]):
-        qd = QueryData(
-            b'INSERT', b'INTO', table, b'(', columns, b')',
-            b'VALUES', b'(', [b'?' for _ in columns],  b')',
-        )
-        assert not qd.prms
-        return qd.stmt
-
     def _proc_colval_args(self,
-        table: TableExpr, 
+        table: Table, 
         value_dict: Optional[Dict[ColumnLike, Any]],
         **values
     ):
