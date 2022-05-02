@@ -53,7 +53,7 @@ class ColumnExprABC(ExprType):
         return (self, self.order_kind)
 
 
-class ColumnExpr(ColumnExprABC):
+class ColumnExpr(ObjectExpr, ColumnExprABC):
     """ Column expression """
 
     def __init__(self,
@@ -268,16 +268,14 @@ class ForeignKeyReference(ObjectExpr):
         self._on_delete = on_delete
         self._on_update = on_update
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_query_data(self, qd: QueryData) -> None:
         """ Append this to query data"""
-        qd.append_one(
+        qd.append(
             b'FOREIGN', b'KEY', self.name, b'(', [super(ObjectExpr, c) for c in self._orig_columns], b')',
             b'REFERENCES', self._ref_table, b'(', [super(ObjectExpr, c) for c in self._ref_columns], b')',
+            (b'ON', b'DELETE', self._on_delete) if self.on_delete else None,
+            (b'ON', b'UPDATE', self._on_update) if self.on_update else None,
         )
-        if self.on_delete:
-            qd.append_one(b'ON', b'DELETE', self._on_delete)
-        if self.on_update:
-            qd.append_one(b'ON', b'UPDATE', self._on_update)
 
 
 class Aliased(ObjectExpr):

@@ -33,9 +33,9 @@ class ExprABC:
     def stmt_bytes(self) -> bytes:
         """ Get a bytes for statement """
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_query_data(self, qd: 'QueryData') -> tuple:
         """ Append this to query data"""
-        qd.append_one(self.stmt_bytes)
+        qd.append(self.stmt_bytes) # Default Implementation
 
 
 class FuncABC:
@@ -63,6 +63,6 @@ class FuncABC:
         return self.name.decode()
 
     @abstractmethod
-    def append_query_data_with_args(self, qd: 'QueryData', args: list) -> None:
+    def append_query_data_with_args(self, qd:'QueryData', args: list) -> None:
         """ Append a statement data of this function with a given list of arguments """
 

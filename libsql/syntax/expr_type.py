@@ -46,7 +46,7 @@ class Func(NoArgsFuncABC):
     def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         self.check_args(args)
-        qd.append(self._name, b'(', args, b')')
+        qd.append(self._name + b'(', args, b')')
 
     def __repr__(self):
         return str(self) + '(' + ','.join(repr(t) for t in self._argtypes) if self._argtypes else '' + ')'
@@ -63,7 +63,7 @@ class NoArgsFunc(NoArgsFuncABC):
     def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert not args
-        qd += self._name
+        qd.append(self._name)
 
 
 class OpABC(Func):
@@ -79,8 +79,7 @@ class UnaryOp(OpABC):
     def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert len(args) == 1
-        qd += self._name
-        qd += args[0]
+        qd.append(self._name, args[0])
 
 
 class BinaryOp(OpABC):
@@ -89,9 +88,9 @@ class BinaryOp(OpABC):
     def append_query_data_with_args(self, qd: 'QueryData', args: List[ExprABC]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert len(args) >= 2
-        qd += b'('
-        qd.append_joined(args, sep=b' %s ' % self.name)
-        qd += b')'
+        qd.append(b'(') 
+        qd.append_joined(args, sep=self.name)
+        qd.append(b')')
         # TODO: Priority
 
 
@@ -257,7 +256,8 @@ class ExprType(ExprABC):
 class Expr(ExprType):
     """ Expression objerct with any value """
     def __init__(self, val):
-        assert isinstance(val, (Expr, bool, int, float, str))
+        if not (val is None or isinstance(val, (Expr, bool, int, float, str))):
+            raise RuntimeError('Invalid value type %s: (%s)' % (type(val), repr(val)))
         self._v = val.v if isinstance(val, Expr) else val
         
 
@@ -331,7 +331,7 @@ class FuncExpr(ExprType):
         return self._args
 
     def append_query_data(self, qd: 'QueryData') -> None:
-        return self._func.append_query_data_with_args(qd, self._args)
+        self._func.append_query_data_with_args(qd, self._args)
 
     def __repr__(self):
         return self._func.repr_with_args(self._args)
