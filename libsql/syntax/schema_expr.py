@@ -48,13 +48,17 @@ class ObjectExpr(ObjectExprABC):
 
 
 class ColumnExprABC(ExprType):
+
+    @abstractproperty
+    def column_expr(self) -> 'ColumnExpr':
+        """ Get a (pure) column expr """
     
     @abstractproperty
     def order_kind(self) -> OrderType:
         """ Return a order kind (ASC or DESC) """
 
     def q_order(self) -> tuple:
-        return (self, self.order_kind)
+        return (self.column_expr, self.order_kind)
 
 
 class ColumnExpr(ObjectExpr, ColumnExprABC):
