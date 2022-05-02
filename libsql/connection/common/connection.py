@@ -15,6 +15,10 @@ from ...syntax.keywords import JoinType
 class ConnectionABC:
     """ Database connection ABC """
 
+    def __init__(self, *, dbname: bytes) -> None:
+        self._dbname = dbname
+        self._db = DatabaseExpr(dbname) # TODO: Fetch tables
+
     @abstractmethod
     def execute_plain(self, stmt: bytes) -> None:
         """ Execute a query (with no parameters).
@@ -109,9 +113,15 @@ class ConnectionABC:
     def last_row_id(self) -> int:
         """ Get a last inserted row id """
 
-    @abstractproperty
+    @property
     def db(self) -> DatabaseExpr:
-        """ Get a database expr """
+        return self._db
+
+    def table(self, name: bytes):
+        return self._db.table(name)
+        
+    def __getitem__(self, val: TableLike):
+        return self._db[val]
 
     def select(self,
         *columns_or_tables: ExprType,
@@ -125,7 +135,7 @@ class ConnectionABC:
     ) -> TableData:
         """ SELECT query """
 
-        from_tables = [*([self.db[t] for t in from_tables] or [])]
+        from_tables = [self.db[t] for t in (from_tables or [])]
         specified_tables: Set[TableExpr] = set(*from_tables, *([t for t, _, _ in joins] if joins else []))
         used_tables = set(e for e in (e.table_expr() for e in columns_or_tables) if e is not None)
         from_tables.extend(used_tables - specified_tables)
@@ -134,9 +144,9 @@ class ConnectionABC:
 
         return self.query(
             b'SELECT',
-            [c.column_def_expr() for c in columns_or_tables] if columns_or_tables else b'*',
+            [c.q_select() for c in columns_or_tables] if columns_or_tables else b'*',
             b'FROM', from_tables,
-            *((join_type, b'JOIN', self.db[table], b'ON', expr) for table, join_type, expr in joins),
+            *((join_type, b'JOIN', self.db[table], b'ON', expr) for table, join_type, expr in (joins or [])),
             (b'WHERE', where) if where else None,
             (b'GROUP', b'BY', groups) if groups else None,
             (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,

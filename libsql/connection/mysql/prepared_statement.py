@@ -15,6 +15,10 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
     def __init__(self, cnx: MySQLConnectionAbstract, stmt: bytes):
         self._cnx = cnx # Prepare before super init
         super().__init__(stmt)
+
+    @property
+    def cnx(self):
+        return self._cnx
     
     def _new(self) -> Tuple[int, int]:
         """ Create a new prepared statement (Override)
@@ -42,18 +46,18 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
     def _send_params_and_get_data(self, params: list) -> TableData:
 
         res = self._send_params(params)
-        if not isinstance(res, list):
-            raise RuntimeError('Invalid result type.')
+        if not isinstance(res[1], list):
+            raise RuntimeError('Invalid column desc:', res[1])
         
         column_desc: List[tuple] = res[1]
-        self.cnx.unread_result = True
+        self._cnx.unread_result = True
         flags = res[2]['status_flag']
         _cursor_exists = flags & ServerFlag.STATUS_CURSOR_EXISTS != 0
 
         if _cursor_exists:
-            self.cnx.cmd_stmt_fetch(self.stmt_id, MAX_RESULTS)
+            self._cnx.cmd_stmt_fetch(self.stmt_id, MAX_RESULTS)
 
-        rows, eof = self.cnx.get_rows(binary=True, columns=column_desc)
+        rows, eof = self._cnx.get_rows(binary=True, columns=column_desc)
         
-        column_names = List[str] = [str(c[0]) for c in column_desc]
+        column_names :List[str] = [str(c[0]) for c in column_desc]
         return TableData(column_names, rows)

@@ -144,7 +144,7 @@ class RowData:
         Yields:
             Iterator: row value
         """
-        return (self._cols[i] for i in self._col_meta.iter_indexes())
+        return (self._row[i] for i in self._col_meta.iter_indexes())
 
     def items(self) -> Iterator[Tuple[str, Any]]:
         """ Iterate columns with its name and value

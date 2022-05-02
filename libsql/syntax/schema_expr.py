@@ -31,6 +31,10 @@ class ObjectExprABC(ExprType):
         assert not b'`' in self.name
         return b'`' + self.name + b'`'
 
+    @abstractmethod
+    def q_select(self) -> tuple:
+        """ Get a query for SELECT """
+
 
 class ObjectExpr(ObjectExprABC):
     """ Column expression """
@@ -133,6 +137,9 @@ class ColumnExpr(ObjectExpr, ColumnExprABC):
     def q_order(self) -> tuple:
         return (self, self.order_kind)
 
+    def q_select(self) -> tuple:
+        return (self,)
+
     @property
     def stmt_bytes(self) -> bytes:
         return (self.table.stmt_bytes + b'.' if self.table else b'') + super().stmt_bytes
@@ -146,7 +153,7 @@ class ColumnExpr(ObjectExpr, ColumnExprABC):
     def __repr__(self):
         return 'Col(%s)' % str(self)
 
-ColumnLike = Union[bytes, ColumnExpr]
+ColumnLike = Union[str, bytes, ColumnExpr]
 
 class OrderedColumnExpr(ColumnExprABC):
     """ Ordered Column Expr """
@@ -208,6 +215,8 @@ class ViewExpr(ObjectExpr):
         return self.column(name)
         
     def __getitem__(self, val: ColumnLike):
+        if isinstance(val, str):
+            return self.column(val.encode())
         if isinstance(val, bytes):
             return self.column(val)
         if isinstance(val, ColumnExpr):
@@ -240,7 +249,7 @@ class TableExpr(ViewExpr):
         )
         # TODO: Add table options
 
-TableLike = Union[bytes, TableExpr]
+TableLike = Union[str, bytes, TableExpr]
 
 class ForeignKeyReference(ObjectExpr):
     def __init__(self,
@@ -323,6 +332,8 @@ class DatabaseExpr(ObjectExpr):
         return self._table_dict[name] 
         
     def __getitem__(self, val: TableLike):
+        if isinstance(val, str):
+            return self.table(val.encode())
         if isinstance(val, bytes):
             return self.table(val)
         if isinstance(val, TableExpr):

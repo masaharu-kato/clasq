@@ -16,7 +16,7 @@ from .prepared_statement import MySQLPreparedStatementExecutor
 class MySQLConnectionABC(ConnectionABC):
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__()
+        super().__init__(dbname=str(kwargs.get('database', '')).encode())
         self.cnx_args = args
         self.cnx_kwargs = kwargs
         self.cnx: MySQLConnectionAbstract = self.new_cnx()
