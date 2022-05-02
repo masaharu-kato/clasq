@@ -54,6 +54,12 @@ class TableData:
         for row in iter(self):
             yield dict(row.items())
 
+    def make_html(self) -> str:
+        return '<TABLE>\n' \
+            + '<TR>' + ''.join('<TH>%s</TH>' % c for c in self.iter_columns()) + '</TR>\n' \
+            + '\n'.join(('<TR>' + ''.join('<TD>%s</TD>' % v for v in row) + '</TR>') for row in self) \
+            + '\n</TABLE>'
+
     def __repr__(self):
         res = 'TableData#%d\n' % id(self)
         res += '\t'.join(str(c) for c in self._col_meta.iter_columns()) + '\n'
