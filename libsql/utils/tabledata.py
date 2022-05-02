@@ -69,6 +69,9 @@ class TableData:
             res += '\t'.join(str(v) for v in row) + '\n'
         return res
 
+    def _repr_html_(self):
+        return self.make_html()
+
 
 class ColumnMetadata:
     def __init__(self, columns: List[str]) -> None:
