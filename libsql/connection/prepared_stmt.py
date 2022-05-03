@@ -1,12 +1,12 @@
 """
     Prepared statement executor abstract class
 """
-from abc import abstractclassmethod, abstractmethod
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from abc import abstractmethod
+from typing import Tuple
 
-from ...utils.tabledata import TableData
+from ..utils.tabledata import TableData
 from .connection import ConnectionABC
-from .. import errors
+from . import errors
 
 
 class PreparedStatementExecutorABC:

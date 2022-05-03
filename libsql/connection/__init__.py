@@ -1,1 +1,1 @@
-from .mysql import MySQLConnection
+from .connection import ConnectionABC

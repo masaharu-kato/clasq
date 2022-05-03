@@ -1,12 +1,12 @@
 """
 """
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
-from mysql.connector.abstracts import MySQLConnectionAbstract
-from mysql.connector.constants import ServerFlag
+from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
+from mysql.connector.constants import ServerFlag # type: ignore
 
 from ...utils.tabledata import TableData
-from ..common.prepared_connection import PreparedStatementExecutorABC
+from ..prepared_stmt import PreparedStatementExecutorABC
 
 MAX_RESULTS = 4294967295
 
@@ -41,7 +41,8 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
 
     def close(self) -> None:
         """ Close a specific prepared statement (Override) """
-        return self._cnx.cmd_stmt_close(self._stmt_id)
+        if hasattr(self, '_stmt_id') and self._cnx.is_connected():
+            self._cnx.cmd_stmt_close(self._stmt_id)
 
     def _send_params_and_get_data(self, params: list) -> TableData:
 
@@ -55,7 +56,7 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
         _cursor_exists = flags & ServerFlag.STATUS_CURSOR_EXISTS != 0
 
         if _cursor_exists:
-            self._cnx.cmd_stmt_fetch(self.stmt_id, MAX_RESULTS)
+            self._cnx.cmd_stmt_fetch(self._stmt_id, MAX_RESULTS)
 
         rows, eof = self._cnx.get_rows(binary=True, columns=column_desc)
         

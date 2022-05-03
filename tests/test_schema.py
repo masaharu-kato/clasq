@@ -2,49 +2,54 @@
     Test libsql.schema
 """
 import pytest
-from libsql import schema
+from libsql.database import Database, Table, Column
+from libsql.syntax.sqltypes import Int, VarChar
+from libsql.syntax.expr_type import Object
+from libsql.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('objname, result', [
-    ['hoGe', '`hoGe`'],
-    ['B', '`B`'],
-    ['?', '`?`'],
-    ['hoge fugar', '`hoge fugar`'],
-    [' piyo12fug', '` piyo12fug`'],
-    ['bbb_cde ', '`bbb_cde `'],
+    [b'hoGe', b'`hoGe`'],
+    [b'B', b'`B`'],
+    [b'?', b'`?`'],
+    [b'hoge fugar', b'`hoge fugar`'],
+    [b' piyo12fug', b'` piyo12fug`'],
+    [b'bbb_cde ', b'`bbb_cde `'],
 ])
 def test_asobj(objname, result):
-    assert schema.asobj(objname) == result
+    assert QueryData(Object(objname)) == QueryData(result)
 
 
-@pytest.mark.parametrize('objs, result', [
-    [['hogefu'], 'hogefu'],
-    [['hog', 'fuga'], 'hog.fuga'],
-    [['`hog`', '`fuga`'], '`hog`.`fuga`'],
-    [['hog.ab3r2', 'fuga', '`piyo.abc`'], 'hog.ab3r2.fuga.`piyo.abc`'],
-])
-def test_joinobjs(objs, result):
-    assert schema.joinobjs(*objs) == result
+# @pytest.mark.parametrize('objs, result', [
+#     [['hogefu'], 'hogefu'],
+#     [['hog', 'fuga'], 'hog.fuga'],
+#     [['`hog`', '`fuga`'], '`hog`.`fuga`'],
+#     [['hog.ab3r2', 'fuga', '`piyo.abc`'], 'hog.ab3r2.fuga.`piyo.abc`'],
+# ])
+# def test_joinobjs(objs, result):
+#     assert ObjectExpr(*objs) == result
 
 
 def test_table_columns():
 
-    db = schema.Database('mydb', [
-        schema.Table('mytable', [
-            schema.Column('id', 'INT'),
-            schema.Column('mycol2', 'INT'),
-            schema.Column('mycol3', 'VARCHAR(64)'),
-        ]),
-        schema.Table('mytable2', [
-            schema.Column('id', 'INT'),
-            schema.Column('mycol4', 'INT'),
-            schema.Column('mycol5', 'VARCHAR(64)'),
-        ])
-    ])
+    db = Database('mydb',
+        Table('mytable',
+            Column('id', Int),
+            Column('mycol2', Int),
+            Column('mycol3', VarChar[64]),
+        ),
+        Table('mytable2',
+            Column('id', Int),
+            Column('mycol4', Int),
+            Column('mycol5', VarChar[64]),
+        )
+    )
 
-    assert db.name == 'mydb'
-    assert db['mytable'].name == 'mytable'
-    assert db['mytable']['mycol1'].name == 'mycol1'
-    assert db.table('mytable')['mycol1'].name == 'mycol1'
-    assert db.table('mytable').column('mycol2').name == 'mycol2'
-    assert db.table('mytable2').col('mycol5').name == 'mycol5'
+    assert db.name == b'mydb'
+    assert db['mytable'].name == b'mytable'
+    assert db['mytable']['mycol2'].name == b'mycol2'
+    assert db.table(b'mytable')['mycol2'].name == b'mycol2'
+    assert db.table(b'mytable').column(b'mycol2').name == b'mycol2'
+    assert db.table(b'mytable2').col(b'mycol5').name == b'mycol5'
 
+    assert db['mytable'].name == b'mytable'
+    assert QueryData(db['mytable']['mycol2']) == QueryData(b'`mytable`.`mycol2`')

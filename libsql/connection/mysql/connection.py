@@ -2,16 +2,21 @@
     Mysql Connection class implementation
 """
 from abc import abstractmethod
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Dict, Iterable, Iterator, Optional
 
-import mysql.connector
-from mysql.connector.abstracts import MySQLConnectionAbstract
-import mysql.connector.pooling
-
+import mysql.connector # type: ignore
+from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
+# from mysql.connector.pooling import MySQLConnectionPool # type: ignore
 
 from ...utils.tabledata import TableData
-from ..common.prepared_connection import ConnectionABC, PreparedConnectionABC, PreparedStatementExecutorABC
-from .prepared_statement import MySQLPreparedStatementExecutor
+from ..prepared_stmt import ConnectionABC, PreparedStatementExecutorABC
+from .prepared_stmt import MySQLPreparedStatementExecutor
+
+
+def connect(*args, **kwargs):
+    cnx = MySQLConnection(*args, **kwargs)
+    return cnx.db
+    
 
 class MySQLConnectionABC(ConnectionABC):
 
@@ -107,7 +112,7 @@ class MySQLConnection(MySQLConnectionABC):
 #         pool_size:int = 16,
 #         **kwargs):
 #         print('MySQLPooledConnection: Init with pool_size=%d' % pool_size)
-#         self.cnx_pool = mysql.connector.pooling.MySQLConnectionPool(pool_size=pool_size, *args, **kwargs)
+#         self.cnx_pool = MySQLConnectionPool(pool_size=pool_size, *args, **kwargs)
 #         super().__init__(*args, dictionary=dictionary, named_tuple=named_tuple, **kwargs)
 
 #     def new_cnx(self, *args, **kwargs):

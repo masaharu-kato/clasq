@@ -5,12 +5,9 @@ import typing
 import datetime
 from functools import lru_cache
 from . import sqltypebases as tb
+from .sqltypebases import Nullable, NotNull, PrimaryKey, Int
 
 Optional = typing.Optional
-
-Nullable = tb.Nullable
-NotNull = tb.NotNull
-PrimaryKey = tb.PrimaryKey
 
 class TinyInt(tb.Final, tb.IntegerType):
     """ TINTINT type """
@@ -26,8 +23,6 @@ class MediumInt(tb.Final, tb.IntegerType):
     """ MEDIUMINT type """
     _MIN_VALUE_ = -2**23
     _MAX_VALUE_ = 2**23-1
-
-Int = tb.Int
 
 class BigInt(tb.Final, tb.IntegerType):
     """ BIGINT type """

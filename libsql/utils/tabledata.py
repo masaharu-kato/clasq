@@ -97,7 +97,7 @@ class ColumnMetadata:
         return iter(self._cols)
 
     def iter_indexes(self) -> Iterator[int]:
-        return self._col_to_i.values()
+        return iter(self._col_to_i.values())
 
     def column_to_i(self, column: str) -> int:
         return self._col_to_i[column]
@@ -169,7 +169,7 @@ class RowData:
         """
         return zip(self._col_meta.iter_columns(), self._row)
 
-    def __dict__(self) -> dict:
+    def __dict__(self):
         """ Generate a dictionary of this row
 
         Returns:

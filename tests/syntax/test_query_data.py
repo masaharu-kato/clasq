@@ -5,7 +5,7 @@
 from math import ceil, floor, trunc
 import pytest
 
-from libsql.syntax.schema import ObjectExpr as Obj
+from libsql.schema import Object as Obj
 from libsql.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('term, result', [

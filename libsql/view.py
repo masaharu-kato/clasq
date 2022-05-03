@@ -2,216 +2,245 @@
     SQL query module
 """
 
-from abc import abstractmethod
-from typing import Iterable, Iterator, List, NamedTuple, NewType, Optional, Sequence, Tuple, Union
+from typing import List, NamedTuple, Optional, Tuple, Union
 
-from .syntax.keywords import JoinType
-from .syntax.expr_type import ExprType
-from .syntax.schema import ViewExpr, Table, Column, OrderedColumn
+from .syntax.keywords import JoinLike, JoinType, make_join_type
+from .syntax.expr_type import ExprABC, NameLike, OP, ObjectABC
+from .schema import ColumnLike, ViewABC, Table, ViewLike, Column, OrderedColumn, Database
+from .utils.tabledata import TableData
 
-class View(ViewExpr):
+JoinData = Tuple[ViewLike, JoinLike, Optional[ExprABC]]
+
+class View(ViewABC):
     """ Table View """
-    def __init__(self):
-        super().__init__()
-        self._select_exprs: List[ExprType] = []
-        self._from_tables : List[Table] = []
-        self._joins  : List[Tuple[Table, JoinType, ExprType]] = []
-        self._where  : Optional[ExprType] = None
-        self._groups : List[Column] = []
-        self._orders : List[OrderedColumn] = []
-        self._limit  : Optional[int] = None
-        self._offset : Optional[int] = None
+    def __init__(self,
+        *_columns: Optional[ObjectABC], 
+        database : Optional[Database] = None,
+        name     : Optional[NameLike] = None,
+        froms    : Optional[Union[List[ViewLike], Tuple[ViewLike, ...]]] = None,
+        joins    : Optional[Union[List[JoinData], Tuple[JoinData, ...]]] = None,
+        where    : Optional[ExprABC] = None,
+        groups   : Optional[Union[List[Column], Tuple[Column, ...]]] = None,
+        orders   : Optional[Union[List[OrderedColumn], Tuple[OrderedColumn, ...]]] = None,
+        limit    : Optional[int] = None,
+        offset   : Optional[int] = None,
+    ):
+        super().__init__(name or b'', database, *_columns)
+        self._froms : Tuple[Table, ...] = self._make_tuple(froms)
+        self._joins  : Tuple[Tuple[Table, JoinType, ExprABC], ...] = self._make_tuple(joins)
+        self._where  : Optional[ExprABC] = where
+        self._groups : Tuple[Column, ...] = self._make_tuple(groups)
+        self._orders : Tuple[OrderedColumn, ...] = self._make_tuple(orders)
+        self._limit  : Optional[int] = limit
+        self._offset : Optional[int] = offset
 
-    # ----------------------------------------------------------------
-    #   Query methods
-    # ----------------------------------------------------------------
-
-    def fetch(self):
-        """ Fetch a single result row """
-        # TODO: Implement
-
-    def fetchall(self):
-        """ Fetch all reuslt rows """
-        # TODO: Implement
-
-    def select(self, *args, **kwargs):
-        """ Run SELECT query """
-        self.db_cursor().select(*args, **kwargs) # TODO: Implement
-
-    def insert(self, *args, **kwargs):
-        """ Run INSERT query """
-        self.db_cursor().insert(*args, **kwargs) # TODO: Implement
-
-    def insertmany(self, *args, **kwargs):
-        """ Run multiple INSERT queries """
-        self.db_cursor().insertmany(*args, **kwargs) # TODO: Implement
-
-    def update(self, *args, **kwargs):
-        """ Run UPDATE query """
-        self.db_cursor().update(*args, **kwargs) # TODO: Implement
-
-    def delete(self, *args, **kwargs):
-        """ Run DELETE query """
-        self.db_cursor().delete(*args, **kwargs) # TODO: Implement
-
-    def selsert(self, *args, **kwargs):
-        """ Run SELECT or INSERT query """
-        self.db_cursor().selsert(*args, **kwargs) # TODO: Implement
-
-    def upsert(self, *args, **kwargs):
-        """ Run UPDATE or INSERT query """
-        self.db_cursor().upsert(*args, **kwargs) # TODO: Implement
-
+        self._result : Optional[TableData] = None
 
     # ----------------------------------------------------------------
     #   View creation methods
     # ----------------------------------------------------------------
 
-    def select_column(self, *ops, **kwargs) -> 'TableColumnsView':
+    def clone(self,
+        *_columns: Optional[ObjectABC], 
+        database : Optional[Database] = None,
+        name     : Optional[NameLike] = None,
+        froms    : Optional[Union[List[ViewLike], Tuple[ViewLike, ...]]] = None,
+        joins    : Optional[Union[List[JoinData], Tuple[JoinData, ...]]] = None,
+        where    : Optional[ExprABC] = None,
+        groups   : Optional[Union[List[Column], Tuple[Column, ...]]] = None,
+        orders   : Optional[Union[List[OrderedColumn], Tuple[OrderedColumn, ...]]] = None,
+        limit    : Optional[int] = None,
+        offset   : Optional[int] = None,
+    ) -> 'View':
+
+        return self._new(
+            *self.iter_columns(), *_columns,
+            database = database if database is not None else self._database,
+            name = name if name is not None else self._name,
+            froms = self._join_tuple(self._froms, froms),
+            joins = self._join_tuple(self._joins, joins),
+            where = OP.AND.call_joined_opt(self._where, where),
+            groups = self._join_tuple(self._groups, groups),
+            orders = self._join_tuple(self._orders, orders),
+            limit = limit if limit is not None else self._limit,
+            offset = offset if offset is not None else self._offset,
+        )
+
+    def merged(self, view: 'View') -> 'View':
+        return self.clone(
+            *view.iter_columns(),
+            database = view._database,
+            name   = view._name,
+            froms  = view._froms,
+            joins  = view._joins,
+            where  = view._where,
+            groups = view._groups,
+            orders = view._orders,
+            limit  = view._limit,
+            offset = view._offset,
+        )
+
+    def select_column(self, *_columns: Optional[ObjectABC]) -> 'View':
         """ Make a View object with columns """
+        return self.clone(*_columns)
 
-    def where(self, *ops, **kwargs) -> 'WheredView':
+    def where(self, *exprs, **coleqs) -> 'View':
         """ Make a View object with WHERE clause """
-        return WheredView(self, []) # TODO: Implement
+        return self.clone(where=self._proc_terms(*exprs, **coleqs))
 
-    def __call__(self, *ops, **kwargs):
-        """ Make a View object with WHERE clause (alias of `where` method) """
-        return self.where(*ops, **kwargs)
+    def group_by(self, *columns: Column) -> 'View':
+        return self.clone(groups=columns)
 
-    def key(self, *ops, **kwargs) -> 'WheredView':
-        """ Make a View object with WHERE clause (Returns a unique row) """
-        return WheredView(self, []) # TODO: Implement
-
-    def group_by(self, *columns: ViewColumnABC) -> 'GroupedView':
-        return GroupedView(self, columns) # TODO: Implement
-
-    def order_by(self, *orders: SQLExprType) -> 'OrderedView':
+    def order_by(self, *orders: OrderedColumn) -> 'View':
         """ Make a View object with ORDER BY clause """
-        return OrderedView(self, orders) # TODO: Implement
+        return self.clone(orders=orders)
 
-    def limit(self, limit: int) -> 'LimitedView':
+    def limit(self, limit: int) -> 'View':
         """ Make a View object with LIMIT OFFSET clause """
-        return LimitedView(self, limit)
+        return self.clone(limit=limit)
 
-    def offset(self, offset: int) -> 'OffsetView':
+    def offset(self, offset: int) -> 'View':
         """ Make a View object with LIMIT OFFSET clause """
-        return OffsetView(self, offset)
+        return self.clone(offset=offset)
 
-    def single(self) -> 'SingleView':
-        """ Make a View object with a single result """
-        return SingleView(self)
+    # def single(self) -> 'SingleView':
+    #     """ Make a View object with a single result """
+    #     return SingleView(self)
 
-    def join(self, type: Join, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
+    def join(self, join_type: JoinLike, view: ViewLike, *exprs: ExprABC, **_coleqs: ColumnLike):
         """ Make a Joined View """
-        # TODO: cond_eqs
-        return JoinedView(type, self, factor, cond)
+        coleqs = {n: self.column(v) for n, v in _coleqs.items()}
+        return self.clone(joins=[(
+            self._proc_view(view),
+            make_join_type(join_type),
+            self._proc_terms(*exprs, **coleqs)
+        )])
 
-    def sql(self) -> str:
-        """ Generate SQL string """
-        return self.table_sql()
+    def inner_join(self, view: ViewLike, *exprs: ExprABC, **coleqs: ColumnLike):
+        """ Make a INNER Joined View """
+        return self.join(JoinType.INNER, view, *exprs, **coleqs)
 
-    def inner_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
-        return self.join(Join.INNER, factor, cond, **cond_eqs)
+    def left_join(self, view: ViewLike, *exprs: ExprABC, **coleqs: ColumnLike):
+        """ Make a LEFT Joined View """
+        return self.join(JoinType.LEFT, view, *exprs, **coleqs)
 
-    def left_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
-        return self.join(Join.LEFT, factor, cond, **cond_eqs)
+    def right_join(self, view: ViewLike, *exprs: ExprABC, **coleqs: ColumnLike):
+        """ Make a RIGHT Joined View """
+        return self.join(JoinType.RIGHT, view, *exprs, **coleqs)
 
-    def right_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
-        return self.join(Join.RIGHT, factor, cond, **cond_eqs)
+    def outer_join(self, view: ViewLike, *exprs: ExprABC, **coleqs: ColumnLike):
+        """ Make a OUTER Joined View """
+        return self.join(JoinType.OUTER, view, *exprs, **coleqs)
 
-    def outer_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
-        return self.join(Join.OUTER, factor, cond, **cond_eqs)
+    def cross_join(self, view: ViewLike, *exprs: ExprABC, **coleqs: ColumnLike):
+        """ Make a CROSS Joined View """
+        return self.join(JoinType.CROSS, view, *exprs, **coleqs)
 
-    def cross_join(self, factor: 'ViewABC', cond: SQLExprType, **cond_eqs: ViewColumnABC):
-        return self.join(Join.CROSS, factor, cond, **cond_eqs)
+    def __getitem__(self, val):
 
+        if isinstance(val, int):
+            return self.clone(offset=val, limit=1)
 
-    # ----------------------------------------------------------------
-    #   System view methods
-    # ----------------------------------------------------------------
+        if isinstance(val, slice):
+            assert not val.step # TODO: Implementation
+            if val.start:
+                if val.stop:
+                    return self.clone(offset=val.start, limit=(val.stop-val.start))
+                return self.clone(offset=val.start)
+            else:
+                if val.stop:
+                    return self.clone(limit=val.stop)
+            return self
 
-    @property
-    def table_view(self) -> 'TableViewABC':
-        return self
+        if isinstance(val, (bytes, str)):
+            return super().__getitem__(val)
+        
+        if isinstance(val, ExprABC):
+            return self.clone(where=val)
 
-    @abstractmethod
-    def table_sql(self) -> str:
-        """ Get SQL of Table """
-
-    @property
-    def where_cond(self) -> SQLExprType:
-        """ Get WHERE conds """
-        return None # Default Implementation
-
-    @abstractmethod
-    def iter_orders(self) -> Iterator[OrderedViewColumn]:
-        """ Iterate ORDER columns """
-
-
-    # ----------------------------------------------------------------
-    #   System column methods
-    # ----------------------------------------------------------------
-
-    @property
-    def columns(self) -> List[ViewColumnABC]:
-        """ Get all columns """
-        return list(self.iter_columns())
-
-    @abstractmethod
-    def iter_columns(self) -> Iterator[ViewColumnABC]:
-        """ Iterate columns """
-
-    @abstractmethod
-    def column(self, column: ColumnLike) -> ViewColumnABC:
-        """ Search a specific column """
-
-    def col(self, column: ColumnLike) -> ViewColumnABC:
-        """ Search a specific column (alias of `self.column()`) """
-        return self.column(column)
-
-    # def __getitem__(self, column: ColumnLike) -> ViewColumnABC:
-    #     """ Search a specific column (alias of `self.column()`) """
-    #     return self.column(column)
+        raise TypeError('Invalid type %s (%s)' % (type(val), val))
 
     
-class SingleView(ViewABC):
-    """ Single result view """
+    def refresh_result(self) -> None:
+        self._result = self.cnx.select(
+            *self.iter_columns(),
+            froms  = self._froms,
+            joins  = self._joins,
+            where  = self._where,
+            groups = self._groups,
+            orders = self._orders,
+            limit  = self._limit,
+            offset = self._offset,
+        )
 
-    def __init__(self, view: GroupedViewABC) -> None:
-        super().__init__()
-        self.view = view
-
-    def where(self, *args, **kwargs):
-        """ (override) """
-        return Record() # TODO: Implement
-
-
-class Record():
-    """ Record Object """
-
-    # ----------------------------------------------------------------
-    #   Data methods
-    # ----------------------------------------------------------------
+    def prepare_result(self) -> None:
+        if self._result is None:
+            return self.refresh_result()
 
     @property
-    def data(self) -> Optional[NamedTuple]:
-        """ Get a data (Named-tuple of column values) """
+    def is_result_ready(self) -> bool:
+        return self._result is not None
 
-    def __getitem__(self, column):
-        """ Get a value of specific column """
+    @property
+    def result(self):
+        self.prepare_result()
+        assert self._result is not None
+        return self._result
 
-    def __bool__(self):
-        """ Return whether the actual data exists or not """
+    def __iter__(self):
+        return iter(self.result)
+
+    @classmethod
+    def _make_tuple(cls, t: Optional[Union[tuple, list]]) -> tuple:
+        if t is None:
+            return ()
+        if isinstance(t, tuple):
+            return t
+        return tuple(t)
+
+    @classmethod
+    def _join_tuple(cls, t1: Optional[Union[tuple, list]], t2: Optional[Union[tuple, list]]) -> tuple:
+        if t1 is None:
+            return cls._make_tuple(t2)
+        if t2 is None:
+            return cls._make_tuple(t1)
+        return (*t1, *t2)
+
+    def _new(self, *args, **kwargs) -> 'View':
+        return View(*args, **kwargs)
+
+    def _proc_view(self, viewlike: ViewLike) -> ViewABC:
+        if isinstance(viewlike, ViewABC):
+            return viewlike
+        return self.database[viewlike]
+
+    def _proc_terms(self, *exprs: Optional[ExprABC], **coleqs: ExprABC) -> Optional[ExprABC]:
+        return OP.AND.call_joined_opt(
+            OP.AND.call_joined_opt(*exprs),
+            OP.AND.call_joined_opt(*(self.column(n) == v for n, v in coleqs.items()))
+        )
 
 
-    # ----------------------------------------------------------------
-    #   Query methods
-    # ----------------------------------------------------------------
+class SingleView(View):
+    """ Single result view """
 
-    def update(self, *args, **kwargs):
-        """ Run UPDATE query """
+    @property
+    def result(self):
+        return super().result[0]
 
-    def delete(self):
-        """ Run DELETE query """
+    def __dict__(self):
+        return dict(self.result)
 
+    def __iter__(self):
+        return iter(self.result)
 
+    def __getitem__(self, val):
+
+        if isinstance(val, (bytes, str)):
+            val = val if isinstance(val, bytes) else val.encode()
+            return self.result[val]
+
+        return super().__getitem__(val)
+
+    def _new(self, *args, **kwargs) -> 'View':
+        return SingleView(*args, **kwargs)
