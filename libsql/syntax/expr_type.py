@@ -487,11 +487,11 @@ class ObjectABC(ExprABC):
         return 'Obj(%s)' % str(self)
 
 
-NameLike = Union[bytes, str]
+Name = Union[bytes, str]
 
 class Object(ObjectABC):
     """ Column expression """
-    def __init__(self, name: NameLike):
+    def __init__(self, name: Name):
         assert isinstance(name, (bytes, str))
         self._name = (name if isinstance(name, bytes) else name.encode())
 

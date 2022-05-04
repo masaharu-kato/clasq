@@ -1,12 +1,12 @@
 """
     Schema expression classes
 """
-from typing import TYPE_CHECKING, Dict, Iterator, Optional, Tuple, Union
+from abc import abstractmethod
+from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
-from .syntax.keywords import OrderType, ReferenceOption
-from .syntax.expr_abc import ExprABCBase
-from .syntax.expr_type import ExprABC, NameLike, ObjectABC, Object, OrderedABC
+from .syntax.keywords import JoinType, JoinLike, make_join_type, OrderType, ReferenceOption
 from .syntax.sqltypebases import SQLType
+from .syntax.expr_type import ExprABC, Name, ObjectABC, Object, OrderedABC, OP
 from .syntax.query_data import QueryData
 from .utils.tabledata import TableData
 
@@ -18,7 +18,7 @@ class Column(Object, OrderedABC):
     """ Column expression """
 
     def __init__(self,
-        name: NameLike,
+        name: Name,
         sqltype: Optional[SQLType] = None,
         *,
         view : Optional['ViewABC'] = None,
@@ -142,6 +142,7 @@ class Column(Object, OrderedABC):
 
 ColumnLike = Union[str, bytes, Column]
 
+
 class OrderedColumn(OrderedABC):
     """ Ordered Column Expr """
     def __init__(self, expr: Column, order: OrderType):
@@ -161,11 +162,12 @@ class OrderedColumn(OrderedABC):
         return self._original_expr.iter_objects()
 
 
+
 class ViewABC(Object):
     """ View Expr """
 
     def __init__(self,
-        name: NameLike,
+        name: Name,
         database: Optional['Database'] = None,
         *_columns: Optional[ObjectABC],
     ):
@@ -177,6 +179,8 @@ class ViewABC(Object):
         # self._options = options
         for column in columns:
             self.append_column(column)
+            
+        self._result : Optional[TableData] = None # View Result
 
     def __repr__(self):
         return 'View(%s)' % str(self)
@@ -192,6 +196,10 @@ class ViewABC(Object):
         return self._database
 
     @property
+    def db(self):
+        return self.database
+
+    @property
     def database_or_none(self):
         return self._database
 
@@ -203,8 +211,10 @@ class ViewABC(Object):
     # def options(self):
     #     return self._options
 
-    def iter_columns(self):
-        return self._column_dict.values()
+    def iter_columns(self) -> Iterator[ObjectABC]:
+        if self._column_specified:
+            return (c for c in self._column_dict.values())
+        return iter([])
 
     def set_database(self, database: 'Database') -> None:
         """ Set a table object """
@@ -232,21 +242,293 @@ class ViewABC(Object):
 
     def col(self, val: ColumnLike):
         return self.column(val)
-        
-    def __getitem__(self, val: ColumnLike):
-        return self.column(val)
 
     def append_column(self, column: ObjectABC) -> None:
         self._column_dict[column.name] = column
+        self._column_specified = True
 
-ViewLike = Union[ViewABC, NameLike]
+
+    def get_froms(self) -> Optional[Iterable[Union['View', Name]]]:
+        return None # Default Implementation
+
+    def get_joins(self) -> Optional[Iterable[Tuple[Union['View', Name], JoinLike, Optional[ExprABC]]]]:
+        return None # Default Implementation
+
+    def get_where(self) -> Optional[ExprABC]:
+        return None # Default Implementation
+
+    def get_groups(self) -> Optional[Iterable[Column]]:
+        return None # Default Implementation
+
+    def get_orders(self) -> Optional[Iterable[OrderedColumn]]:
+        return None # Default Implementation
+
+    def get_limit(self) -> Optional[int]:
+        return None # Default Implementation
+
+    def get_offset(self) -> Optional[int]:
+        return None # Default Implementation
+
+    def clone(self,
+        *_columns: Optional[ObjectABC], 
+        database : Optional['Database'] = None,
+        name     : Optional[Name] = None,
+        froms    : Optional[Iterable[Union['ViewABC', Name]]] = None,
+        joins    : Optional[Iterable[Tuple[Union['ViewABC', Name], JoinLike, Optional[ExprABC]]]] = None,
+        where    : Optional[ExprABC] = None,
+        groups   : Optional[Iterable[Column]] = None,
+        orders   : Optional[Iterable[OrderedColumn]] = None,
+        limit    : Optional[int] = None,
+        offset   : Optional[int] = None,
+    ) -> 'ViewABC':
+
+        return self._new_view(
+            *self.iter_columns(), *_columns,
+            database = database if database is not None else self._database,
+            name = name if name is not None else self._name,
+            froms = self._join_as_tuple(self.get_froms(), froms),
+            joins = self._join_as_tuple(self.get_joins(), joins),
+            where = OP.AND.call_joined_opt(self.get_where(), where),
+            groups = self._join_as_tuple(self.get_groups(), groups),
+            orders = self._join_as_tuple(self.get_orders(), orders),
+            limit = limit if limit is not None else self.get_limit(),
+            offset = offset if offset is not None else self.get_offset(),
+        )
+
+    def merged(self, view: 'View') -> 'ViewABC':
+        return self.clone(
+            *view.iter_columns(),
+            database = view._database,
+            name   = view._name,
+            froms  = view.get_froms(),
+            joins  = view.get_joins(),
+            where  = view.get_where(),
+            groups = view.get_groups(),
+            orders = view.get_orders(),
+            limit  = view.get_limit(),
+            offset = view.get_offset(),
+        )
+
+    def select_column(self, *_columns: Optional[ObjectABC]) -> 'ViewABC':
+        """ Make a View object with columns """
+        return self.clone(*_columns)
+
+    def where(self, *exprs, **coleqs) -> 'ViewABC':
+        """ Make a View object with WHERE clause """
+        return self.clone(where=self._proc_terms(*exprs, **coleqs))
+
+    def group_by(self, *columns: Column) -> 'ViewABC':
+        return self.clone(groups=columns)
+
+    def order_by(self, *orders: OrderedColumn) -> 'ViewABC':
+        """ Make a View object with ORDER BY clause """
+        return self.clone(orders=orders)
+
+    def limit(self, limit: int) -> 'ViewABC':
+        """ Make a View object with LIMIT OFFSET clause """
+        return self.clone(limit=limit)
+
+    def offset(self, offset: int) -> 'ViewABC':
+        """ Make a View object with LIMIT OFFSET clause """
+        return self.clone(offset=offset)
+
+    # def single(self) -> 'SingleView':
+    #     """ Make a View object with a single result """
+    #     return SingleView(self)
+
+    def join(self, join_type: JoinLike, view: Union['ViewABC', Name], *exprs: ExprABC, **_coleqs: ColumnLike) -> 'ViewABC':
+        """ Make a Joined View """
+        coleqs = {n: self.column(v) for n, v in _coleqs.items()}
+        return self.clone(joins=[(
+            self._proc_view(view),
+            make_join_type(join_type),
+            self._proc_terms(*exprs, **coleqs)
+        )])
+
+    def inner_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: ColumnLike) -> 'ViewABC':
+        """ Make a INNER Joined View """
+        return self.join(JoinType.INNER, view, *exprs, **coleqs)
+
+    def left_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: ColumnLike) -> 'ViewABC':
+        """ Make a LEFT Joined View """
+        return self.join(JoinType.LEFT, view, *exprs, **coleqs)
+
+    def right_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: ColumnLike) -> 'ViewABC':
+        """ Make a RIGHT Joined View """
+        return self.join(JoinType.RIGHT, view, *exprs, **coleqs)
+
+    def outer_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: ColumnLike) -> 'ViewABC':
+        """ Make a OUTER Joined View """
+        return self.join(JoinType.OUTER, view, *exprs, **coleqs)
+
+    def cross_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: ColumnLike) -> 'ViewABC':
+        """ Make a CROSS Joined View """
+        return self.join(JoinType.CROSS, view, *exprs, **coleqs)
+
+    def __getitem__(self, val):
+
+        if isinstance(val, int):
+            return self.clone(offset=val, limit=1)
+
+        if isinstance(val, slice):
+            assert not val.step # TODO: Implementation
+            if val.start:
+                if val.stop:
+                    return self.clone(offset=val.start, limit=(val.stop-val.start))
+                return self.clone(offset=val.start)
+            else:
+                if val.stop:
+                    return self.clone(limit=val.stop)
+            return self
+
+        if isinstance(val, (bytes, str)):
+            return self.column(val)
+        
+        if isinstance(val, ExprABC):
+            return self.clone(where=val)
+
+        raise TypeError('Invalid type %s (%s)' % (type(val), val))
+
+    
+    def refresh_result(self) -> None:
+        self._result = self.db.select(
+            *self.iter_columns(),
+            froms  = self.get_froms(),
+            joins  = self.get_joins(),
+            where  = self.get_where(),
+            groups = self.get_groups(),
+            orders = self.get_orders(),
+            limit  = self.get_limit(),
+            offset = self.get_offset(),
+        )
+
+    def prepare_result(self) -> None:
+        if self._result is None:
+            return self.refresh_result()
+
+    @property
+    def is_result_ready(self) -> bool:
+        return self._result is not None
+
+    @property
+    def result(self):
+        self.prepare_result()
+        assert self._result is not None
+        return self._result
+
+    def __iter__(self):
+        return iter(self.result)
+
+    @classmethod
+    def _make_tuple(cls, t: Optional[Iterable]) -> tuple:
+        if t is None:
+            return ()
+        if isinstance(t, tuple):
+            return t
+        return tuple(t)
+
+    @classmethod
+    def _join_as_tuple(cls, t1: Optional[Iterable], t2: Optional[Iterable]) -> tuple:
+        if t1 is None:
+            return cls._make_tuple(t2)
+        if t2 is None:
+            return cls._make_tuple(t1)
+        return (*t1, *t2)
+
+    def _proc_view(self, viewlike: Union['ViewABC', Name]) -> 'ViewABC':
+        if isinstance(viewlike, ViewABC):
+            return viewlike
+        return self.database[viewlike]
+
+    def _proc_terms(self, *exprs: Optional[ExprABC], **coleqs: ExprABC) -> Optional[ExprABC]:
+        return OP.AND.call_joined_opt(
+            OP.AND.call_joined_opt(*exprs),
+            OP.AND.call_joined_opt(*(self.column(n) == v for n, v in coleqs.items()))
+        )
+
+    @abstractmethod
+    def _new_view(self, *args, **kwargs) -> 'ViewABC':
+        """ Make a new view with arguments """
+
+
+class View(ViewABC):
+    """ Table View """
+    def __init__(self,
+        *_columns: Optional[ObjectABC], 
+        database : Optional['Database'] = None,
+        name     : Optional[Name] = None,
+        froms    : Optional[Iterable[Union['View', Name]]] = None,
+        joins    : Optional[Iterable[Tuple[Union['View', Name], JoinLike, Optional[ExprABC]]]] = None,
+        where    : Optional[ExprABC] = None,
+        groups   : Optional[Iterable[Column]] = None,
+        orders   : Optional[Iterable[OrderedColumn]] = None,
+        limit    : Optional[int] = None,
+        offset   : Optional[int] = None,
+    ):
+        super().__init__(name or b'', database, *_columns)
+        self._froms  : Tuple['Table', ...] = self._make_tuple(froms)
+        self._joins  : Tuple[Tuple['Table', JoinType, ExprABC], ...] = self._make_tuple(joins)
+        self._where  : Optional[ExprABC] = where
+        self._groups : Tuple[Column, ...] = self._make_tuple(groups)
+        self._orders : Tuple[OrderedColumn, ...] = self._make_tuple(orders)
+        self._limit  : Optional[int] = limit
+        self._offset : Optional[int] = offset
+
+    def get_froms(self):
+        return self._froms
+
+    def get_joins(self):
+        return self._joins
+
+    def get_where(self) -> Optional[ExprABC]:
+        return self._where
+
+    def get_groups(self) -> Optional[Iterable[Column]]:
+        return self._groups
+
+    def get_orders(self) -> Optional[Iterable[OrderedColumn]]:
+        return self._orders
+
+    def get_limit(self) -> Optional[int]:
+        return self._limit
+
+    def get_offset(self) -> Optional[int]:
+        return self._offset
+
+    def _new_view(self, *args, **kwargs) -> 'ViewABC':
+        return View(*args, **kwargs)
+
+
+class SingleView(View):
+    """ Single result view """
+
+    @property
+    def result(self):
+        return super().result[0]
+
+    def __dict__(self):
+        return dict(self.result)
+
+    def __iter__(self):
+        return iter(self.result)
+
+    def __getitem__(self, val):
+
+        if isinstance(val, (bytes, str)):
+            val = val if isinstance(val, bytes) else val.encode()
+            return self.result[val]
+
+        return super().__getitem__(val)
+
+    def _new_view(self, *args, **kwargs) -> 'View':
+        return SingleView(*args, **kwargs)
 
 
 class Table(ViewABC):
     """ Table Expr """
 
     def __init__(self,
-        name: NameLike,
+        name: Name,
         database: Optional['Database'] = None,
         *columns: ObjectABC,
         # **options
@@ -256,7 +538,10 @@ class Table(ViewABC):
     def __repr__(self):
         return 'Table(%s)' % str(self)
 
-    def append_column(self, column: Column) -> None:
+    def append_column(self, column: ObjectABC) -> None:
+        if not isinstance(column, Column):
+            raise RuntimeError('Invalid argument type %s (%s)' % (type(column), column))
+
         if column.table_or_none:
             if not column.table == self:
                 raise RuntimeError('Column of the different table.')
@@ -309,6 +594,12 @@ class Table(ViewABC):
         """ Run DELETE query """
         return self.cnx.delete(self, **options)
 
+    def get_froms(self):
+        return (self,)
+        
+    def _new_view(self, *args, **kwargs) -> 'ViewABC':
+        return View(*args, **kwargs)
+
 
 TableLike = Union[str, bytes, Table]
 
@@ -321,7 +612,7 @@ class ForeignKeyReference(Object):
         *,
         on_delete: Optional[ReferenceOption] = None,
         on_update: Optional[ReferenceOption] = None,
-        name: Optional[NameLike] = None
+        name: Optional[Name] = None
     ):
         super().__init__(name or b'')
         

@@ -3,7 +3,7 @@
 """
 from typing import TYPE_CHECKING, Any, Dict, Optional, List, Tuple, Set
 
-from .schema import Object, Table, TableLike, NameLike
+from .schema import Object, Table, TableLike, Name
 from .syntax.expr_type import ExprABC, ObjectABC
 from .schema import Table, TableLike, Column, ColumnLike, OrderedColumn, iter_tables
 from .syntax.keywords import JoinType, make_join_type
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class Database(Object):
     """ Database Expr """
 
-    def __init__(self, name: NameLike, *tables: Table, cnx: Optional['ConnectionABC'] = None, **options):
+    def __init__(self, name: Name, *tables: Table, cnx: Optional['ConnectionABC'] = None, **options):
         super().__init__(name)
         self._table_specified = bool(tables)
         self._table_dict: Dict[bytes, Table] = {}
