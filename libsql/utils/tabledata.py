@@ -6,8 +6,10 @@ from typing import Any, Iterator, List, Tuple, Union
 
 TABLE_REPR_LIMIT = 100
 
+RowType = tuple
+
 class TableData:
-    def __init__(self, columns: Union[List[str], 'ColumnMetadata'], rows: List[list]) -> None:
+    def __init__(self, columns: Union[List[str], 'ColumnMetadata'], rows: List[RowType]) -> None:
         """ Create a table data.
 
         Args:
@@ -15,6 +17,10 @@ class TableData:
             rows (List[list]): List of rows (values of columns)
         """
         self._col_meta = columns if isinstance(columns, ColumnMetadata) else ColumnMetadata(columns)
+        
+        if not (isinstance(rows, list) and all(isinstance(row, RowType) for row in rows)):
+            raise TypeError('Invalid type of arguments.')
+
         self._rows = rows
 
     def __iter__(self) -> Iterator['RowData']:
@@ -54,11 +60,22 @@ class TableData:
         for row in iter(self):
             yield dict(row.items())
 
+    def rows_values_list(self):
+        return list(self.iter_rows_values())
+
+    def rows_dict_list(self):
+        return list(self.iter_rows_dict())
+
     def __len__(self):
         return len(self._rows)
 
     def __getitem__(self, value):
         return RowData(self._col_meta, self._rows[value])
+
+    def __eq__(self, val) -> bool:
+        if not isinstance(val, TableData):
+            return NotImplemented
+        return self._col_meta == val._col_meta and self._rows == val._rows
 
     def make_html(self) -> str:
         return '<TABLE>\n' \
@@ -116,12 +133,12 @@ class ColumnMetadata:
 
 
 class RowData:
-    def __init__(self, column_metadata: ColumnMetadata, row: list) -> None:
+    def __init__(self, column_metadata: ColumnMetadata, row: RowType) -> None:
         """ Create a row data.
 
         Args:
             column_metadata (ColumnMetadata): Column metadata.
-            row (list): Row data (values of columns)
+            row (RowType): Row data (values of columns)
         """
         self._col_meta = column_metadata
         self._row = row
