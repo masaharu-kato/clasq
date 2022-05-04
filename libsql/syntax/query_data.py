@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Iterable, Optional, Union
 
 from .expr_abc import ExprABCBase
-from .keywords import Value
+from .values import NULL, is_value_type
 
 
 class QueryData:
@@ -43,11 +43,10 @@ class QueryData:
                 self._stmt += _SPACE
             self._stmt += stmt 
         if prms:
-            for _prm in prms:
-                prm = None if _prm == Value.NULL else _prm
-                if not (prm is None or isinstance(prm, (bool, int, float, str))):
+            for prm in prms:
+                if not is_value_type(prm):
                     raise TypeError('Invalid parameter value type %s (%s)' % (type(prm), repr(prm)))
-                self._prms.append(prm)
+                self._prms.append(None if prm == NULL else prm)
         return self
 
     def _append_qd(self, qd: 'QueryData') -> 'QueryData':
@@ -85,14 +84,14 @@ class QueryData:
             val.append_query_data(self)
             return self
 
-        if isinstance(val, (bool, int, float, str, Value)):
+        if isinstance(val, bytes):
+            return self._append(val, prms)
+
+        if is_value_type(val):
             return self.append_value(val)
 
         if isinstance(val, Enum):
             return self.append_one(val.value)
-
-        if isinstance(val, bytes):
-            return self._append(val, prms)
 
         if isinstance(val, tuple):
             return self.append(*val)

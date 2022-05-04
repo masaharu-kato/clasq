@@ -31,15 +31,6 @@ class ReferenceOption(KeywordABC, Enum):
     NO_ACTION = b'NO_ACTION'
 
 
-class Value(KeywordABC, Enum):
-    """ Where operations """
-    NULL = b'NULL'
-    NOT_NULL = b'NOT NULL'
-    EVAL_TRUE = b'EVAL_TRUE'
-    EVAL_FALSE = b'EVAL_FALSE'
-    EVAL_FALSE_OR_NULL = b'EVAL_FALSE_OR_NULL'
-
-
 JoinLike = Union[JoinType, bytes, str]
 
 def make_join_type(val: JoinLike):

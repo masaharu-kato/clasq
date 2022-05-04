@@ -5,6 +5,9 @@ from typing import Optional, Union
 import datetime
 from .expr_type import ExprABC as Ext, Func, NoArgsFunc, OP, BasicFunc
 
+DateLike = Union[datetime.date, datetime.datetime]
+TimeLike = Union[datetime.datetime, datetime.time]
+
 class FunctionsABC():
     """ Functions ABC """
 
@@ -24,11 +27,11 @@ class Math(FunctionsABC):
     MOD_OP_  = OP.MOD_
     ABS      = BasicFunc.ABS
     ACOS     = Func(b'ACOS'   , [float], float)
-    ATAN     = Func(b'ATAN'   , [float, Optional[float]], float)
+    ATAN     = Func(b'ATAN'   , [float, (float, float)], float)
     ATAN2    = Func(b'ATAN2'  , [float, float], float)
     CEIL     = BasicFunc.CEIL
     CEILING  = Func(b'CEILING', [float], float)
-    CONV     = Func(b'CONV'   , [Ext, int, int], float)
+    CONV     = Func(b'CONV'   , [(Ext, int, int)], float)
     COS      = Func(b'COS'    , [float], float)
     COT      = Func(b'COT'    , [float], float)
     CRC32    = Func(b'CRC32'  , [float], float)
@@ -36,7 +39,7 @@ class Math(FunctionsABC):
     EXP      = Func(b'EXP'    , [float], float)
     FLOOR    = BasicFunc.FLOOR
     LN       = Func(b'LN'     , [float], float)
-    LOG      = Func(b'LOG'    , [float, Optional[float]], float)
+    LOG      = Func(b'LOG'    , [float, (float, float)], float)
     LOG10    = Func(b'LOG10'  , [float], float)
     LOG2     = Func(b'LOG2'   , [float], float)
     MOD      = Func(b'MOD'    , [int, int], float)
@@ -44,8 +47,8 @@ class Math(FunctionsABC):
     POW      = Func(b'POW'    , [float, float], float)
     POWER    = Func(b'POWER'  , [float, float], float)
     RADIANS  = Func(b'RADIANS', [float], float)
-    RAND     = Func(b'RAND'   , [Optional[int]], float)
-    ROUND    = Func(b'ROUND'  , [float, Optional[int]], float)
+    RAND     = Func(b'RAND'   , [(), int], float)
+    ROUND    = BasicFunc.ROUND,
     SIGN     = Func(b'SIGN'   , [float], int)
     SIN      = Func(b'SIN'    , [float], float)
     SQRT     = Func(b'SQRT'   , [float], float)
@@ -64,36 +67,36 @@ class DateTime(FunctionsABC):
     CURRENT_TIME_   = NoArgsFunc(b'CURRENT_TIME', datetime.time)
     CURRENT_TIMESTAMP = Func(b'CURRENT_TIMESTAMP', [], datetime.time)
     DATE            = Func(b'DATE', [Ext], datetime.date)
-    DATEDIFF        = Func(b'DATEDIFF', [Ext, Ext], int)
-    DATE_ADD        = Func(b'DATE_ADD', [Ext, int], Ext)
-    DATE_SUB        = Func(b'DATE_SUB', [Ext, int], Ext)
+    DATEDIFF        = Func(b'DATEDIFF', [(Ext, Ext)], int)
+    DATE_ADD        = Func(b'DATE_ADD', [(Ext, int)], Ext)
+    DATE_SUB        = Func(b'DATE_SUB', [(Ext, int)], Ext)
     DATE_FORMAT     = Func(b'DATE_FORMAT')
-    DAY             = Func(b'DAY', [Union[datetime.date, datetime.datetime]], int)
-    DAYOFMONTH      = Func(b'DAYOFMONTH', [Union[datetime.date, datetime.datetime]], int)
-    DAYNAME         = Func(b'DAYNAME', [Union[datetime.date, datetime.datetime]], str)
-    DAYOFWEEK       = Func(b'DAYOFWEEK', [Union[datetime.date, datetime.datetime]], int)
-    DAYOFYEAR       = Func(b'DAYOFYEAR', [Union[datetime.date, datetime.datetime]], int)
+    DAY             = Func(b'DAY', [DateLike], int)
+    DAYOFMONTH      = Func(b'DAYOFMONTH', [DateLike], int)
+    DAYNAME         = Func(b'DAYNAME', [DateLike], str)
+    DAYOFWEEK       = Func(b'DAYOFWEEK', [DateLike], int)
+    DAYOFYEAR       = Func(b'DAYOFYEAR', [DateLike], int)
     EXTRACT         = Func(b'EXTRACT')
     FROM_DAYS       = Func(b'FROM_DAYS')
     FROM_UNIXTIME   = Func(b'FROM_UNIXTIME')
     GET_FORMAT      = Func(b'GET_FORMAT')
-    HOUR            = Func(b'HOUR', [Union[datetime.datetime, datetime.time]], int)
+    HOUR            = Func(b'HOUR', [TimeLike], int)
     LAST_DAY        = Func(b'LAST_DAY')
     LOCALTIME       = Func(b'LOCALTIME')
     LOCALTIMESTAMP  = Func(b'LOCALTIMESTAMP')
     MICROSECOND     = Func(b'MICROSECOND')
-    MINUTE          = Func(b'MINUTE', [Union[datetime.datetime, datetime.time]], int)
-    MONTH           = Func(b'MONTH', [Union[datetime.date, datetime.datetime]], int)
-    MONTHNAME       = Func(b'MONTHNAME', [Union[datetime.date, datetime.datetime]], str)
+    MINUTE          = Func(b'MINUTE', [TimeLike], int)
+    MONTH           = Func(b'MONTH', [DateLike], int)
+    MONTHNAME       = Func(b'MONTHNAME', [DateLike], str)
     NOW             = Func(b'NOW', [int], datetime.datetime)
     PERIOD_ADD      = Func(b'PERIOD_ADD')
     PERIOD_DIFF     = Func(b'PERIOD_DIFF')
     QUARTER         = Func(b'QUARTER')
-    SECOND          = Func(b'SECOND', [Union[datetime.datetime, datetime.time]], int)
+    SECOND          = Func(b'SECOND', [TimeLike], int)
     SEC_TO_TIME     = Func(b'SEC_TO_TIME')
     STR_TO_DATE     = Func(b'STR_TO_DATE')
     SUBTIME         = Func(b'SUBTIME')
-    TIME            = Func(b'TIME', [Union[datetime.datetime, datetime.time]], datetime.time)
+    TIME            = Func(b'TIME', [TimeLike], datetime.time)
     TIMEDIFF        = Func(b'TIMEDIFF')
     TIMESTAMP       = Func(b'TIMESTAMP')
     TIMESTAMPADD    = Func(b'TIMESTAMPADD')
@@ -106,11 +109,11 @@ class DateTime(FunctionsABC):
     UTC_DATE        = Func(b'UTC_DATE')
     UTC_TIME        = Func(b'UTC_TIME')
     UTC_TIMESTAMP   = Func(b'UTC_TIMESTAMP')
-    WEEK            = Func(b'WEEK', [Union[datetime.date, datetime.datetime], Optional[int]], int)
-    WEEKDAY         = Func(b'WEEKDAY', [Union[datetime.date, datetime.datetime]], int)
-    WEEKOFYEAR      = Func(b'WEEKOFYEAR', [Union[datetime.date, datetime.datetime]], int)
-    YEAR            = Func(b'YEAR', [Union[datetime.date, datetime.datetime]], int)
-    YEARWEEK        = Func(b'YEARWEEK', [Union[datetime.date, datetime.datetime]], int)
+    WEEK            = Func(b'WEEK', [DateLike, Optional[int]], int)
+    WEEKDAY         = Func(b'WEEKDAY', [DateLike], int)
+    WEEKOFYEAR      = Func(b'WEEKOFYEAR', [DateLike], int)
+    YEAR            = Func(b'YEAR', [DateLike], int)
+    YEARWEEK        = Func(b'YEARWEEK', [DateLike], int)
 
 # BETWEEN = 'BETWEEN'
 # COUNT(DISTINCT)
@@ -200,8 +203,8 @@ class String(FunctionsABC):
     WEIGHT_STRING = Func(b'WEIGHT_STRING')
 
 class XML(FunctionsABC):
-    ExtractValue = Func(b'ExtractValue', [Ext, Ext], Ext)
-    UpdateXML = Func(b'UpdateXML', [str, str, str], Ext)
+    ExtractValue = Func(b'ExtractValue', [(Ext, Ext)], Ext)
+    UpdateXML = Func(b'UpdateXML', [(str, str, str)], Ext)
 
 class Bit(FunctionsABC):
     AND_OP  = OP.BIT_AND_OP

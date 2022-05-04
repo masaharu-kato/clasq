@@ -2,27 +2,31 @@
     Definition ExprType class and subclasses
 """
 from abc import abstractmethod, abstractproperty
-from typing import Iterator, List, Optional, TYPE_CHECKING, Tuple, Union
+from typing import Any, Iterator, List, Optional, TYPE_CHECKING, Tuple, Union, Type
 
 from . import errors
 from .expr_abc import ExprABCBase, FuncABCBase
-from .keywords import OrderType, Value
+from .keywords import OrderType
+from .values import NULL, ValueType, is_value_type
 
 if TYPE_CHECKING:
     from .query_data import QueryData
-    from ..schema import Column
 
 
 class FuncABC(FuncABCBase):
     """ Func Type """
 
-    def call(self, *args) -> 'FuncExpr':
+    def call(self, *args: 'ExprLike') -> 'FuncExpr':
         """ Returns an expression representing a call to this function
 
         Returns:
             FuncExpr: Function call expression
         """
         return FuncExpr(self, *args)
+
+    @abstractmethod
+    def repr_with_args(self, args: Tuple[ExprABCBase, ...]) -> str:
+        """ Get a statement data of this function with a given list of arguments """
 
 
 class NoArgsFuncABC(FuncABC):
@@ -35,35 +39,46 @@ class NoArgsFuncABC(FuncABC):
     def returntype(self):
         return self._returntype
 
+    def repr_with_args(self, args: Tuple[ExprABCBase, ...]) -> str:
+        """ Get a statement data of this function with a given list of arguments
+            (Overrided from `FuncABC` class)
+        """
+        return str(self)
+
 
 class Func(NoArgsFuncABC):
     """ Function """
-    def __init__(self, name: bytes, argtypes: Optional[list] = None, returntype=None):
+    def __init__(self,
+        name: bytes, argsets: Optional[List[Union[Type, Tuple[Type, ...]]]] = None,
+        returntype=None
+    ):
         super().__init__(name, returntype)
-        self._argtypes = argtypes
+        self._argsets: List[Tuple[Type, ...]] = (
+            [argset if isinstance(argset, tuple) else (argset,) for argset in argsets]
+            if argsets is not None else [])
 
     @property
     def argtypes(self):
-        return self._argtypes
+        return self._argsets
 
     def check_args(self, args: Tuple[ExprABCBase, ...]) -> None:
         """ Check the arguments """
-        # if self._argtypes is not None and len(self._argtypes) != len(args):
-        #     raise RuntimeError('Invalid arguments.')
-        # TODO: Check types
+        if self._argsets:
+            if not any(len(argset) == len(args) for argset in self._argsets):
+                raise errors.ObjectArgNumError('Invalid number of arguments.')
+        # TODO: Check argument types
 
 
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprABCBase, ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         self.check_args(args)
-        qd.append(self._name + b'(', args, b')')
+        qd.append(self._name + b'(', list(args), b')')
 
     def __repr__(self):
-        return str(self) + '(' + ','.join(repr(t) for t in self._argtypes) if self._argtypes else '' + ')'
+        return str(self) + '(' + ','.join(repr(t) for t in self._argsets) if self._argsets else '' + ')'
 
     def repr_with_args(self, args: Tuple[ExprABCBase, ...]) -> str:
         """ Get a statement data of this function with a given list of arguments (Override) """
-        self.check_args(args)
         return str(self) + '(' + ', '.join(map(repr, args)) + ')'
 
 
@@ -85,6 +100,9 @@ class OpABC(Func):
 
 class UnaryOp(OpABC):
     """ Unary Op """
+    
+    def __init__(self, name: bytes, plv: Optional[int] = None):
+        super().__init__(name, [Any], Any, plv)
 
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprABCBase, ...]) -> None:
         """ Get a statement data of this function with a given list of arguments
@@ -126,7 +144,7 @@ class CalcBinaryOp(BinaryOp):
     """ Calculation Binary Operator """
     
     def __init__(self, name: bytes, plv: Optional[int] = None):
-        super().__init__(name, [ExprABC, ExprABC], ExprABC, plv)
+        super().__init__(name, None, ExprABC, plv)
 
 
 class CompareBinaryOp(BinaryOp):
@@ -138,6 +156,12 @@ class CompareBinaryOp(BinaryOp):
     def call(self, *args) -> 'FuncExpr':
         if not len(args) == 2:
             raise errors.ObjectArgsError('Invalid number of arguments.', args)
+        return super().call(*(map(self._proc_value, args)))
+
+    def _proc_value(self, arg):
+        if arg is None:
+            return NULL
+        return arg
 
 
 class ExprABC(ExprABCBase):
@@ -255,15 +279,15 @@ class ExprABC(ExprABCBase):
 
     def __rand__(self, y):
         """ Logical AND operator (reverse) """
-        return self.rfunc(OP.AND, y)
+        return OP.AND.call(y, self)
 
     def __rxor__(self, y):
         """ Logical XOR operator (reverse) """
-        return self.rfunc(OP.XOR, y)
+        return OP.XOR.call(y, self)
 
     def __ror__(self, y):
         """ Logical OR operator (reverse) """
-        return self.rfunc(OP.OR, y)
+        return OP.OR.call(y, self)
 
     def __neg__(self):
         """ Minus (negative) operator """
@@ -289,18 +313,18 @@ class ExprABC(ExprABCBase):
         """ FLOOR function """
         return BasicFunc.FLOOR.call(self)
 
+    def __round__(self, ndigits: int = 0):
+        return BasicFunc.ROUND.call(self, ndigits)
+
     def __trunc__(self):
         """ TRUNCATE function """
-        return BasicFunc.TRUNCATE.call(self)
+        return BasicFunc.TRUNCATE_0.call(self)
 
     # def __int__(self):
     #     return self.infunc('int')
 
     # def __float__(self):
     #     return self.infunc('float')
-
-    # def __round__(self):
-    #     return self.infunc('round')
 
     # def __complex__(self):
     #     return self.infunc('complex')
@@ -332,15 +356,15 @@ class ExprABC(ExprABCBase):
 
     def is_null(self):
         """ IS NULL operator """
-        return OP.IS.call(self, Value.NULL)
+        return OP.IS.call(self, NULL)
 
     def is_not_null(self):
         """ IS NOT NULL operator """
-        return OP.IS_NOT.call(self, Value.NULL)
+        return OP.IS_NOT.call(self, NULL)
 
-    def in_(self, expr):
+    def in_(self, *exprs):
         """ IN operator """
-        return OP.IN.call(self, expr)
+        return OP.IN.call(self, *exprs)
 
     def like(self, expr):
         """ LIKE operator """
@@ -359,47 +383,53 @@ class ExprABC(ExprABCBase):
         return OP.NOT.call(self)
 
     def abs(self):
-        """ ABS function """
+        """ call ABS function """
         return BasicFunc.ABS.call(self)
 
     def ceil(self):
-        """ CEIL function """
+        """ call CEIL function """
         return BasicFunc.CEIL.call(self)
 
     def floor(self):
-        """ FLOOR function """
+        """ call FLOOR function """
         return BasicFunc.FLOOR.call(self)
 
-    def truncate(self):
-        """ TRUNCATE function """
-        return BasicFunc.TRUNCATE.call(self)
+    def round(self, ndigits: int = 0):
+        """ call ROUND function """
+        return BasicFunc.ROUND.call(self, ndigits)
+
+    def truncate(self, ndigits: Optional[int] = None):
+        """ call TRUNCATE function """
+        if ndigits is None:
+            return BasicFunc.TRUNCATE_0.call(self)
+        return BasicFunc.TRUNCATE.call(self, ndigits)
 
     def avg(self):
-        """ AVG function """
+        """ call AVG function """
         return BasicFunc.AVG.call(self)
 
     def count(self):
-        """ COUNT function """
+        """ call COUNT function """
         return BasicFunc.COUNT.call(self)
 
     def max(self):
-        """ MAX function """
+        """ call MAX function """
         return BasicFunc.MAX.call(self)
 
     def min(self):
-        """ MIN function """
+        """ call MIN function """
         return BasicFunc.MIN.call(self)
 
     def stddev(self):
-        """ STDDEV function """
+        """ call STDDEV function """
         return BasicFunc.STDDEV.call(self)
 
     def sum(self):
-        """ SUM function """
+        """ call SUM function """
         return BasicFunc.SUM.call(self)
 
     def variance(self):
-        """ VARIANCE function """
+        """ call VARIANCE function """
         return BasicFunc.VARIANCE.call(self)
         
     def aliased(self, alias: Union[bytes, str]) -> 'Aliased':
@@ -412,12 +442,17 @@ class ExprABC(ExprABCBase):
         """
         return self.aliased(alias)
 
+ExprLike = Union['ExprABC', ValueType]
+
+def is_expr_like(value) -> bool:
+    return isinstance(value, ExprABC) or is_value_type(value)
+
 
 class Expr(ExprABC):
     """ Expression objerct with any value """
     def __init__(self, val):
-        if not (val is None or isinstance(val, (Expr, bool, int, float, str))):
-            raise RuntimeError('Invalid value type %s: (%s)' % (type(val), repr(val)))
+        if not (isinstance(val, ExprABC) or is_value_type(val)):
+            raise errors.ObjectArgTypeError('Invalid value type %s: (%s)' % (type(val), repr(val)))
         self._v = val.v if isinstance(val, Expr) else val
 
     @property
@@ -434,9 +469,16 @@ class Expr(ExprABC):
 
 class FuncExpr(ExprABC): 
     """ General expression class """
-    def __init__(self, func: FuncABC, *args):
+    def __init__(self, func: FuncABC, *args: ExprLike):
+        """ init """
+        if not isinstance(func, FuncABC):
+            raise errors.ObjectArgTypeError('Invalid function type.')
+        for i, arg in enumerate(args, 1):
+            if not is_expr_like(arg):
+                raise errors.ObjectArgTypeError('Argument #%d: Invalid type %s (%s)' % (i, type(arg), arg))
+
         self._func = func
-        self._args: Tuple[ExprABC, ...] = args
+        self._args: Tuple[ExprLike, ...] = args
 
     @property
     def func(self):
@@ -482,6 +524,14 @@ class ObjectABC(ExprABC):
     def q_create(self) -> tuple:
         """ Get a query for creation """
         return (self,) # Default implementation
+
+    # def __eq__(self, value) -> bool:
+    #     if isinstance(value, type(self)):
+    #         return self.name == value.name
+    #     return super().__eq__(value)
+
+    def __hash__(self) -> int:
+        return hash((type(self), self.name))
 
     def __repr__(self):
         return 'Obj(%s)' % str(self)
@@ -579,8 +629,8 @@ class OpIN(BinaryOp):
 
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprABCBase, ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
-        assert len(args) == 2 and isinstance(args[1], list)
-        qd.append(b'(', args[0], b'IN', b'(', args[1], b')', b')')
+        assert len(args) >= 2
+        qd.append(b'(', args[0], b'IN', b'(', list(args[1:]), b')', b')')
         # TODO: Priority
 
 
@@ -609,6 +659,18 @@ class OpCASE(BinaryOp):
             (b'ELSE', args[2]) if len(args) == 3 else None,
             b'END', b')'
         )
+        # TODO: Priority
+
+
+class TRUNCATE_0(Func):
+    """ TRUNCATE Operator (ndigits = 0) """
+    def __init__(self):
+        super().__init__(b'TRUNCATE', [float], float)
+
+    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprABCBase, ...]) -> None:
+        """ Get a statement data of this function with a given list of arguments (Override) """
+        assert len(args) == 1
+        qd.append(b'TRUNCATE(', args[0], b',', b'0', b')')
         # TODO: Priority
 
 
@@ -657,15 +719,15 @@ class OP:
     BETWEEN = OpBETWEEN()
     CASE    = OpCASE()
     
-    MINUS    = UnaryOp(b'-', [ExprABC], ExprABC, 4)
+    MINUS    = UnaryOp(b'-', plv=4)
 
-    BIT_INV  = UnaryOp(b'~', [ExprABC], ExprABC, 4)
-    NOT_OP   = UnaryOp(b'!', [ExprABC], ExprABC, 3)
+    BIT_INV  = UnaryOp(b'~', plv=4)
+    NOT_OP   = UnaryOp(b'!', plv=3)
 
-    NOT      = UnaryOp(b'NOT', [ExprABC], ExprABC, 13)
-    BINARY   = UnaryOp(b'BINARY', [ExprABC], ExprABC, 2)
+    NOT      = UnaryOp(b'NOT', plv=13)
+    BINARY   = UnaryOp(b'BINARY', plv=2)
 
-    JSON_EXTRACT_OP = BinaryOp(b'->', [ExprABC, ExprABC], str)
+    JSON_EXTRACT_OP = BinaryOp(b'->' , [ExprABC, ExprABC], str)
     JSON_UNQUOTE_OP = BinaryOp(b'->>', [ExprABC, ExprABC], str)
 
     MEMBER_OF = BinaryOp(b'MEMBER OF', [ExprABC, ExprABC], Optional[bool], 11)
@@ -674,10 +736,12 @@ class OP:
 class BasicFunc:
     """ Definition of basic functions """
 
-    ABS      = Func(b'ABS'    , [float], float)
-    CEIL     = Func(b'CEIL'   , [float], float)
-    FLOOR    = Func(b'FLOOR'  , [float], float)
-    TRUNCATE = Func(b'TRUNCATE', [float, int], float)
+    ABS      = Func(b'ABS'     , [float], float)
+    CEIL     = Func(b'CEIL'    , [float], float)
+    FLOOR    = Func(b'FLOOR'   , [float], float)
+    ROUND    = Func(b'ROUND'   , [float, (float, int)], float)
+    TRUNCATE = Func(b'TRUNCATE', [(float, int)], float)
+    TRUNCATE_0 = TRUNCATE_0()
 
     AVG = Func(b'AVG')
     COUNT = Func(b'COUNT')

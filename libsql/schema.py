@@ -141,7 +141,7 @@ class Column(Object, OrderedABC):
         return 'Col(%s)' % str(self)
 
 
-ColumnLike = Union[str, bytes, Column]
+ColumnLike = Union[str, bytes, ObjectABC]
 
 
 class OrderedColumn(OrderedABC):
@@ -420,6 +420,29 @@ class ViewABC(Object):
     def __iter__(self):
         return iter(self.result)
 
+    def __eq__(self, value):
+        if isinstance(value, TableData):
+            return self.result == value
+        return super().__eq__(value)
+
+    def check_equality(self, value: 'ViewABC') -> bool:
+        if not isinstance(value, ViewABC):
+            raise TypeError('Invalid value type.')
+        view = value
+        return [*self.iter_columns()] == [*view.iter_columns()] \
+            and self._database == view._database \
+            and self._name == view._name \
+            and self.get_froms()  == view.get_froms() \
+            and self.get_joins()  == view.get_joins() \
+            and self.get_where()  == view.get_where() \
+            and self.get_groups() == view.get_groups() \
+            and self.get_orders() == view.get_orders() \
+            and self.get_limit()  == view.get_limit() \
+            and self.get_offset() == view.get_offset()
+    
+    def __hash__(self) -> int:
+        return super().__hash__()
+
     @classmethod
     def _make_tuple(cls, t: Optional[Iterable]) -> tuple:
         if t is None:
@@ -550,7 +573,20 @@ class Table(ViewABC):
             column.set_table(self)
         return super().append_column(column)
 
-    def column(self, val: ColumnLike):
+    def column(self, val: ColumnLike) -> ObjectABC:
+        """ Get a column from this table
+
+        Args:
+            val (ColumnLike): The column name or the column object
+
+        Raises:
+            ObjectNotFoundError: The column with the specified name cannot be found on this table.
+            NotaSelfObjectError: The specified column object is not a column of this table.
+            ObjectArgumentsTypeError: The specified value is not a valid type.
+
+        Returns:
+            ObjectABC: The column object
+        """
 
         if isinstance(val, (bytes, str)):
             name = val.encode() if isinstance(val, str) else val
