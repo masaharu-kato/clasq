@@ -57,7 +57,7 @@ def test_select():
             (cates, 'INNER', prods['category_id'] == cates['id']),
             (sales, 'LEFT', sales['product_id'] == prods['id']),
         ],
-        where=[cates['id'].in_([3, 4])],
+        where=[cates['id'].in_(3, 4)],
         groups=[prods['id']],
         orders=[-sales_price, -sales_count, -prods['price']],
     )

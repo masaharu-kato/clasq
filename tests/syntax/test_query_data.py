@@ -40,7 +40,7 @@ from libsql.syntax.query_data import QueryData
     [abs  (Obj(b'expr')), (b'ABS(`expr`)', [])],
     [ceil (Obj(b'expr')), (b'CEIL(`expr`)', [])],
     [floor(Obj(b'expr')), (b'FLOOR(`expr`)', [])],
-    [trunc(Obj(b'expr')), (b'TRUNCATE(`expr`)', [])],
+    [trunc(Obj(b'expr')), (b'TRUNCATE(`expr`, 0)', [])],
 ])
 def test_expr_op(term, result):
     qd = QueryData(term)
