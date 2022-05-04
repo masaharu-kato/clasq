@@ -55,10 +55,8 @@ class Column(Object, OrderedABC):
         return self
 
     @property
-    def table(self) -> 'Table':
-        if self._table is None:
-            raise errors.ObjectNotSetError('Table is not set.')
-        return self._table
+    def view_or_none(self):
+        return self._view
 
     @property
     def table_or_none(self):
@@ -71,8 +69,10 @@ class Column(Object, OrderedABC):
         return self._view
 
     @property
-    def view_or_none(self):
-        return self._view
+    def table(self) -> 'Table':
+        if self._table is None:
+            raise errors.ObjectNotSetError('Table is not set.')
+        return self._table
 
     @property
     def database(self):

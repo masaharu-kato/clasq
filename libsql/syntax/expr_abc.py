@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Iterator, Tuple
 
 if TYPE_CHECKING:
     from .query_data import QueryData
-    from .expr_type import FuncExpr, Object
+    from .expr_type import ExprLike, FuncExpr, Object
 
 
 class ExprABCBase(ABC):
@@ -77,7 +77,7 @@ class FuncABCBase(ABC):
         return self.name.decode()
 
     @abstractmethod
-    def append_query_data_with_args(self, qd:'QueryData', args: Tuple[ExprABCBase, ...]) -> None:
+    def append_query_data_with_args(self, qd:'QueryData', args: Tuple['ExprLike', ...]) -> None:
         """ Append a statement data of this function with a given list of arguments
             (Abstract method)
         

@@ -4,9 +4,7 @@
 from typing import Optional, Union
 import datetime
 from .expr_type import ExprABC as Ext, Func, NoArgsFunc, OP, BasicFunc
-
-DateLike = Union[datetime.date, datetime.datetime]
-TimeLike = Union[datetime.datetime, datetime.time]
+from .values import DateLike, TimeLike
 
 class FunctionsABC():
     """ Functions ABC """

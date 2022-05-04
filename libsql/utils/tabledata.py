@@ -6,10 +6,9 @@ from typing import Any, Iterator, List, Tuple, Union
 
 TABLE_REPR_LIMIT = 100
 
-RowType = tuple
 
 class TableData:
-    def __init__(self, columns: Union[List[str], 'ColumnMetadata'], rows: List[RowType]) -> None:
+    def __init__(self, columns: Union[List[str], 'ColumnMetadata'], rows: List[tuple]) -> None:
         """ Create a table data.
 
         Args:
@@ -18,7 +17,7 @@ class TableData:
         """
         self._col_meta = columns if isinstance(columns, ColumnMetadata) else ColumnMetadata(columns)
         
-        if not (isinstance(rows, list) and all(isinstance(row, RowType) for row in rows)):
+        if not (isinstance(rows, list) and all(isinstance(row, tuple) for row in rows)):
             raise TypeError('Invalid type of arguments.')
 
         self._rows = rows
@@ -133,12 +132,12 @@ class ColumnMetadata:
 
 
 class RowData:
-    def __init__(self, column_metadata: ColumnMetadata, row: RowType) -> None:
+    def __init__(self, column_metadata: ColumnMetadata, row: tuple) -> None:
         """ Create a row data.
 
         Args:
             column_metadata (ColumnMetadata): Column metadata.
-            row (RowType): Row data (values of columns)
+            row (tuple): Row data (values of columns)
         """
         self._col_meta = column_metadata
         self._row = row

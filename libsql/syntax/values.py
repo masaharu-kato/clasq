@@ -11,6 +11,9 @@ Date = datetime.date
 Time = datetime.time
 DateTime = datetime.datetime
 
+DateLike = Union[Date, DateTime]
+TimeLike = Union[DateTime, Time]
+
 class Value(KeywordABC, Enum):
     """ Special values """
     NULL = b'NULL'
