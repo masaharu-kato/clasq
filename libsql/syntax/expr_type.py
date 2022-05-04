@@ -4,6 +4,7 @@
 from abc import abstractmethod, abstractproperty
 from typing import Iterator, List, Optional, TYPE_CHECKING, Tuple, Union
 
+from . import errors
 from .expr_abc import ExprABCBase, FuncABCBase
 from .keywords import OrderType, Value
 
@@ -136,8 +137,7 @@ class CompareBinaryOp(BinaryOp):
 
     def call(self, *args) -> 'FuncExpr':
         if not len(args) == 2:
-            raise RuntimeError('Invalid number of arguments.', args)
-        return super().call(*(Value.NULL if arg is None else arg for arg in args))
+            raise errors.ObjectArgumentsError('Invalid number of arguments.', args)
 
 
 class ExprABC(ExprABCBase):

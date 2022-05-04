@@ -8,6 +8,7 @@ from .syntax.keywords import JoinType, JoinLike, make_join_type, OrderType, Refe
 from .syntax.sqltypebases import SQLType
 from .syntax.expr_type import ExprABC, Name, ObjectABC, Object, OrderedABC, OP
 from .syntax.query_data import QueryData
+from .syntax import errors
 from .utils.tabledata import TableData
 
 if TYPE_CHECKING:
@@ -56,7 +57,7 @@ class Column(Object, OrderedABC):
     @property
     def table(self) -> 'Table':
         if self._table is None:
-            raise RuntimeError('Table is not set.')
+            raise errors.ObjectNotSetError('Table is not set.')
         return self._table
 
     @property
@@ -104,7 +105,7 @@ class Column(Object, OrderedABC):
     def set_table(self, table: 'Table') -> None:
         """ Set a table object """
         if self._table is not None:
-            raise RuntimeError('Table already set.')
+            raise errors.ObjectAlreadySetError('Table already set.')
         self._table = table
     
     def q_create(self) -> tuple:
@@ -192,7 +193,7 @@ class ViewABC(Object):
     @property
     def database(self):
         if self._database is None:
-            raise RuntimeError('Database is not set.')
+            raise errors.ObjectNotSetError('Database is not set.')
         return self._database
 
     @property
@@ -219,7 +220,7 @@ class ViewABC(Object):
     def set_database(self, database: 'Database') -> None:
         """ Set a table object """
         if self._database is not None:
-            raise RuntimeError('Database already set.')
+            raise errors.ObjectAlreadySetError('Database already set.')
         self._database = database
 
     def column(self, val: ColumnLike):
@@ -230,15 +231,15 @@ class ViewABC(Object):
                 if not self.column_specified:
                     self._column_dict[name] = Column(name, view=self)
                 else:
-                    raise KeyError('Undefined column name `%r` on view `%r`' % (name, self._name))
+                    raise errors.ObjectNotFoundError('Undefined column name `%r` on view `%r`' % (name, self._name))
             return self._column_dict[name]
             
         if isinstance(val, Column):
             if val.view_or_none == self:
                 return val
-            raise RuntimeError('Not a column of this view.')
+            raise errors.NotaSelfObjectError('Not a column of this view.')
 
-        raise TypeError('Invalid type %s (%s)' % (type(val), val))
+        raise errors.ObjectArgumentsTypeError('Invalid type %s (%s)' % (type(val), val))
 
     def col(self, val: ColumnLike):
         return self.column(val)
@@ -540,11 +541,11 @@ class Table(ViewABC):
 
     def append_column(self, column: ObjectABC) -> None:
         if not isinstance(column, Column):
-            raise RuntimeError('Invalid argument type %s (%s)' % (type(column), column))
+            raise errors.ObjectArgumentsTypeError('Invalid argument type %s (%s)' % (type(column), column))
 
         if column.table_or_none:
             if not column.table == self:
-                raise RuntimeError('Column of the different table.')
+                raise errors.NotaSelfObjectError('Column of the different table.')
         else:
             column.set_table(self)
         return super().append_column(column)
@@ -557,15 +558,15 @@ class Table(ViewABC):
                 if not self.column_specified:
                     self._column_dict[name] = Column(name, table=self)
                 else:
-                    raise KeyError('Undefined column name `%r` on table `%r`' % (name, self._name))
+                    raise errors.ObjectNotFoundError('Unknown column name `%r` on table `%r`' % (name, self._name))
             return self._column_dict[name]
             
-        if isinstance(val, Column):
+        if isinstance(val, ObjectABC):
             if val.table_or_none == self:
                 return val
-            raise RuntimeError('Not a column of this table.')
+            raise errors.NotaSelfObjectError('Not a column of this table.')
 
-        raise TypeError('Invalid type %s (%s)' % (type(val), val))
+        raise errors.ObjectArgumentsTypeError('Invalid type %s (%s)' % (type(val), val))
         
     def q_select(self) -> tuple:
         return (self, b'.*')

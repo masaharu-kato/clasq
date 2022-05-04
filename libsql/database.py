@@ -7,6 +7,7 @@ from .schema import Object, Table, TableLike, Name
 from .syntax.expr_type import ExprABC, ObjectABC
 from .schema import Table, TableLike, Column, ColumnLike, OrderedColumn, iter_tables
 from .syntax.keywords import JoinType, make_join_type
+from .syntax import errors
 from .utils.tabledata import TableData
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ class Database(Object):
     @property
     def cnx(self):
         if self._cnx is None:
-            raise RuntimeError('Connection is not set.')
+            raise errors.ObjectNotSetError('Connection is not set.')
         return self._cnx
 
     @property
@@ -56,15 +57,15 @@ class Database(Object):
                 if not self.table_specified:
                     self._table_dict[name] = Table(name, database=self)
                 else:
-                    raise KeyError('Undefined column name `%r` on table `%r`' % (name, self._name))
+                    raise errors.ObjectNotFoundError('Undefined column name `%r` on table `%r`' % (name, self._name))
             return self._table_dict[name] 
 
         if isinstance(val, Table):
             if val.database == self:
                 return val
-            raise RuntimeError('Not a table of this database.')
+            raise errors.NotaSelfObjectError('Not a table of this database.')
 
-        raise TypeError('Invalid type %s (%s)' % (type(val), val))
+        raise errors.ObjectArgumentsError('Invalid type %s (%s)' % (type(val), val))
         
     def __getitem__(self, val: TableLike):
         return self.table(val)
@@ -72,7 +73,7 @@ class Database(Object):
     def append_table(self, table: Table) -> None:
         if table.database_or_none:
             if not table.database == self:
-                raise RuntimeError('Table of the different database.')
+                raise errors.NotaSelfObjectError('Table of the different database.')
         else:
             table.set_database(self)
         self._table_dict[table.name] = table
@@ -131,7 +132,7 @@ class Database(Object):
         used_tables = set(iter_tables(*columns_or_tables))
         from_tables.extend(used_tables - specified_tables)
         if not from_tables:
-            raise RuntimeError('No tables specified for `from.`')
+            raise errors.ObjectNotSpecifiedError('No tables specified for `from.`')
 
         return self.query(
             b'SELECT',
