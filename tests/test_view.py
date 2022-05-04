@@ -3,6 +3,7 @@
 """
 import libsql
 from libsql.utils.tabledata import TableData
+from libsql.syntax.keywords import OrderType
 
 def test_view_1():
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
@@ -30,6 +31,10 @@ def test_view_1():
             (5, 'Mouse'),
         ]
     )
+
+    assert categories.order_by(name=True) == ordered_categories.result
+    assert categories.order_by(name='ASC') == ordered_categories.result
+    assert categories.order_by(name=OrderType.ASC) == ordered_categories.result
 
 
     products = db['products']

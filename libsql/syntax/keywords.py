@@ -31,6 +31,22 @@ class ReferenceOption(KeywordABC, Enum):
     NO_ACTION = b'NO_ACTION'
 
 
+OrderLike = Union[OrderType, bool, bytes, str]
+
+def make_order_type(val: OrderLike):
+    if isinstance(val, OrderType):
+        return val
+    if val is True:
+        return OrderType.ASC
+    if val is False:
+        return OrderType.DESC
+    if isinstance(val, str):
+        return OrderType(val.encode().upper())
+    if isinstance(val, bytes):
+        return OrderType(val.upper())
+    raise TypeError('Invalid type %s (%s)' % (type(val), val))
+
+
 JoinLike = Union[JoinType, bytes, str]
 
 def make_join_type(val: JoinLike):

@@ -1,11 +1,10 @@
 """
     Definition ExprType class and subclasses
 """
-from abc import abstractmethod, abstractproperty
+from abc import ABC, abstractmethod, abstractproperty
 from typing import Any, Iterator, List, Optional, TYPE_CHECKING, Tuple, Union, Type
 
 from . import errors
-from .expr_abc import ExprABCBase, FuncABCBase
 from .keywords import OrderType
 from .values import NULL, ValueType, is_value_type
 
@@ -14,8 +13,12 @@ if TYPE_CHECKING:
     from .query_data import QueryData
 
 
-class FuncABC(FuncABCBase):
-    """ Func Type """
+class FuncABC(ABC):
+    """ Function ABC """
+
+    def __init__(self, name: bytes):
+        assert isinstance(name, bytes)
+        self._name = name
 
     def call(self, *args: 'ExprLike') -> 'FuncExpr':
         """ Returns an expression representing a call to this function
@@ -24,6 +27,51 @@ class FuncABC(FuncABCBase):
             FuncExpr: Function call expression
         """
         return FuncExpr(self, *args)
+
+    def __call__(self, *args) -> 'FuncExpr':
+        """ Returns an expression representing a call to this function
+            Synonym of `call` method.
+
+        Returns:
+            FuncExpr: Function call expression
+        """
+        return self.call(*args)
+
+    @property
+    def name(self) -> bytes:
+        """ Returns a function name
+
+        Returns:
+            bytes: Function name
+        """
+        return self._name
+
+    def __bytes__(self):
+        """ Returns a function name
+            Synonym of `name` method.
+
+        Returns:
+            bytes: Function name
+        """
+        return self.name
+
+    def __str__(self) -> str:
+        """ Returns a function name as string
+
+        Returns:
+            str: Function name
+        """
+        return self.name.decode()
+
+    @abstractmethod
+    def append_query_data_with_args(self, qd:'QueryData', args: Tuple['ExprLike', ...]) -> None:
+        """ Append a statement data of this function with a given list of arguments
+            (Abstract method)
+        
+        Args:
+            qd (QueryData): QueryData object to be appended
+            args (list): Argument values for the function
+        """
 
     @abstractmethod
     def repr_with_args(self, args: Tuple['ExprLike', ...]) -> str:
@@ -165,8 +213,20 @@ class CompareBinaryOp(BinaryOp):
         return arg
 
 
-class ExprABC(ExprABCBase):
+class ExprABC(ABC):
     """ Expression abstract class """
+
+    def iter_objects(self) -> Iterator['Object']:
+        """ Get a columns used in this expression """
+        return iter([]) # Default implementation
+
+    @abstractmethod
+    def append_query_data(self, qd: 'QueryData') -> None:
+        """ Append this expression to the QueryData object
+
+        Args:
+            qd (QueryData): QueryData object to be appended
+        """
 
     def __add__(self, y):
         """ Addition operator """

@@ -2,9 +2,9 @@
     Query data class
 """
 from enum import Enum
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional
 
-from .expr_abc import ExprABCBase
+from .exprs import ExprABC
 from .values import NULL, is_value_type
 
 
@@ -79,7 +79,7 @@ class QueryData:
             assert prms is None
             return self._append_qd(val)
 
-        if isinstance(val, ExprABCBase):
+        if isinstance(val, ExprABC):
             assert prms is None
             val.append_query_data(self)
             return self

@@ -4,7 +4,7 @@
 import pytest
 from libsql.database import Database, Table, Column
 from libsql.syntax.sqltypes import Int, VarChar
-from libsql.syntax.expr_type import Object
+from libsql.syntax.exprs import Object
 from libsql.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('objname, result', [

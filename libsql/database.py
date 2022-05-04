@@ -4,7 +4,7 @@
 from typing import TYPE_CHECKING, Any, Dict, Optional, List, Tuple, Set
 
 from .schema import Object, Table, TableLike, Name
-from .syntax.expr_type import ExprABC, ObjectABC
+from .syntax.exprs import ExprABC, ObjectABC
 from .schema import Table, TableLike, Column, ColumnLike, OrderedColumn, iter_tables
 from .syntax.keywords import JoinType, make_join_type
 from .syntax import errors

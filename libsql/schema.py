@@ -4,14 +4,14 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
-from .syntax.keywords import JoinType, JoinLike, make_join_type, OrderType, ReferenceOption
+from .syntax.keywords import JoinType, JoinLike, make_join_type, OrderType, OrderLike, make_order_type, ReferenceOption
 from .syntax.sqltypebases import SQLType
-from .syntax.expr_type import ExprABC, Name, ObjectABC, Object, OrderedABC, OP
-from .syntax.query_data import QueryData
+from .syntax.exprs import ExprABC, Name, ObjectABC, Object, OrderedABC, OP
 from .syntax import errors
 from .utils.tabledata import TableData
 
 if TYPE_CHECKING:
+    from .syntax.query_data import QueryData
     from .database import Database
 
 
@@ -128,6 +128,9 @@ class Column(Object, OrderedABC):
         if self.table_or_none:
             qd.append(self.table, b'.')
         super().append_query_data(qd)
+
+    def ordered(self, order: OrderLike):
+        return OrderedColumn(self, make_order_type(order))
 
     def __pos__(self):
         """ Get a ASC ordered expression """
@@ -318,12 +321,18 @@ class ViewABC(Object):
         """ Make a View object with WHERE clause """
         return self.clone(where=self._proc_terms(*exprs, **coleqs))
 
-    def group_by(self, *columns: Column) -> 'ViewABC':
-        return self.clone(groups=columns)
+    def group_by(self, *columns: Column, **cols: Optional[bool]) -> 'ViewABC':
+        return self.clone(groups=[
+            *columns,
+            *(self.column(c) for c, v in cols.items() if v)
+        ])
 
-    def order_by(self, *orders: OrderedColumn) -> 'ViewABC':
+    def order_by(self, *orders: OrderedColumn, **col_orders: Optional[OrderLike]) -> 'ViewABC':
         """ Make a View object with ORDER BY clause """
-        return self.clone(orders=orders)
+        return self.clone(orders=[
+            *orders,
+            *(self.column(c).ordered(v) for c, v in col_orders.items() if v is not None)
+        ])
 
     def limit(self, limit: int) -> 'ViewABC':
         """ Make a View object with LIMIT OFFSET clause """
@@ -425,7 +434,7 @@ class ViewABC(Object):
             return self.result == value
         return super().__eq__(value)
 
-    def check_equality(self, value: 'ViewABC') -> bool:
+    def check_eq(self, value: 'ViewABC') -> bool:
         if not isinstance(value, ViewABC):
             raise TypeError('Invalid value type.')
         view = value
@@ -676,7 +685,7 @@ class ForeignKeyReference(Object):
     def on_update(self):
         return self._on_update
 
-    def append_query_data(self, qd: QueryData) -> None:
+    def append_query_data(self, qd: 'QueryData') -> None:
         """ Append this to query data"""
         qd.append(
             b'FOREIGN', b'KEY', self.name, b'(', [super(Object, c) for c in self._orig_columns], b')',
