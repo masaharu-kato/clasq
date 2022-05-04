@@ -8,16 +8,16 @@ class SyntaxError(RuntimeError):
 class ObjectError(RuntimeError):
     """ Object Error """
 
-class ObjectArgumentsError(ObjectError):
+class ObjectArgsError(ObjectError):
     """ Object arguments Error """
 
-class ObjectArgumentsNumberError(ObjectArgumentsError):
+class ObjectArgNumError(ObjectArgsError):
     """ Object arguments number Error """
 
-class ObjectArgumentsTypeError(ObjectArgumentsError, TypeError):
+class ObjectArgTypeError(ObjectArgsError, TypeError):
     """ Object arguments type Error """
 
-class ObjectNotSpecifiedError(ObjectArgumentsError):
+class ObjectNotSpecifiedError(ObjectArgsError):
     """ Object arguments not specified Error """
 
 class ObjectNotFoundError(ObjectError, KeyError):

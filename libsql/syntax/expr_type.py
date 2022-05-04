@@ -137,7 +137,7 @@ class CompareBinaryOp(BinaryOp):
 
     def call(self, *args) -> 'FuncExpr':
         if not len(args) == 2:
-            raise errors.ObjectArgumentsError('Invalid number of arguments.', args)
+            raise errors.ObjectArgsError('Invalid number of arguments.', args)
 
 
 class ExprABC(ExprABCBase):

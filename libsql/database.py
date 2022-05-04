@@ -65,7 +65,7 @@ class Database(Object):
                 return val
             raise errors.NotaSelfObjectError('Not a table of this database.')
 
-        raise errors.ObjectArgumentsError('Invalid type %s (%s)' % (type(val), val))
+        raise errors.ObjectArgsError('Invalid type %s (%s)' % (type(val), val))
         
     def __getitem__(self, val: TableLike):
         return self.table(val)

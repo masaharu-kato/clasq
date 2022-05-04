@@ -239,7 +239,7 @@ class ViewABC(Object):
                 return val
             raise errors.NotaSelfObjectError('Not a column of this view.')
 
-        raise errors.ObjectArgumentsTypeError('Invalid type %s (%s)' % (type(val), val))
+        raise errors.ObjectArgTypeError('Invalid type %s (%s)' % (type(val), val))
 
     def col(self, val: ColumnLike):
         return self.column(val)
@@ -541,7 +541,7 @@ class Table(ViewABC):
 
     def append_column(self, column: ObjectABC) -> None:
         if not isinstance(column, Column):
-            raise errors.ObjectArgumentsTypeError('Invalid argument type %s (%s)' % (type(column), column))
+            raise errors.ObjectArgTypeError('Invalid argument type %s (%s)' % (type(column), column))
 
         if column.table_or_none:
             if not column.table == self:
@@ -566,7 +566,7 @@ class Table(ViewABC):
                 return val
             raise errors.NotaSelfObjectError('Not a column of this table.')
 
-        raise errors.ObjectArgumentsTypeError('Invalid type %s (%s)' % (type(val), val))
+        raise errors.ObjectArgTypeError('Invalid type %s (%s)' % (type(val), val))
         
     def q_select(self) -> tuple:
         return (self, b'.*')
