@@ -25,6 +25,7 @@ class Database(Object):
         cnx: Optional['ConnectionABC'] = None,
         charset: Optional[Name] = None,
         collate: Optional[Name] = None,
+        fetch_from_db: Optional[bool] = None,
         dynamic: bool = False,
         **options
     ):
@@ -36,8 +37,15 @@ class Database(Object):
         self._exists = bool(cnx)
         self._dynamic = dynamic
         self._options = options
-        for table in tables:
-            self.append_table_object(table)
+
+
+        if fetch_from_db is True and tables:
+            raise errors.ObjectArgsError('Tables are ignored when fetch_from_db is True')
+        if fetch_from_db is not False and not tables: 
+            self.fetch_from_db()
+        else:
+            for table in tables:
+                self.append_table_object(table)
 
     @property
     def cnx(self):
@@ -74,6 +82,9 @@ class Database(Object):
 
     def iter_tables(self):
         return iter(self._table_dict.values())
+
+    def tables(self):
+        return list(self.iter_tables())
 
     def table(self, val: Union[Name, Table]) -> Table:
         """ Get a Table object with the specified name
@@ -149,6 +160,11 @@ class Database(Object):
         table = Table(name, database=self, **options)
         self._table_dict[table.name] = table
         return table
+
+    def fetch_from_db(self) -> None:
+        """ Fetch tables of this database from the connection """
+        for tabledata in self.query(b'SHOW', b'TABLES'):
+            self.append_table(tabledata[0])
 
     def q_create(self, *, if_not_exists=False) -> tuple:
         return (

@@ -22,8 +22,9 @@ class MySQLConnectionABC(ConnectionABC):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.cnx: MySQLConnectionAbstract = self.new_cnx()
+        self._cnx: MySQLConnectionAbstract = self.new_cnx()
         self._prepared_stmts: Dict[bytes, PreparedStatementExecutorABC] = {}
+        self.initialize_database()
 
     @abstractmethod
     def new_cnx(self) -> MySQLConnectionAbstract:
@@ -31,7 +32,7 @@ class MySQLConnectionABC(ConnectionABC):
 
     def commit(self):
         """ Commit the current transaction (Override) """
-        return self.cnx.commit()
+        return self._cnx.commit()
 
     ### =========================================================================================================== ###
     #    Execute and Query
@@ -39,12 +40,12 @@ class MySQLConnectionABC(ConnectionABC):
 
     def execute_plain(self, stmt: bytes) -> None:
         """ Execute a query using prepared statement """
-        self.cnx.cmd_query(stmt)
+        self._cnx.cmd_query(stmt)
 
     def query_plain(self, stmt: bytes) -> TableData:
         """ Execute a query using prepared statement, and get result """
-        qres = self.cnx.cmd_query(stmt)
-        rows, eof = self.cnx.get_rows()
+        qres = self._cnx.cmd_query(stmt)
+        rows, eof = self._cnx.get_rows()
         column_names = [c[0] for c in qres['columns']]
         return TableData(column_names, rows)
 
@@ -79,7 +80,7 @@ class MySQLConnectionABC(ConnectionABC):
 
     def __exit__(self, ex_type, ex_value, trace):
         """ Close the cursor """
-        self.cnx.close()
+        self._cnx.close()
         # if self.cnx is not None:
         #     try:
         #         self.cnx.close()
@@ -90,7 +91,7 @@ class MySQLConnectionABC(ConnectionABC):
 
     def _get_or_make_pstmt(self, stmt: bytes) -> PreparedStatementExecutorABC:
         if not (pstmt := self._prepared_stmts.get(stmt)):
-            pstmt = self._prepared_stmts[stmt] = MySQLPreparedStatementExecutor(self.cnx, stmt)
+            pstmt = self._prepared_stmts[stmt] = MySQLPreparedStatementExecutor(self._cnx, stmt)
         return pstmt
 
 

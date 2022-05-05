@@ -17,8 +17,18 @@ class ConnectionABC:
         self._cnx_args = args
         self._cnx_kwargs = {'database': database, **kwargs}
         self._dbname = database.encode()
-        self._db = Database(self._dbname, cnx=self, dynamic=dynamic) # TODO: Fetch tables
         self._last_qd: Optional[QueryData] = None
+        self._db_dynamic = dynamic
+        self._db: Optional[Database] = None
+
+    def initialize_database(self) -> None:
+        self._db = Database(self._dbname, cnx=self, dynamic=self._db_dynamic)
+
+    @property
+    def db(self) -> Database:
+        if self._db is None:
+            raise RuntimeError('Database is not initialized.')
+        return self._db
 
     @abstractmethod
     def execute_plain(self, stmt: bytes) -> None:
@@ -127,7 +137,3 @@ class ConnectionABC:
     @property
     def last_qd(self) -> Optional[QueryData]:
         return self._last_qd
-
-    @property
-    def db(self) -> Database:
-        return self._db

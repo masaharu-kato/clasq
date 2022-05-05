@@ -20,20 +20,26 @@ class Table(ViewABC):
 
     def __init__(self,
         name: Name,
-        *_columns: Optional[Column],
+        *columns: Column,
         database: Optional['Database'] = None,
         primary_key: Optional[Tuple[Union[Name, Column], ...]] = None,
         unique: Optional[Tuple[Union[Name, Column], ...]] = None,
         refs: Optional[List['ForeignKeyReference']] = None,
+        fetch_from_db: Optional[bool] = None,
         dynamic: bool = False,
         # **options
     ):
-        super().__init__(name, *_columns, database=database, dynamic=dynamic)
+        super().__init__(name, *columns, database=database, dynamic=dynamic)
         
-        columns = [c for c in _columns if c is not None]
         self._column_dict: Dict[bytes, Column] = {}
-        for column in columns:
-            self.append_column_object(column)
+        
+        if fetch_from_db is True and columns:
+            raise errors.ObjectArgsError('Columns are ignored when fetch_from_db is True')
+        if fetch_from_db is not False and not columns: 
+            self.fetch_from_db()
+        else:
+            for column in columns:
+                self.append_column_object(column)
         # self._options = options
         
         self._primary_key: Optional[List[Column]] = None
@@ -126,8 +132,19 @@ class Table(ViewABC):
         self._column_dict[column.name] = column
         return column
 
+    def fetch_from_db(self) -> None:
+        """ Fetch columns of this table from the connected database """
+        if self.database_or_none is None:
+            raise errors.ObjectNotSetError('Database is not set.')
+        for coldata in self.db.query(b'SHOW', b'COLUMNS', b'FROM', self.name):
+            self.append_column(coldata['Field']) # TODO: Types, Nullable, Default, Keys
+        self._exists_on_db = True
+
     def iter_columns(self) -> Iterator[Column]:
         return (c for c in self._column_dict.values())
+
+    def columns(self):
+        return list(self.iter_columns())
 
     def set_primary_key(self, *columns: Union[Name, Column]):
         self._primary_key = [self.table_column(c) for c in columns]
