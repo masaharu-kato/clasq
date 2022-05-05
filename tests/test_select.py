@@ -1,6 +1,7 @@
 """
     Test basic select
 """
+import pytest
 import libsql
 from libsql.syntax.query_data import QueryData
 
@@ -14,9 +15,10 @@ from libsql.syntax.query_data import QueryData
 #     db.execute_plain(f.read())
 # del db
 
-def test_basic_select():
+@pytest.mark.parametrize('dynamic', [True, False])
+def test_basic_select(dynamic):
     # Normal selection
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=True)
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=dynamic)
 
     products = db['products']
     all_products = db.select(products)
@@ -43,9 +45,10 @@ def test_basic_select():
     # displays = db.select(products, where=products['category_id'] == 3
     
 
-def test_select():
+@pytest.mark.parametrize('dynamic', [True, False])
+def test_select(dynamic):
     # Normal selection
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=True)
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=dynamic)
     cates, prods, sales = db['categories'], db['products'], db['user_sale_products']
 
     sales_count = sales['count'].sum().as_('sales_count')
