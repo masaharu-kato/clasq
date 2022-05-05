@@ -142,11 +142,11 @@ class RowData:
         self._col_meta = column_metadata
         self._row = row
 
-    def __getitem__(self, column: str) -> Any:
+    def __getitem__(self, val: Union[int, str]) -> Any:
         """ Get a value of specific column
 
         Args:
-            column (str): Name of the column to get a value
+            val (int | str): Index or Name of the column to get a value
 
         Returns:
             Any: Value of the specified column
@@ -154,20 +154,24 @@ class RowData:
         Raises:
             KeyError: The specified column is not found.
         """
-        return self._row[self._col_meta.column_to_i(column)]
+        if isinstance(val, int):
+            return self._row[val]
+        return self._row[self._col_meta.column_to_i(val)]
 
-    def get(self, column: str, default: Any = None) -> Any:
+    def get(self, val: Union[int, str], default: Any = None) -> Any:
         """ Get a value of specific column with a default value
 
         Args:
-            column (str): Name of the column to get a value
+            column (int | str): Index or Name of the column to get a value
             default (Any, optional): Default value
                 used if the specific column is not found. Defaults to None.
 
         Returns:
             Any: Value of the specified column, or a default value
         """
-        return self[column] if column in self._col_meta else default
+        if isinstance(val, int):
+            return self._row[val] if val >= 0 and val < len(self._row) else default
+        return self[val] if val in self._col_meta else default
 
     def __iter__(self) -> Iterator:
         """ Iterate row values
@@ -186,11 +190,14 @@ class RowData:
         """
         return zip(self._col_meta.iter_columns(), self._row)
 
+    def make_dict(self):
+        return dict(self.items())
+
+    @property
     def __dict__(self):
         """ Generate a dictionary of this row
 
         Returns:
             dict: A dictionary of this row
         """
-        return dict(self.items())
-
+        return self.make_dict()
