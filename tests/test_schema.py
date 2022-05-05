@@ -2,7 +2,7 @@
     Test libsql.schema
 """
 import pytest
-from libsql.database import Database, Table, Column
+from libsql.schema.database import Database, Table, Column
 from libsql.syntax.sqltypes import Int, VarChar
 from libsql.syntax.exprs import Object
 from libsql.syntax.query_data import QueryData

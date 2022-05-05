@@ -5,7 +5,7 @@ import typing
 import datetime
 from functools import lru_cache
 from . import sqltypebases as tb
-from .sqltypebases import Nullable, NotNull, PrimaryKey, Int
+from .sqltypebases import Nullable, NotNull, PrimaryKey, Int, SQLTypeABC, SQLTypeEnv, get_type_sql
 
 Optional = typing.Optional
 
@@ -49,7 +49,7 @@ class UnsignedBigInt(tb.Final, tb.UnsignedIntegerType):
     """ Unsigned BIGINT type """
     _MAX_VALUE_ = 2**64-1
 
-class Unsigned(tb.SQLType):
+class Unsigned(tb.SQLTypeABC):
     """ Unsigned sql type """
 
     @classmethod
@@ -218,3 +218,50 @@ tb.SQLTypeEnv.set_type_alias(datetime.date, Date)
 tb.SQLTypeEnv.set_type_alias(datetime.time, Time)
 tb.SQLTypeEnv.set_type_alias(datetime.datetime, DateTime)
 
+
+TypeLike = typing.Optional[typing.Union[SQLTypeABC, typing.Type, bytes, str]]
+
+SQLType = typing.Union[SQLTypeABC, typing.Type]
+
+def make_sql_type(typelike: TypeLike) -> SQLType:
+
+    if (isinstance(typelike, type) and issubclass(typelike, SQLTypeABC))\
+        or isinstance(typelike, SQLTypeABC):
+        return typelike
+
+    if isinstance(typelike, str):
+        if not typelike:
+            return Text
+        try:
+            return VarChar.with_length(int(typelike))
+        except ValueError:
+            pass
+    
+    elif isinstance(typelike, bytes):
+        if not typelike:
+            return Blob
+        try:
+            return VarBinary.with_length(int(typelike))
+        except ValueError:
+            pass
+    
+    else:
+
+        if typelike is datetime.datetime:
+            return DateTime
+        if typelike is datetime.date:
+            return Date
+        if typelike is datetime.time:
+            return Time
+        if typelike is str:
+            return Text
+        if typelike is bytes:
+            return Blob
+        if typelike is float:
+            return Double
+        if typelike is int:
+            return Int
+        if typelike is bool:
+            return Bool
+
+    raise RuntimeError('Invalid typelike:', typelike)

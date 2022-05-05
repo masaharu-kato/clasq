@@ -17,7 +17,7 @@ def _isinstance(v, t):
     return isinstance(v, t)
 
 
-class SQLType:
+class SQLTypeABC:
     """ SQL data types """
     _PY_TYPE_            : typing.Optional[typing.Type[object]] = None # Corresponding python type
     __TYPE_SQL__         : typing.Optional[str]  = None # Code of this type in SQL. Specify None if it is the same as the class name
@@ -96,8 +96,8 @@ class SQLType:
 
 
 def get_type_sql(t):
-    """ Get the SQL of type in a given SQLType subclass """
-    assert issubclass(t, SQLType)
+    """ Get the SQL of type in a given SQLTypeABC subclass """
+    assert issubclass(t, SQLTypeABC)
     return t.__type_sql__()
 
 
@@ -136,18 +136,22 @@ class SQLTypeWithOptionalLength(SQLTypeWithOptionalKey, typing.Generic[T]):
     @classmethod
     @lru_cache
     def __class_getitem__(cls, l):
-        assert isinstance(l, int) and issubclass(cls, SQLType)
+        assert isinstance(l, int) and issubclass(cls, SQLTypeABC)
         return cls.new_subclass(
             f'{cls.__name__}_len{l}',
             _MAX_LEN_ = l,
             __TYPE_SQL__ = f'{get_type_sql(cls)}({l})',
         )
 
+    @classmethod
+    def with_length(cls, l):
+        return cls.__class_getitem__(l)
+
 
 class SQLTypeWithLength(SQLTypeWithOptionalLength, SQLTypeWithKey):
     """ SQL data types with length (required) """
 
-class NumericType(SQLType):
+class NumericType(SQLTypeABC):
     """ Numeric types """
 
 class IntegerType(NumericType):
@@ -183,14 +187,18 @@ class DecimalType(NumericType, SQLTypeWithKey, typing.Generic[T]):
 
     @classmethod
     @lru_cache
-    def __class_getitem__(cls, pr_sc): # Precision and scale
-        assert isinstance(pr_sc, tuple) and len(pr_sc) == 2 and isinstance(pr_sc[0], int) and isinstance(pr_sc[1], int)
-        pr, sc = pr_sc
+    def with_prec_scale(cls, pr, sc): # Precision and scale
+        assert isinstance(pr, int) and isinstance(sc, int)
         return cls.new_subclass(
             f'{cls.__name__}_{pr}_{sc}',
             _TYPE_DECI_PREC_  = pr,
             _TYPE_DECI_SCALE_ = sc,
         )
+
+    @classmethod
+    def __class_getitem__(cls, pr_sc):
+        assert isinstance(pr_sc, tuple) and len(pr_sc) == 2
+        return cls.with_prec_scale(*pr_sc)
 
     def __new__(cls, *_args, **_kwargs):
         if not cls._TYPE_DECI_PREC_ or not cls._TYPE_DECI_SCALE_:
@@ -198,11 +206,11 @@ class DecimalType(NumericType, SQLTypeWithKey, typing.Generic[T]):
         return super().__new__(cls)
 
 
-class DatetimeType(SQLType):
+class DatetimeType(SQLTypeABC):
     """ Date and time types """
 
 
-class StringType(SQLType):
+class StringType(SQLTypeABC):
     """ String types """
     _PY_TYPE_ = str
     _MAX_LEN_ = None
@@ -231,13 +239,18 @@ class SQLTypeWithValues(SQLTypeWithKey, typing.Generic[T]):
 
     @classmethod
     @lru_cache
-    def __class_getitem__(cls, values):
-        assert isinstance(values, tuple) and all(isinstance(v, str) for v in values)
+    def with_values(cls, *values):
+        assert all(isinstance(v, str) for v in values)
         return cls.new_subclass(
             f'{cls.__name__}_vals_' + '_'.join(values),
             _TYPE_VALUES_ = values,
             __TYPE_SQL__  = f'{get_type_sql(cls)}(' + ', '.join(f"'{v}'" for v in values) + ')',
         )
+
+    @classmethod
+    def __class_getitem__(cls, values):
+        assert isinstance(values, (tuple, list))
+        return cls.with_values(*values)
 
 
 class Record:
@@ -255,7 +268,7 @@ class SQLTypeEnv:
     @classmethod
     def set_type_alias(cls, tf:typing.Type[object], tt:typing.Type[object]) -> None:
         """ Set an alias type of a given type """
-        assert is_child_class(tt, SQLType)
+        assert is_child_class(tt, SQLTypeABC)
         cls.type_aliases[tf] = tt
 
     @staticmethod
@@ -283,7 +296,7 @@ class SQLTypeEnv:
 
     @classmethod
     def actual_type(cls, t:typing.Type[object], *, ensure_nullable:bool=False) -> typing.Type[object]:
-        """ Get an actual type (subclass of SQLType) of a given type """
+        """ Get an actual type (subclass of SQLTypeABC) of a given type """
         if cls._is_typing_optional(t):
             return cls.actual_type(cls._typing_basetype(t), ensure_nullable=False)
         if is_child_class(t, Record):
@@ -299,7 +312,7 @@ class SQLTypeEnv:
         """ Check if `t` is a compatible column type or not """
         if cls._is_typing_type(t):
             return cls._is_typing_optional(t) and cls.is_compatible_column_type(cls._typing_basetype(t))
-        return is_child_class(t, SQLType) or is_child_class(t, Record) or t in cls.type_aliases
+        return is_child_class(t, SQLTypeABC) or is_child_class(t, Record) or t in cls.type_aliases
 
     @classmethod
     def is_compatible_table_type(cls, t:typing.Type[object]) -> bool:
@@ -327,8 +340,8 @@ class SQLTypeWithType(SQLTypeWithKey, typing.Generic[T]):
     _TYPE_ENSURE_NULLABLE_ = False
 
     @classmethod
-    @lru_cache
-    def __class_getitem__(cls, t:typing.Type[object]):
+    # @lru_cache
+    def with_type(cls, t:typing.Type[object]):
         assert cls._TYPE_SQL_SUFFIX_ is not None
         assert isinstance(t, type)
         t = SQLTypeEnv.actual_type(t, ensure_nullable=cls._TYPE_ENSURE_NULLABLE_)
@@ -338,6 +351,10 @@ class SQLTypeWithType(SQLTypeWithKey, typing.Generic[T]):
             _TYPE_BASE_  = t,
             __TYPE_SQL__ = t.__type_sql__() + cls._TYPE_SQL_SUFFIX_, #type: ignore
         )
+
+    @classmethod
+    def __class_getitem__(cls, t:typing.Type[object]):
+        return cls.with_type(t)
 
 
 class Final:
@@ -372,7 +389,7 @@ class ForeignTableKey(Final, SQLTypeWithType, typing.Generic[T]):
     """ Foreign table key (Primary key) """
 
     @classmethod
-    @lru_cache
+    # @lru_cache
     def __class_getitem__(cls, t:typing.Type[object]):
         assert issubclass(t, Record)
         return cls.new_subclass(

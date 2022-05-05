@@ -7,15 +7,17 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Un
 from libsql.syntax.query_data import QueryData
 
 from ..utils.tabledata import TableData
-from ..database import Database
+from ..schema.database import Database
 
 
 class ConnectionABC:
     """ Database connection ABC """
 
-    def __init__(self, *, dbname: bytes) -> None:
-        self._dbname = dbname
-        self._db = Database(dbname, cnx=self) # TODO: Fetch tables
+    def __init__(self, *args, database: str, dynamic=False, **kwargs) -> None:
+        self._cnx_args = args
+        self._cnx_kwargs = {'database': database, **kwargs}
+        self._dbname = database.encode()
+        self._db = Database(self._dbname, cnx=self, dynamic=dynamic) # TODO: Fetch tables
         self._last_qd: Optional[QueryData] = None
 
     @abstractmethod
@@ -82,20 +84,29 @@ class ConnectionABC:
             Iterator[TableData]: Fetched data (if exists)
         """
 
-    def execute(self, *args, **kwargs) -> None:
-        self._last_qd = qd = QueryData(*args, **kwargs)
+    def execute_qd(self, qd: QueryData) -> None:
+        self._last_qd = qd = qd
         return self.execute_with_stmt_prms(qd.stmt, qd.prms)
 
-    def execute_with_prms(self, stmt, prms):
-        return self.execute_with_stmt_prms(QueryData(stmt), prms)
+    def execute(self, *args, **kwargs) -> None:
+        return self.execute_qd(QueryData(*args, **kwargs))
 
-    def execute_with_many_prms(self, stmt, prms_list):
-        return self.execute_with_stmt_many_prms(QueryData(stmt), prms_list)
+    def execute_with_prms(self, stmt, prms) -> None:
+        qd = QueryData(stmt)
+        assert not qd.prms
+        return self.execute_with_stmt_prms(qd.stmt, prms)
+
+    def execute_with_many_prms(self, stmt, prms_list) -> None:
+        qd = QueryData(stmt)
+        assert not qd.prms
+        return self.execute_with_stmt_many_prms(qd.stmt, prms_list)
+
+    def query_qd(self, qd: QueryData) -> TableData:
+        self._last_qd = qd = qd
+        return self.query_with_stmt_prms(qd.stmt, qd.prms)
 
     def query(self, *args, **kwargs) -> TableData:
-        self._last_qd = qd = QueryData(*args, **kwargs)
-        print(qd)
-        return self.query_with_stmt_prms(qd.stmt, qd.prms)
+        return self.query_qd(QueryData(*args, **kwargs))
 
     def query_with_prms(self, stmt, prms):
         return self.query_with_stmt_prms(QueryData(stmt), prms)

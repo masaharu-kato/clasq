@@ -4,7 +4,9 @@
 from enum import Enum
 from typing import Iterable, Optional
 
-from .exprs import ExprABC
+from libsql.syntax.object_abc import ObjectABC
+
+from .query_abc import QueryABC
 from .values import NULL, is_value_type
 
 
@@ -79,7 +81,7 @@ class QueryData:
             assert prms is None
             return self._append_qd(val)
 
-        if isinstance(val, ExprABC):
+        if isinstance(val, QueryABC):
             assert prms is None
             val.append_query_data(self)
             return self

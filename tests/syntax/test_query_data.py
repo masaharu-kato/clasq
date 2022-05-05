@@ -5,7 +5,7 @@
 from math import ceil, floor, trunc
 import pytest
 
-from libsql.schema import Object as Obj
+from libsql.syntax.exprs import NamedExpr as Obj
 from libsql.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('term, result', [
@@ -35,8 +35,8 @@ from libsql.syntax.query_data import QueryData
     [(Obj(b'abc') == 123) ^ (Obj(b'defg') == 456), (b'((`abc` = ?) XOR (`defg` = ?))', [123, 456])],
     [Obj(b'expr1') + Obj(b'expr2') >= 1000, (b'((`expr1` + `expr2`) >= ?)' , [1000])],
     [(Obj(b'abc') > 123) | ((Obj(b'abc') == 123) & (Obj(b'defg') >= 456)), (b'((`abc` > ?) OR ((`abc` = ?) AND (`defg` >= ?)))', [123, 123, 456])],
-    [+Obj(b'expr'), (b'`expr`', [])],
-    [-Obj(b'expr'), (b'- `expr`', [])],
+    # [+Obj(b'expr'), (b'`expr`', [])],
+    # [-Obj(b'expr'), (b'- `expr`', [])],
     [abs  (Obj(b'expr')), (b'ABS(`expr`)', [])],
     [ceil (Obj(b'expr')), (b'CEIL(`expr`)', [])],
     [floor(Obj(b'expr')), (b'FLOOR(`expr`)', [])],

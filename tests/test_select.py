@@ -16,7 +16,7 @@ from libsql.syntax.query_data import QueryData
 
 def test_basic_select():
     # Normal selection
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=True)
 
     products = db['products']
     all_products = db.select(products)
@@ -45,7 +45,7 @@ def test_basic_select():
 
 def test_select():
     # Normal selection
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=True)
     cates, prods, sales = db['categories'], db['products'], db['user_sale_products']
 
     sales_count = sales['count'].sum().as_('sales_count')

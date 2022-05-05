@@ -21,9 +21,7 @@ def connect(*args, **kwargs):
 class MySQLConnectionABC(ConnectionABC):
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(dbname=str(kwargs.get('database', '')).encode())
-        self.cnx_args = args
-        self.cnx_kwargs = kwargs
+        super().__init__(*args, **kwargs)
         self.cnx: MySQLConnectionAbstract = self.new_cnx()
         self._prepared_stmts: Dict[bytes, PreparedStatementExecutorABC] = {}
 
@@ -101,7 +99,7 @@ class MySQLConnection(MySQLConnectionABC):
 
     def new_cnx(self):
         # TODO: Implementation with Cext of MySQL Connection
-        return mysql.connector.connect(*self.cnx_args, **self.cnx_kwargs, use_pure=True) # MySQL connection 
+        return mysql.connector.connect(*self._cnx_args, **self._cnx_kwargs, use_pure=True) # MySQL connection 
 
 
 # class MySQLPooledConnection(MySQLConnectionABC):

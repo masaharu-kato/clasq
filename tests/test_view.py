@@ -6,7 +6,7 @@ from libsql.utils.tabledata import TableData
 from libsql.syntax.keywords import OrderType
 
 def test_view_1():
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=True)
 
     categories = db['categories']
     assert categories.result == TableData(
