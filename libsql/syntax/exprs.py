@@ -2,16 +2,14 @@
     Definition Computable class and subclasses
 """
 from abc import ABC, abstractmethod, abstractproperty
-from typing import Any, Iterator, List, Optional, TYPE_CHECKING, Tuple, Union, Type
+from typing import Any, Iterator, List, Optional, Tuple, Union, Type
 
-from .query_abc import QueryABC, iter_objects
+from .query_abc import QueryABC
+from .query_data import QueryData
 from .keywords import OrderType, OrderLike
 from .values import NULL, ValueType, is_value_type
-from .object_abc import Name, to_name, ObjectABC, Object
+from .object_abc import Name, ObjectABC, Object
 from . import errors
-
-if TYPE_CHECKING:
-    from .query_data import QueryData
 
 
 class FuncABC(ABC):
@@ -21,15 +19,21 @@ class FuncABC(ABC):
         assert isinstance(name, bytes)
         self._name = name
 
-    def call(self, *args: 'ExprLike') -> 'FunctionCall':
+    def call(self, *args: 'ExprLike') -> 'ExprABC':
         """ Returns an expression representing a call to this function
 
         Returns:
             FuncExpr: Function call expression
         """
-        return FunctionCall(self, *args)
+        nn_args = [arg for arg in args if not isinstance(arg, NoneExprType)]
+        if not nn_args:
+            return NoneExpr
+        return self._call_nn(*nn_args)
 
-    def __call__(self, *args) -> 'FunctionCall':
+    def _call_nn(self, *nn_args: 'ExprLike') -> 'ExprABC':
+        return FuncCall(self, *nn_args)
+
+    def __call__(self, *args) -> 'ExprABC':
         """ Returns an expression representing a call to this function
             Synonym of `call` method.
 
@@ -65,7 +69,7 @@ class FuncABC(ABC):
         return self.name.decode()
 
     @abstractmethod
-    def append_query_data_with_args(self, qd:'QueryData', args: Tuple['ExprLike', ...]) -> None:
+    def append_query_data_with_args(self, qd:QueryData, args: Tuple['ExprLike', ...]) -> None:
         """ Append a statement data of this function with a given list of arguments
             (Abstract method)
         
@@ -115,11 +119,11 @@ class Func(NoArgsFuncABC):
         """ Check the arguments """
         if self._argsets:
             if not any(len(argset) == len(args) for argset in self._argsets):
-                raise errors.ObjectArgNumError('Invalid number of arguments.')
+                raise errors.ObjectArgNumError('Invalid number of arguments.', self._argsets, args)
         # TODO: Check argument types
 
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         self.check_args(args)
         qd.append(self._name + b'(', list(args), b')')
@@ -135,7 +139,7 @@ class Func(NoArgsFuncABC):
 class NoArgsFunc(NoArgsFuncABC):
     """ Func with no arguments """
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert not args
         qd.append(self._name)
@@ -154,7 +158,7 @@ class UnaryOp(OpABC):
     def __init__(self, name: bytes, plv: Optional[int] = None):
         super().__init__(name, [Any], Any, plv)
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments
             (Override from `FuncABC` class)
 
@@ -169,7 +173,15 @@ class UnaryOp(OpABC):
 class BinaryOp(OpABC):
     """ Binary Operator """
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
+    def _call_nn(self, *nn_args: 'ExprLike') -> 'ExprABC':
+        if len(nn_args) == 1:
+            arg = nn_args[0]
+            if isinstance(arg, ExprABC):
+                return arg
+            return Expr(arg)
+        return super()._call_nn(*nn_args)
+
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments
             (Override from `FuncABC` class)
         """
@@ -179,15 +191,18 @@ class BinaryOp(OpABC):
         qd.append(b')')
         # TODO: Priority
 
-    def call_joined_opt(self, *opt_args) -> Optional['ExprABC']:
-        return self.call_joined(*(arg for arg in opt_args if arg is not None))
+    def _proc_values(self, *args):
+        # if not len(args):
+        #     raise errors.ObjectArgNumError('No arguments.')
+        # if len(args) == 1:
+        #     return (self._proc_value(args[0]), NoneExpr)
+        # return tuple(map(self._proc_value, args))
+        return map(self._proc_value, args)
 
-    def call_joined(self, *args) -> Optional['ExprABC']:
-        if not args:
-            return None
-        if len(args) == 1:
-            return args[0]
-        return self.call(*args)
+    def _proc_value(self, arg):
+        if arg is None:
+            return NULL
+        return arg
 
 
 class CalcBinaryOp(BinaryOp):
@@ -201,21 +216,28 @@ class CompareBinaryOp(BinaryOp):
     """ Compare Binary Operator """
     
     def __init__(self, name: bytes, plv: Optional[int] = None):
-        super().__init__(name, [ExprABC, ExprABC], Optional[bool], plv)
-
-    def call(self, *args) -> 'FunctionCall':
-        if not len(args) == 2:
-            raise errors.ObjectArgsError('Invalid number of arguments.', args)
-        return super().call(*(map(self._proc_value, args)))
-
-    def _proc_value(self, arg):
-        if arg is None:
-            return NULL
-        return arg
+        super().__init__(name, [(ExprABC, ExprABC)], Optional[bool], plv)
 
 
+class OpEQ(CompareBinaryOp):
 
-class ExprABC(QueryABC):
+    def __init__(self):
+        super().__init__(name=b'=', plv=11)
+
+    def call(self, *args) -> 'FuncCall':
+        return OpEqCall(self, *self._proc_values(*args))
+
+
+class OpNotEQ(CompareBinaryOp):
+
+    def __init__(self):
+        super().__init__(name=b'!=', plv=11)
+
+    def call(self, *args) -> 'FuncCall':
+        return OpNotEqCall(self, *self._proc_values(*args))
+
+
+class ExprABC(ABC):
     """ Expression abstract class """
 
     def __add__(self, y):
@@ -270,7 +292,7 @@ class ExprABC(QueryABC):
 
     def __eq__(self, y):
         """ Equal operator """
-        print('ExprABC.__eq__() called:', repr(self), repr(y))
+        # print('ExprABC.__eq__() called:', repr(self), repr(y))
         return OP.EQ.call(self, y)
 
     def __ne__(self, y):
@@ -500,7 +522,11 @@ def is_expr_like(value) -> bool:
     return isinstance(value, ExprABC) or is_value_type(value)
 
 
-class Expr(ExprABC):
+class QueryExprABC(ExprABC, QueryABC):
+    """ Query and Expr ABC """
+
+
+class Expr(QueryExprABC):
     """ Expression objerct with any value """
     def __init__(self, val):
         if not (isinstance(val, ExprABC) or is_value_type(val)):
@@ -515,12 +541,64 @@ class Expr(ExprABC):
     def __repr__(self):
         return repr(self._v)
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_query_data(self, qd: QueryData) -> None:
         qd.append_values(self._v)
 
 
-class NamedExprABC(ExprABC, ObjectABC):
+class NoneExprType(ExprABC):
+    """ Expression objerct with any value """
+
+    def __repr__(self):
+        return 'NoneExpr'
+
+    def __add__(self, y):
+        return y
+
+    def __sub__(self, y):
+        return y
+
+    def __mul__(self, y):
+        return y
+
+    def __and__(self, y):
+        return y
+
+    def __xor__(self, y):
+        return y
+
+    def __or__(self, y):
+        return y
+        
+    def __radd__(self, y):
+        return y
+
+    def __rsub__(self, y):
+        return y
+
+    def __rmul__(self, y):
+        return y
+
+    def __rand__(self, y):
+        return y
+
+    def __rxor__(self, y):
+        return y
+
+    def __ror__(self, y):
+        return y
+
+    def __bool__(self):
+        return False
+
+NoneExpr = NoneExprType()
+
+
+class NamedExprABC(QueryExprABC, ObjectABC):
     """ ColumnLike Object ABC """
+    
+    @abstractproperty
+    def query_for_select_column(self) -> QueryData:
+        """ Get a query for SELECT """
 
     @abstractproperty
     def original_expr(self) -> ExprABC:
@@ -530,7 +608,7 @@ class NamedExprABC(ExprABC, ObjectABC):
     def order_type(self) -> OrderType:
         """ Return a order kind (ASC or DESC) """
 
-    # def append_query_data(self, qd: 'QueryData') -> None:
+    # def append_query_data(self, qd: QueryData) -> None:
     #     if self.original_expr is not self:
     #         return self.original_expr.append_query_data(qd)
     #     return super().append_query_data(qd)
@@ -550,8 +628,12 @@ class NamedExprABC(ExprABC, ObjectABC):
         return OrderedNamedExpr(self, OrderType.DESC)
 
 
-class NamedExpr(NamedExprABC, Object):
+class NamedExpr(Object, NamedExprABC):
     """ ColumnLike Object """
+
+    @property
+    def query_for_select_column(self) -> QueryData:
+        return QueryData(self.name)
 
     @property
     def original_expr(self) -> ExprABC:
@@ -571,11 +653,13 @@ class AliasedExpr(NamedExpr):
     def expr(self):
         return self._expr
 
-    def query_for_select_column(self) -> tuple:
-        return (self._expr, b'AS', self)
+    @property
+    def query_for_select_column(self) -> QueryData:
+        return QueryData(self._expr, b'AS', self)
 
     def iter_objects(self) -> Iterator['ObjectABC']:
-        yield from self._expr.iter_objects()
+        if isinstance(self._expr, QueryABC):
+            yield from self._expr.iter_objects()
 
 
 class OrderedNamedExpr(NamedExprABC):
@@ -598,15 +682,19 @@ class OrderedNamedExpr(NamedExprABC):
         """ Get a order kind """
         return self._order_kind
 
-    def append_query_data(self, qd: 'QueryData') -> None:
-        return self.original_expr.append_query_data(qd)
+    @property
+    def query_for_select_column(self) -> QueryData:
+        return self._original_expr.query_for_select_column
+
+    def append_query_data(self, qd: QueryData) -> None:
+        return self._original_expr.append_query_data(qd)
 
     def iter_objects(self) -> Iterator['ObjectABC']:
         return self._original_expr.iter_objects()
 
 
 
-class FunctionCall(ExprABC): 
+class FuncCall(QueryExprABC): 
     """ General expression class """
     def __init__(self, func: FuncABC, *args: ExprLike):
         """ init """
@@ -615,7 +703,7 @@ class FunctionCall(ExprABC):
         self._func = func
 
         for i, arg in enumerate(args, 1):
-            if not is_expr_like(arg):
+            if not is_expr_like(arg): # or isinstance(arg, QueryABC) ?
                 raise errors.ObjectArgTypeError('Argument #%d: Invalid type. (all args: %s)' % (i, ', '.join(map(repr, args))))
         self._args: Tuple[ExprLike, ...] = args
 
@@ -627,16 +715,26 @@ class FunctionCall(ExprABC):
     def args(self):
         return self._args
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_query_data(self, qd: QueryData) -> None:
         self._func.append_query_data_with_args(qd, self._args)
 
     def iter_objects(self) -> Iterator['ObjectABC']:
         for arg in self._args:
-            if isinstance(arg, ExprABC):
+            if isinstance(arg, QueryABC):
                 yield from arg.iter_objects()
 
     def __repr__(self):
         return self._func.repr_with_args(self._args)
+
+
+class OpEqCall(FuncCall):
+    def __bool__(self) -> bool:
+        return self.args[0] is self.args[1]
+
+
+class OpNotEqCall(FuncCall):
+    def __bool__(self) -> bool:
+        return self.args[0] is not self.args[1]
 
 
 class OpIN(BinaryOp):
@@ -644,7 +742,7 @@ class OpIN(BinaryOp):
     def __init__(self):
         super().__init__(b'IN', [ExprABC, ExprABC], Optional[bool], 11)
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprLike, ...]) -> None:
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple[ExprLike, ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert len(args) >= 2
         qd.append(b'(', args[0], b'IN', b'(', list(args[1:]), b')', b')')
@@ -656,7 +754,7 @@ class OpBETWEEN(BinaryOp):
     def __init__(self):
         super().__init__(b'BETWEEN', [ExprABC, ExprABC, ExprABC], Optional[bool], 11)
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprLike, ...]) -> None:
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple[ExprLike, ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert len(args) == 3
         qd.append(b'(', args[0], b'BETWEEN', args[1], b'AND', args[2], b')')
@@ -668,7 +766,7 @@ class OpCASE(BinaryOp):
     def __init__(self):
         super().__init__(b'CASE', [ExprABC, ExprABC, ExprABC], ExprABC, 12)
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprLike, ...]) -> None:
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple[ExprLike, ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert len(args) == 2 or len(args) == 3
         qd.append(
@@ -684,7 +782,7 @@ class TRUNCATE_0(Func):
     def __init__(self):
         super().__init__(b'TRUNCATE', [float], float)
 
-    def append_query_data_with_args(self, qd: 'QueryData', args: Tuple[ExprLike, ...]) -> None:
+    def append_query_data_with_args(self, qd: QueryData, args: Tuple[ExprLike, ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert len(args) == 1
         qd.append(b'TRUNCATE(', args[0], b',', b'0', b')')
@@ -702,7 +800,7 @@ class OP:
     MOD_     = CalcBinaryOp(b'MOD', plv=6)
     INTDIV   = CalcBinaryOp(b'DIV', plv=6)
 
-    EQ       = CompareBinaryOp(b'='     , plv=11)
+    EQ       = OpEQ()
     IS       = CompareBinaryOp(b'IS'    , plv=11)
     IS_NOT   = CompareBinaryOp(b'IS NOT', plv=11)
     LT       = CompareBinaryOp(b'<'     , plv=11)
@@ -710,7 +808,7 @@ class OP:
     NULL_EQ  = CompareBinaryOp(b'<=>'   , plv=11)
     GT       = CompareBinaryOp(b'>'     , plv=11)
     GT_EQ    = CompareBinaryOp(b'>='    , plv=11)
-    NOT_EQ   = CompareBinaryOp(b'!='    , plv=11)
+    NOT_EQ   = OpNotEQ()
     NOT_EQ_  = CompareBinaryOp(b'<>'    , plv=11)
 
     BIT_AND_OP  = CalcBinaryOp(b'&' , plv=9)
@@ -719,14 +817,14 @@ class OP:
     BIT_RSHIFT  = CalcBinaryOp(b'>>', plv=8)
     BIT_LSHIFT  = CalcBinaryOp(b'<<', plv=8)
 
+    AND  = CalcBinaryOp(b'AND' , plv=14)
+    AND_ = CalcBinaryOp(b'&&'  , plv=14)
+    OR   = CalcBinaryOp(b'OR'  , plv=16)
+    OR_  = CalcBinaryOp(b'||'  , plv=16)
+    XOR  = CalcBinaryOp(b'XOR' , plv=15)
+    
     IN   = OpIN()
     LIKE = CompareBinaryOp(b'LIKE')
-    AND  = CompareBinaryOp(b'AND' , plv=14)
-    AND_ = CompareBinaryOp(b'&&'  , plv=14)
-    OR   = CompareBinaryOp(b'OR'  , plv=16)
-    OR_  = CompareBinaryOp(b'||'  , plv=16)
-    XOR  = CompareBinaryOp(b'XOR' , plv=15)
-    
     RLIKE  = CompareBinaryOp(b'RLIKE', plv=11)
     REGEXP = CompareBinaryOp(b'REGEXP', plv=11)
     SOUNDS_LIKE = CompareBinaryOp(b'SOUNDS_LIKE', plv=11)

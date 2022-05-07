@@ -9,7 +9,7 @@ from libsql.syntax.exprs import NamedExpr as Obj
 from libsql.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('term, result', [
-    [Obj(b'expr') == None , (b'(`expr` = ?)' , [None])],
+    [Obj(b'expr') == None , (b'(`expr` = NULL)' , [])],
     [Obj(b'expr') == True , (b'(`expr` = ?)' , [True])],
     [Obj(b'expr') == False, (b'(`expr` = ?)' , [False])],
     [Obj(b'expr') == 1    , (b'(`expr` = ?)' , [1])],

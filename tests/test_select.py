@@ -20,26 +20,30 @@ def test_basic_select(dynamic):
     # Normal selection
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=dynamic)
 
+    SELECT_PRODUCTS_SQL = b'SELECT `products`.`id`, `products`.`category_id`, `products`.`name`, `products`.`price` FROM `products`'
+
     products = db['products']
-    all_products = db.select(products)
-    assert db.last_qd == QueryData(b'SELECT `products`.* FROM `products`')
-    assert len(all_products) == 30
-    assert all_products[0]['id'] == 1 and all_products[0]['price'] == 60000
+    products.result
+    assert db.last_qd == QueryData(SELECT_PRODUCTS_SQL)
+    assert len(products) == 30
+    assert products.result[0]['id'] == 1 and products.result[0]['price'] == 60000
 
     # Where 
-    computers = db.select(products, where=products['category_id'] == 1)
-    true_qd = QueryData(b'SELECT `products`.* FROM `products` WHERE (`products`.`category_id` = ?)', prms=[1])
+    computers = products.where(products['category_id'] == 1)
+    computers.result
+    true_qd = QueryData(SELECT_PRODUCTS_SQL + b' WHERE (`products`.`category_id` = ?)', prms=[1])
     print(db.last_qd)
     print(true_qd)
     assert db.last_qd == true_qd
     assert len(computers) == 6
-    assert computers[0]['id'] == 1 and computers[0]['price'] == 60000
+    assert computers.result[0]['id'] == 1 and computers.result[0]['price'] == 60000
 
     # Order (one column)
-    sorted_computers = db.select(products, where=products['category_id'] == 1, orders=[-products['price']])
-    assert db.last_qd == QueryData(b'SELECT `products`.* FROM `products` WHERE (`products`.`category_id` = ?) ORDER BY `products`.`price` DESC', prms=[1])
+    sorted_computers = computers.order_by(-products['price'])
+    sorted_computers.result
+    assert db.last_qd == QueryData(SELECT_PRODUCTS_SQL + b' WHERE (`products`.`category_id` = ?) ORDER BY `products`.`price` DESC', prms=[1])
     assert len(sorted_computers) == 6
-    assert sorted_computers[0]['id'] == 4 and sorted_computers[0]['price'] == 140000
+    assert sorted_computers.result[0]['id'] == 4 and sorted_computers.result[0]['price'] == 140000
 
     # # Order (multiple column)
     # displays = db.select(products, where=products['category_id'] == 3
@@ -47,25 +51,33 @@ def test_basic_select(dynamic):
 
 @pytest.mark.parametrize('dynamic', [True, False])
 def test_select(dynamic):
-    # Normal selection
+    
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=dynamic)
     cates, prods, sales = db['categories'], db['products'], db['user_sale_products']
 
     sales_count = sales['count'].sum().as_('sales_count')
     sales_price = (sales['count'] * sales['price']).sum().as_('sales_price')
 
-    res = db.select(
-        cates['id'].as_('cate_id'), cates['name'].as_('cate_name'), prods, sales_count, sales_price,
-        joins=[
-            (cates, 'INNER', prods['category_id'] == cates['id']),
-            (sales, 'LEFT', sales['product_id'] == prods['id']),
-        ],
-        where=[cates['id'].in_(3, 4)],
-        groups=[prods['id']],
-        orders=[-sales_price, -sales_count, -prods['price']],
-    )
+    base_view = (prods
+        .inner_join(cates, prods['category_id'] == cates['id'])
+        .left_join(sales, sales['product_id'] == prods['id'])
+        .where(cates['id'].in_(3, 4))
+        .group_by(prods['id']))
+
+    res = base_view.select_column(
+            cates['id'].as_('cate_id'),
+            cates['name'].as_('cate_name'),    
+            prods['id'],
+            prods['name'],
+            prods['price'],
+            sales_count,
+            sales_price
+        ).order_by(
+            -sales_price,
+            -sales_count,
+            -prods['price']
+        )
 
     assert len(res) == 12
-    assert res[0]['sales_price'] == '70000'
-    assert res[1]['sales_price'] == '25000'
-
+    assert res.result[0]['sales_price'] == '70000'
+    assert res.result[1]['sales_price'] == '25000'

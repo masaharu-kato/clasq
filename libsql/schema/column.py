@@ -3,13 +3,15 @@
 """
 from typing import TYPE_CHECKING, Iterator, Optional
 
+from ..syntax.object_abc import Name, ObjectABC
+from ..syntax.exprs import ExprABC, NamedExpr, NamedExprABC
 from ..syntax.keywords import OrderType, OrderLike, ReferenceOption
-from ..syntax.exprs import ExprABC, NamedExpr, NamedExprABC, Name, ObjectABC, iter_objects
+from ..syntax.query_abc import iter_objects
+from ..syntax.query_data import QueryData
 from ..syntax import sqltypes
 from ..syntax import errors
 
 if TYPE_CHECKING:
-    from ..syntax.query_data import QueryData
     from .view import ViewABC
     from .table import Table, ForeignKeyReference
 
@@ -144,8 +146,8 @@ class Column(NamedExpr):
     def q_order(self) -> tuple:
         return (self, self.order_type)
 
-    def append_query_data(self, qd: 'QueryData') -> None:
-        if self.table_or_none:
+    def append_query_data(self, qd: QueryData) -> None:
+        if self.table_or_none is not None:
             qd.append(self.table, b'.')
         super().append_query_data(qd)
 
@@ -161,10 +163,17 @@ class Column(NamedExpr):
         return OrderedColumn(self, OrderType.DESC)
 
     def __repr__(self):
+        if self._table is not None:
+            return 'Col(%s.%s)' % (str(self.table), str(self))
         return 'Col(%s)' % str(self)
+
+    @property
+    def query_for_select_column(self) -> QueryData:
+        return QueryData(self)
     
-    def query_for_create_table(self) -> tuple:
-        return (
+    @property
+    def query_for_create_table(self) -> QueryData:
+        return QueryData(
             self.name, b' ',
             sqltypes.get_type_sql(self.sql_type).encode(),
             (b'NOT', b'NULL') if self.is_not_null_type else None,
@@ -198,8 +207,12 @@ class OrderedColumn(NamedExprABC):
     def iter_objects(self) -> Iterator[ObjectABC]:
         return self._original_expr.iter_objects()
 
-    def append_query_data(self, qd: 'QueryData') -> None:
-        return self.original_expr.append_query_data(qd)
+    def append_query_data(self, qd: QueryData) -> None:
+        return self._original_expr.append_query_data(qd)
+
+    @property
+    def query_for_select_column(self) -> QueryData:
+        return self._original_expr.query_for_select_column
 
 
 def iter_columns(*exprs: Optional[ObjectABC]):

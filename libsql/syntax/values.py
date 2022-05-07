@@ -14,7 +14,7 @@ DateTime = datetime.datetime
 DateLike = Union[Date, DateTime]
 TimeLike = Union[DateTime, Time]
 
-class Value(KeywordABC, Enum):
+class Value(KeywordABC):
     """ Special values """
     NULL = b'NULL'
     # NOT_NULL = b'NOT NULL'
@@ -23,7 +23,6 @@ class Value(KeywordABC, Enum):
     # EVAL_FALSE_OR_NULL = b'EVAL_FALSE_OR_NULL'
 
 NULL = Value.NULL
-
 
 ValueType = Union[bool, int, float, bytes, str, Date, Time, DateTime, Value]
 

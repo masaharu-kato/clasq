@@ -4,15 +4,17 @@
 from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Tuple, Type, Union
 
 from ..syntax.keywords import ReferenceOption
-from ..syntax.exprs import NamedExprABC, ObjectABC, Object, Name, to_name, iter_objects
+from ..syntax.object_abc import to_name
+from ..syntax.exprs import NamedExprABC, ObjectABC, Object, Name
+from ..syntax.query_abc import iter_objects
+from ..syntax.query_data import QueryData
 from ..syntax import sqltypes
 from ..syntax import errors
 from ..utils.tabledata import TableData
-from .column import Column, NamedExpr
+from .column import Column
 from .view import ViewABC, View
 
 if TYPE_CHECKING:
-    from ..syntax.query_data import QueryData
     from .database import Database
 
 class Table(ViewABC):
@@ -29,9 +31,11 @@ class Table(ViewABC):
         dynamic: bool = False,
         # **options
     ):
-        super().__init__(name, *columns, database=database, dynamic=dynamic)
+        super().__init__(name)
         
+        self._database = database
         self._column_dict: Dict[bytes, Column] = {}
+        self._dynamic = dynamic
         
         if fetch_from_db is True and columns:
             raise errors.ObjectArgsError('Columns are ignored when fetch_from_db is True')
@@ -51,6 +55,45 @@ class Table(ViewABC):
         if unique:
             self.set_unique(*unique)
 
+    @property
+    def database_or_none(self) -> Optional['Database']:
+        return self._database
+
+    def iter_columns(self) -> Iterator[Column]:
+        return (c for c in self._column_dict.values())
+
+    @property
+    def columns(self):
+        return tuple(self.iter_columns())
+
+    @property
+    def available_named_exprs(self) -> Iterable[NamedExprABC]:
+        return self.columns
+
+    @property
+    def named_exprs(self) -> Iterable[NamedExprABC]:
+        return self.available_named_exprs
+
+    @property
+    def outer_named_exprs(self) -> Iterable[NamedExprABC]:
+        return self.named_exprs
+
+    @property
+    def base_view(self) -> 'ViewABC':
+        return self
+    
+    @property
+    def query_table_expr(self) -> QueryData:
+        return QueryData(self)
+
+    def set_database(self, database: 'Database') -> None:
+        if self._database is not None:
+            raise errors.ObjectAlreadySetError('Database is already set.')
+        self._database = database
+        
+    @property
+    def is_dynamic(self) -> bool:
+        return self._dynamic
 
     def table_column(self, val: Union[Name, Column]) -> Column:
         """ Get a column from this table
@@ -81,7 +124,7 @@ class Table(ViewABC):
                 self.append_column_object(val)
             return val
 
-        raise errors.ObjectArgTypeError('Invalid type %s (%s)' % (type(val), val))
+        raise errors.ObjectArgTypeError('Invalid type', val)
 
     def column(self, val: Union[Name, NamedExprABC]) -> NamedExprABC:
         if isinstance(val, NamedExprABC) and not isinstance(val, Column):
@@ -101,11 +144,14 @@ class Table(ViewABC):
         if not isinstance(column, Column):
             raise errors.ObjectArgTypeError('Invalid argument type %s (%s)' % (type(column), column))
 
-        if not column.table_or_none:
+        if column.table_or_none is None:
             column.set_table(self)
 
         elif not column.table_or_none == self:
             raise errors.NotaSelfObjectError('Column of the different table.')
+            
+        if column.name in self._column_dict:
+            raise errors.ObjectNameAlreadyExistsError('Column name already exists.', column)
             
         self._column_dict[column.name] = column
         
@@ -129,6 +175,8 @@ class Table(ViewABC):
             primary=primary,
             auto_increment=auto_increment,
         )
+        if column.name in self._column_dict:
+            raise errors.ObjectNameAlreadyExistsError(column)
         self._column_dict[column.name] = column
         return column
 
@@ -136,15 +184,11 @@ class Table(ViewABC):
         """ Fetch columns of this table from the connected database """
         if self.database_or_none is None:
             raise errors.ObjectNotSetError('Database is not set.')
+        self._column_dict.clear()
         for coldata in self.db.query(b'SHOW', b'COLUMNS', b'FROM', self.name):
             self.append_column(coldata['Field']) # TODO: Types, Nullable, Default, Keys
+        # TODO: Primary, Unique, etc...
         self._exists_on_db = True
-
-    def iter_columns(self) -> Iterator[Column]:
-        return (c for c in self._column_dict.values())
-
-    def columns(self):
-        return list(self.iter_columns())
 
     def set_primary_key(self, *columns: Union[Name, Column]):
         self._primary_key = [self.table_column(c) for c in columns]
@@ -152,35 +196,38 @@ class Table(ViewABC):
     def set_unique(self, *columns: Union[Name, Column]):
         self._unique = [self.table_column(c) for c in columns]
 
-    def query_for_select_column(self) -> tuple:
-        return (self, b'.*')
+    @property
+    def query_for_select_column(self) -> QueryData:
+        return QueryData(self, b'.*')
 
     def select(self, *exprs, **options) -> TableData:
         """ Run SELECT query """
-        return self.db.select(self, *exprs, **options)
+        return self.clone(*exprs, **options).result
 
     def insert(self, data, **values) -> int:
         """ Run INSERT query """
         return self.db.insert(self, data, **values)
 
-    def update(self, data, **options):
+    def update(self, data, **options) -> None:
         """ Run UPDATE query """
-        return self.db.update(self, data, **options)
+        self.db.update(self, data, **options)
 
-    def delete(self, **options):
+    def delete(self, **options) -> None:
         """ Run DELETE query """
-        return self.db.delete(self, **options)
+        self.db.delete(self, **options)
 
-    def truncate(self):
+    def truncate(self) -> None:
         """ Run TRUNCATE TABLE query """
-        return self.db.execute(b'TRUNCATE', b'TABLE', self)
+        self.db.execute(b'TRUNCATE', b'TABLE', self)
 
-    def drop(self, *, temporary=False, if_exists=False):
+    def drop(self, *, temporary=False, if_exists=False) -> None:
         """ Run DROP TABLE query """
         if_exists = if_exists or (not self._exists_on_db)
-        return self.db.execute(
+        self.db.execute(
             b'DROP', b'TEMPORARY' if temporary else None, b'TABLE',
             (b'IF', b'EXISTS') if if_exists else None, self)
+        self._exists_on_db = False
+        self.db.remove_table(self)
 
     def create(self, *, temporary=False, if_not_exists=False, drop_if_exists=False) -> None:
         """ Create this Table on the database """
@@ -189,12 +236,9 @@ class Table(ViewABC):
         self.db.execute(
             b'CREATE', b'TEMPORARY' if temporary else None, b'TABLE',
             b'IF NOT EXISTS' if if_not_exists else None,
-            self, b'(', [c.query_for_create_table() for c in self.iter_columns()], b')'
+            self, b'(', [c.query_for_create_table for c in self.columns], b')'
         )
-        self._exists_on_db = True
-
-    def get_froms(self):
-        return (self,)
+        self.fetch_from_db()
         
     def _new_view(self, *args, **kwargs) -> 'ViewABC':
         return View(*args, **kwargs)
@@ -239,7 +283,7 @@ class ForeignKeyReference(Object):
     def on_update(self):
         return self._on_update
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_query_data(self, qd: QueryData) -> None:
         """ Append this to query data"""
         qd.append(
             b'FOREIGN', b'KEY', self.name, b'(', [super(Object, c) for c in self._orig_columns], b')',
@@ -252,7 +296,7 @@ class ForeignKeyReference(Object):
 def iter_tables(*exprs: Optional[ObjectABC]):
     for e in iter_objects(*exprs):
         if isinstance(e, Column):
-            if e.table_or_none:
+            if e.table_or_none is not None:
                 yield e.table
         elif isinstance(e, Table):
             yield e

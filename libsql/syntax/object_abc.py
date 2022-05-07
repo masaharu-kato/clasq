@@ -4,7 +4,9 @@
 from abc import abstractproperty
 from typing import Iterator, TYPE_CHECKING, Type, Union
 
+from ..utils.keyset import FrozenKeySetABC, KeySetABC, OrderedFrozenKeySetABC, OrderedKeySetABC
 from .query_abc import QueryABC
+from . import errors
 
 if TYPE_CHECKING:
     from .query_data import QueryData
@@ -23,10 +25,6 @@ class ObjectABC(QueryABC):
 
     def __str__(self):
         return self.name.decode()
-
-    def query_for_select_column(self) -> tuple:
-        """ Get a query for SELECT """
-        return (self,) # Default implementation
 
     def iter_objects(self) -> Iterator['ObjectABC']:
         yield self # Default implementation
@@ -56,9 +54,6 @@ class ObjectABC(QueryABC):
     def __ne__(self, val) -> bool:
         return not self.__eq__(val)
 
-    def __hash__(self) -> int:
-        return hash((type(self), self.name))
-
     def __repr__(self):
         return 'Obj(%s)' % str(self)
 
@@ -75,6 +70,8 @@ class Object(ObjectABC):
     """ Column expression """
     def __init__(self, name: Name):
         self._name = to_name(name)
+        # if not self._name:
+        #     raise errors.ObjectArgsError('Name cannot be empty.')
 
     @property
     def name(self):
@@ -82,3 +79,31 @@ class Object(ObjectABC):
 
     def append_query_data(self, qd: 'QueryData') -> None:
         qd.append_object(self.name) # Default Implementation
+
+
+def object_key(obj):
+    return id(obj)
+
+
+class FrozenObjectSet(FrozenKeySetABC):
+
+    def _key(self, obj):
+        return object_key(obj)
+
+
+class ObjectSet(KeySetABC):
+
+    def _key(self, obj):
+        return object_key(obj)
+
+
+class OrderedFrozenObjectSet(OrderedFrozenKeySetABC):
+
+    def _key(self, obj):
+        return object_key(obj)
+
+
+class OrderedObjectSet(OrderedKeySetABC):
+
+    def _key(self, obj):
+        return object_key(obj)

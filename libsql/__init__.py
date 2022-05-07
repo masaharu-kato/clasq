@@ -1,5 +1,2 @@
-from .syntax import functions
-from .syntax import keywords
-from .syntax import sqltypes
-from .utils import tabledata
+from .syntax import functions, keywords, sqltypes
 from .connection import mysql

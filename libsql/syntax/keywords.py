@@ -3,12 +3,19 @@
 """
 
 from enum import Enum
-from tkinter import CASCADE
-from typing import Union
+from typing import TYPE_CHECKING, Union
+
+from .query_abc import QueryABC
+
+if TYPE_CHECKING:
+    from .query_data import QueryData
 
 
-class KeywordABC:
+class KeywordABC(QueryABC, Enum):
     """ Keyword abstract class """
+
+    def append_query_data(self, qd: 'QueryData') -> None:
+        qd.append_one(self.value)
 
     @classmethod
     def _make(cls, val):
@@ -21,7 +28,7 @@ class KeywordABC:
         raise TypeError('Invalid type %s (%s)' % (type(val), val))
 
 
-class OrderType(KeywordABC, Enum):
+class OrderType(KeywordABC):
     ASC = b'ASC'
     DESC = b'DESC'
 
@@ -34,7 +41,7 @@ class OrderType(KeywordABC, Enum):
         return super()._make(val)
 
 
-class JoinType(KeywordABC, Enum):
+class JoinType(KeywordABC):
     INNER = b'INNER'
     LEFT  = b'LEFT'
     RIGHT = b'RIGHT'
@@ -46,7 +53,7 @@ class JoinType(KeywordABC, Enum):
         return super()._make(val)
 
 
-class ReferenceOption(KeywordABC, Enum):
+class ReferenceOption(KeywordABC):
     RESTRICT = b'RESTRICT'
     CASCADE = b'CASCADE'
     SET_NULL = b'SET_NULL'

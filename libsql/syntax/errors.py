@@ -31,3 +31,12 @@ class ObjectNotSetError(ObjectError):
 
 class ObjectAlreadySetError(ObjectError):
     """ Object already set Error """
+
+class ObjectNameAlreadyExistsError(ObjectError):
+    """ Object name already exists Error """
+
+class ObjectAmbiguousError(ObjectError):
+    """ Object is ambiguous Error """
+
+class ObjectExprError(ObjectError):
+    """ Object expression error """

@@ -1,12 +1,12 @@
 """
     Database class definition
 """
-from typing import TYPE_CHECKING, Any, Dict, Optional, List, Tuple, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, List, Tuple, Set, Union
+from libsql.schema.view import ViewABC
 
 from libsql.syntax.query_data import QueryData
 
-from ..syntax.exprs import ExprABC, ObjectABC, Object, NamedExprABC, Name
-from ..syntax.keywords import JoinType
+from ..syntax.exprs import ExprABC, Object, Name
 from ..syntax import errors
 from .table import Table, iter_tables
 from .column import Column, NamedExpr, OrderedColumn
@@ -83,6 +83,7 @@ class Database(Object):
     def iter_tables(self):
         return iter(self._table_dict.values())
 
+    @property
     def tables(self):
         return list(self.iter_tables())
 
@@ -116,7 +117,7 @@ class Database(Object):
 
         raise errors.ObjectArgsError('Invalid type %s (%s)' % (type(val), val))
         
-    def __getitem__(self, val: Union[Name, Table]):
+    def __getitem__(self, val: Union[Name, Table]) -> Table:
         return self.table(val)
 
     def table_or_none(self, val: Union[Name, Table]) -> Optional[Table]:
@@ -140,14 +141,18 @@ class Database(Object):
         Raises:
             errors.NotaSelfObjectError: The Table object in the different database was specified
         """
-        if table.database_or_none:
+        if table.database_or_none is not None:
             if not table.database == self:
                 raise errors.NotaSelfObjectError('Table of the different database.')
         else:
             table.set_database(self)
+
+        if table.name in self._table_dict:
+            raise errors.ObjectNameAlreadyExistsError('Table name object already exists.', table)
+
         self._table_dict[table.name] = table
 
-    def append_table(self, name: Name, **options) -> 'Table':
+    def append_table(self, name: Name, *, fetch=False, **options) -> 'Table':
         """ Append new table to this Database
 
         Args:
@@ -157,14 +162,17 @@ class Database(Object):
         Returns:
             Table: Appended new Table object
         """
-        table = Table(name, database=self, **options)
-        self._table_dict[table.name] = table
-        return table
+        self.append_table_object(Table(name, database=self, fetch_from_db=fetch, **options))
+        return self.table(name)
+
+    def remove_table(self, table: Table) -> None:
+        table_name = self.table(table).name
+        del self._table_dict[table_name]
 
     def fetch_from_db(self) -> None:
         """ Fetch tables of this database from the connection """
         for tabledata in self.query(b'SHOW', b'TABLES'):
-            self.append_table(tabledata[0])
+            self.append_table(tabledata[0], fetch=True)
 
     def q_create(self, *, if_not_exists=False) -> tuple:
         return (
@@ -181,14 +189,14 @@ class Database(Object):
         self.execute(
             b'DROP', b'DATABASE',
             (b'IF', b'EXISTS') if if_exists else None, self)
-        self._exists_on_db = False
+        self._exists = False
 
     def create(self, *, if_not_exists=False, drop_if_exists=False) -> None:
         """ Create this database """
         if drop_if_exists:
             self.drop(if_exists=True)
         self.execute(*self.q_create(if_not_exists=if_not_exists))
-        self._exists_on_db = True
+        self._exists = True
 
     @property
     def last_qd(self):
@@ -209,96 +217,29 @@ class Database(Object):
     def commit(self) -> None:
         return self.cnx.commit()
 
-    def select_query(self,
-        *_columns_or_tables: Optional[Union[Table, NamedExprABC]],
-        froms : Optional[List[Union[Name, Table]]] = None,
-        joins : Optional[List[Tuple[Union[Name, Table], JoinType, Optional[ExprABC]]]] = None,
-        where : Optional[ExprABC] = None,
-        groups: Optional[List[NamedExprABC]] = None,
-        orders: Optional[List[NamedExprABC]] = None,
-        limit : Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> QueryData:
-        """ Make a SELECT query data
+    # def select(self,
+    #     *nexprs: NamedExprABC,
+    #     views : Iterable[ViewABC] = (),
+    #     where : ExprABC = NoneExpr,
+    #     groups: Iterable[NamedExprABC] = (),
+    #     orders: Iterable[NamedExprABC] = (),
+    #     limit : Optional[int] = None,
+    #     offset: Optional[int] = None,
+    # ) -> TableData:
+    #     """ Run SELECT query
 
-        Returns:
-            QueryData: SELECT query data
-        """
-
-        columns_or_tables = [c for c in _columns_or_tables if c is not None]
-        from_tables = [self.table(t) for t in (froms or [])]
-        specified_tables: Set[Table] = set([*from_tables, *([self.table(t) for t, _, _ in joins] if joins else [])])
-        used_tables = set(iter_tables(*columns_or_tables))
-        from_tables.extend(used_tables - specified_tables)
-        if not from_tables:
-            raise errors.ObjectNotSpecifiedError('No tables specified for `from.`')
-
-        return QueryData(
-            b'SELECT',
-            [c.query_for_select_column() for c in columns_or_tables] if columns_or_tables else b'*',
-            b'FROM', from_tables,
-            *((
-                JoinType.make(join_type), b'JOIN',
-                self.table(t),
-                (b'ON', expr) if expr is not None else None
-            ) for t, join_type, expr in (joins or [])),
-            (b'WHERE', where) if where else None,
-            (b'GROUP', b'BY', groups) if groups else None,
-            (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
-            (b'LIMIT', limit) if limit else None,
-            (b'OFFSET', offset) if offset else None,
-        )
-
-    def select(self,
-        *_columns_or_tables: Optional[NamedExprABC],
-        froms : Optional[List[Union[Name, Table]]] = None,
-        joins : Optional[List[Tuple[Union[Name, Table], JoinType, Optional[ExprABC]]]] = None,
-        where : Optional[ExprABC] = None,
-        groups: Optional[List[NamedExprABC]] = None,
-        orders: Optional[List[NamedExprABC]] = None,
-        limit : Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> TableData:
-        """ Run SELECT query
-
-        Args:
-            columns_or_tables (ExprABC):
-                Columns or Tables to select.
-
-            from_tables (Optional[List[Union[Name, Table]]], optional):
-                Tables for FROM clause. Defaults to None.
-
-            joins (Optional[List[Tuple[Union[Name, Table], JoinType, ExprABC]]], optional):
-                Table joins. Defaults to None.
-
-            where (Optional[ExprABC], optional):
-                Where expression. Defaults to None.
-
-            groups (Optional[List[Column]], optional):
-                Column groups. Defaults to None.
-
-            orders (Optional[List[OrderedColumn]], optional):
-                Column orders. Defaults to None.
-
-            limit (Optional[int], optional):
-                Limit value. Defaults to None.
-
-            offset (Optional[int], optional):
-                Offset value. Defaults to None.
-
-        Returns:
-            TableData: Result rows
-        """
-        return self.query_qd(self.select_query(
-            *_columns_or_tables,
-            froms  = froms,
-            joins  = joins,
-            where  = where,
-            groups = groups,
-            orders = orders,
-            limit  = limit,
-            offset = offset,
-        ))
+    #     Returns:
+    #         TableData: Result data
+    #     """
+    #     return self.query_qd(self.select_query(
+    #         *nexprs,
+    #         views = views,
+    #         where = where,
+    #         groups = groups,
+    #         orders = orders,
+    #         limit = limit,
+    #         offset = offset,
+    #     ))
 
     def insert(self,
         tablelike: Union[Name, Table],

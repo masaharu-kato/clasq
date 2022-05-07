@@ -1,118 +1,102 @@
 """
     View classes
 """
-from abc import abstractmethod
-from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Tuple, Type, Union
+from abc import abstractmethod, abstractproperty
+from typing import TYPE_CHECKING, Dict, Iterable, Optional, Tuple, Union
 
+from ..syntax.object_abc import Object, Name, to_name, FrozenObjectSet, OrderedFrozenObjectSet
+from ..syntax.exprs import ExprABC, NoneExpr, OP, NamedExprABC, NamedExpr
 from ..syntax.keywords import JoinType, JoinLike, OrderLike
-from ..syntax.exprs import ExprABC, OP, NamedExpr, ObjectABC, Object, NamedExprABC, Name, to_name
+from ..syntax.query_data import QueryData
 from ..syntax import errors
 from ..utils.tabledata import TableData
 
 if TYPE_CHECKING:
-    from ..syntax.query_data import QueryData
-    from .table import Table
     from .database import Database
+    from ..connection import ConnectionABC
 
 
 class ViewABC(Object):
     """ View Expr """
 
-    def __init__(self,
-        name: Name,
-        *_nexprs: Optional[NamedExprABC],
-        database: Optional['Database'] = None,
-        exists_on_db: bool = False,
-        dynamic: bool = False,
-    ):
+    def __init__(self, name: Name):
         super().__init__(name)
-        assert database is None or type(database).__name__ == 'Database' 
-        self._database = database
-        self._exists_on_db = exists_on_db
-        self._dynamic = dynamic
+        if not self.name:
+            raise errors.ObjectArgsError('View name cannot be empty.')
 
-        nexprs = [c for c in _nexprs if c is not None]
-        self._nexpr_dict: Dict[bytes, NamedExprABC] = {}
-        for nexpr in nexprs:
-            self.append_named_expr(nexpr)
-        # self._options = options
-            
-        self._query_data : Optional['QueryData'] = None # SELECT query data
+        self._qd_table_expr: Optional[QueryData] = None
+        self._qd_select : Optional[QueryData] = None # SELECT query data
         self._result : Optional[TableData] = None # View Result
+
+    @abstractproperty
+    def base_view(self) -> 'ViewABC':
+        """ Get a base View object """
+
+    @abstractproperty
+    def available_named_exprs(self) -> Iterable[NamedExprABC]:
+        """ Iterate available NamedExpr objects """
+    
+    @abstractproperty
+    def named_exprs(self) -> Iterable[NamedExprABC]:
+        """ Iterate NamedExpr objects """
+
+    @abstractproperty
+    def query_table_expr(self) -> QueryData:
+        """ QueryData for SELECT FROM """
+
+    @abstractproperty
+    def outer_named_exprs(self) -> Iterable[NamedExprABC]:
+        """ NamedExpr objects for Outer View (which joins this view) """
+
+    @abstractmethod
+    def column(self, val: Union[Name, NamedExprABC]) -> NamedExprABC:
+        """ Get a NamedExpr object with the specified name
+                or check existing NamedExpr object is valid for this Table object
+
+        Args:
+            val (bytes | str | NamedExprABC): NamedExpr name or Column object
+
+        Returns:
+            NamedExprABC: NamedExpr object with the specified name or Column object itself
+        """
+
+    # @abstractmethod
+    # def append_named_expr_object(self, nexpr: NamedExprABC) -> None:
+    #     """ Append (existing) named expression object
+
+    #     Args:
+    #         nexpr (NamedExprABC): Named expression object
+    #     """
+
+    @abstractmethod
+    def _new_view(self, *args, **kwargs) -> 'ViewABC':
+        """ Make a new view with arguments """
 
     def __repr__(self):
         return 'View(%s)' % str(self)
 
     @property
-    def database(self):
-        if self._database is None:
-            raise errors.ObjectNotSetError('Database is not set.')
-        return self._database
+    def database_or_none(self) -> Optional['Database']:
+        return self.base_view.database_or_none # Default Implementation
 
     @property
-    def db(self):
+    def database(self) -> 'Database':
+        """ Get a Database object of this view """
+        if self.database_or_none is None:
+            raise errors.ObjectNotSetError('Database is not set.')
+        return self.database_or_none
+
+    @property
+    def db(self) -> 'Database':
         return self.database
 
     @property
-    def database_or_none(self):
-        return self._database
-
-    @property
-    def cnx(self):
+    def cnx(self) -> 'ConnectionABC':
         return self.database.cnx
 
     @property
-    def exists_on_db(self):
-        return self._exists_on_db
-
-    @property
-    def is_dynamic(self):
-        return self._dynamic
-
-    # @property
-    # def options(self):
-    #     return self._options
-
-    def iter_named_exprs(self) -> Iterator[ObjectABC]:
-        return (c for c in self._nexpr_dict.values())
-
-    def set_database(self, database: 'Database') -> None:
-        """ Set a Database object """
-        if self._database is not None:
-            raise errors.ObjectAlreadySetError('Database already set.')
-        self._database = database
-
-    def column(self, val: Union[Name, NamedExprABC]) -> NamedExprABC:
-        """ Get a Column object with the specified name
-                or check existing Column object is valid for this Table object
-
-        Args:
-            val (bytes | str | ObjectABC): Column name or Column object
-
-        Raises:
-            errors.ObjectNotFoundError: _description_
-            errors.NotaSelfObjectError: _description_
-            errors.ObjectArgTypeError: _description_
-
-        Returns:
-            Column: Column object with the specified name or Column object itself
-        """
-        if isinstance(val, (bytes, str)):
-            name = to_name(val)
-            if name not in self._nexpr_dict:
-                if not self.is_dynamic:
-                    raise errors.ObjectNotFoundError('Undefined column name `%r` on view `%r`' % (name, self._name))
-                self._nexpr_dict[name] = NamedExpr(name)
-            return self._nexpr_dict[name]
-            
-        if isinstance(val, NamedExprABC):
-            if not val in self._nexpr_dict.values():
-                if not self.is_dynamic:
-                    raise errors.NotaSelfObjectError('Not a column of this view.')
-                self._nexpr_dict[val.name] = val
-            return val
-
-        raise errors.ObjectArgTypeError('Invalid type %s (%s)' % (type(val), val))
+    def exists_on_db(self) -> bool:
+        return False # Default Implementation
 
     def col(self, val: Union[Name, NamedExprABC]):
         """ Synonym of `column` method """
@@ -130,82 +114,143 @@ class ViewABC(Object):
         """ Synonym of `column_or_none` method """
         return self.column_or_none(val)
 
-    def append_named_expr(self, nexpr: NamedExprABC) -> None:
-        """ Append (existing) named expression object
-
-        Args:
-            nexpr (NamedExprABC): Named expression object
-        """
-        self._nexpr_dict[nexpr.name] = nexpr
-
-    def get_froms(self) -> Optional[Iterable[Union['View', Name]]]:
+    @property
+    def join_type(self) -> Optional[JoinType]:
         return None # Default Implementation
 
-    def get_joins(self) -> Optional[Iterable[Tuple[Union['View', Name], JoinLike, Optional[ExprABC]]]]:
+    @property
+    def view_to_join(self) -> 'ViewABC':
+        raise errors.ObjectNotSetError('Join is not set.') # Default Implementation
+
+    @property
+    def expr_for_join(self) -> 'ExprABC':
+        raise errors.ObjectNotSetError('Join is not set.') # Default Implementation
+
+    @property
+    def where_expr(self) -> ExprABC:
+        return NoneExpr  # Default Implementation
+
+    @property
+    def where_expr_for_join(self):
+        return NoneExpr  # Default Implementation
+
+    @property
+    def groups(self) -> Iterable[NamedExprABC]:
+        return () # Default Implementation
+
+    @property
+    def orders(self) -> Iterable[NamedExprABC]:
+        return () # Default Implementation
+
+    @property
+    def outer_orders(self) -> Iterable[NamedExprABC]:
+        return () # Default Implementation
+
+    @property
+    def limit_value(self) -> Optional[int]:
         return None # Default Implementation
 
-    def get_where(self) -> Optional[ExprABC]:
+    @property
+    def offset_value(self) -> Optional[int]:
         return None # Default Implementation
 
-    def get_groups(self) -> Optional[Iterable[NamedExprABC]]:
-        return None # Default Implementation
+    @property
+    def force_join_subquery(self) -> bool:
+        return False # Default Implementation
 
-    def get_orders(self) -> Optional[Iterable[NamedExprABC]]:
-        return None # Default Implementation
+    @property
+    def subquery_required_for_join(self) -> bool:
+        return self.force_join_subquery or bool(self.groups or self.limit_value or self.offset_value)
 
-    def get_limit(self) -> Optional[int]:
-        return None # Default Implementation
+    @property
+    def expr_for_outer_join(self) -> ExprABC:
+        return NoneExpr if self.subquery_required_for_join else self.where_expr  # Default Implementation
 
-    def get_offset(self) -> Optional[int]:
-        return None # Default Implementation
+    @property
+    def query_table_expr_for_join(self) -> QueryData:
+        if self.subquery_required_for_join:
+            return QueryData(b'(', self.query_select, b')', b'AS', self.name)
+        return self.base_view.query_table_expr
+
+    def refresh_query_select(self) -> QueryData:
+        """ Refresh QueryData """
+        qd = QueryData(
+            b'SELECT',
+            [c.query_for_select_column for c in self.named_exprs] if self.named_exprs else b'*',
+            b'FROM', self.query_table_expr,
+            (b'WHERE', self.where_expr) if self.where_expr is not NoneExpr else None,
+            (b'GROUP', b'BY', [*self.groups]) if self.groups else None,
+            (b'ORDER', b'BY', [c.q_order() for c in self.orders]) if self.orders else None,
+            (b'LIMIT', self.limit_value) if self.limit_value else None,
+            (b'OFFSET', self.offset_value) if self.offset_value else None,
+        )
+        self._qd_select = qd
+        return qd
+
+    @property
+    def query_select(self) -> QueryData:
+        if self._qd_select is None:
+            return self.refresh_query_select()
+        return self._qd_select
 
     def clone(self,
-        *_columns: Optional[ObjectABC], 
-        database : Optional['Database'] = None,
-        name     : Optional[Name] = None,
-        froms    : Optional[Iterable[Union['ViewABC', Name]]] = None,
-        joins    : Optional[Iterable[Tuple[Union['ViewABC', Name], JoinLike, Optional[ExprABC]]]] = None,
-        where    : Optional[ExprABC] = None,
-        groups   : Optional[Iterable[NamedExprABC]] = None,
-        orders   : Optional[Iterable[NamedExprABC]] = None,
-        limit    : Optional[int] = None,
-        offset   : Optional[int] = None,
+        *,
+        sel_nexprs: Iterable[NamedExprABC] = (),
+        add_nexprs: Iterable[NamedExprABC] = (),
+        name  : Optional[Name] = None,
+        join_type: Optional[JoinLike] = None,
+        join_view: Optional['ViewABC'] = None,
+        join_expr: Optional[ExprABC] = None,
+        where : ExprABC = NoneExpr,
+        groups: Iterable[NamedExprABC] = (),
+        orders: Iterable[NamedExprABC] = (),
+        limit : Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> 'ViewABC':
-
-        return self._new_view(
-            *self.iter_named_exprs(), *_columns,
-            database = database if database is not None else self._database,
+        assert self.named_exprs
+        new_view = self._new_view(
+            base_view = self.base_view,
+            cur_nexprs = self.named_exprs,
+            sel_nexprs = sel_nexprs,
+            add_nexprs = add_nexprs,
             name = name if name is not None else self._name,
-            froms = self._join_as_tuple(self.get_froms(), froms),
-            joins = self._join_as_tuple(self.get_joins(), joins),
-            where = OP.AND.call_joined_opt(self.get_where(), where),
-            groups = self._join_as_tuple(self.get_groups(), groups),
-            orders = self._join_as_tuple(self.get_orders(), orders),
-            limit = limit if limit is not None else self.get_limit(),
-            offset = offset if offset is not None else self.get_offset(),
+            join_type = join_type,
+            join_view = join_view,
+            join_expr = join_expr,
+            where = self.where_expr & where,
+            groups = (*self.groups, *groups),
+            orders = (*self.orders, *orders),
+            limit = limit if limit is not None else self.limit_value,
+            offset = offset if offset is not None else self.offset_value,
         )
+        if join_type is not None:
+            return self._new_view(base_view=new_view)
+        return new_view
 
-    def merged(self, view: 'View') -> 'ViewABC':
-        return self.clone(
-            *view.iter_named_exprs(),
-            database = view._database,
-            name   = view._name,
-            froms  = view.get_froms(),
-            joins  = view.get_joins(),
-            where  = view.get_where(),
-            groups = view.get_groups(),
-            orders = view.get_orders(),
-            limit  = view.get_limit(),
-            offset = view.get_offset(),
-        )
+    # def merged(self, view: 'View') -> 'ViewABC':
+    #     return self.clone(
+    #         *view.iter_named_exprs(),
+    #         name = view._name,
+    #         base = self.base_view
+    #         joins  = view.joins,
+    #         where  = view.where_expr,
+    #         groups = view.groups,
+    #         orders = view.orders,
+    #         limit  = view.limit_value,
+    #         offset = view.offset_value,
+    #     )
 
-    def select_column(self, *_columns: Optional[ObjectABC]) -> 'ViewABC':
-        """ Make a View object with columns """
-        return self.clone(*_columns)
+    def select_column(self, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+        """ Make a View object with specific columns (NamedExpr objects) """
+        return self.clone(sel_nexprs=(*cols, *(c.as_(n) for n, c in as_cols.items())))
+
+    def add_column(self, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+        """ Make a View object with additional columns (NamedExpr objects) """
+        return self.clone(add_nexprs=(*cols, *(c.as_(n) for n, c in as_cols.items())))
 
     def where(self, *exprs, **coleqs) -> 'ViewABC':
         """ Make a View object with WHERE clause """
-        return self.clone(where=self._proc_terms(*exprs, **coleqs))
+        return self.clone(where=OP.AND(*exprs, **coleqs))
 
     def group_by(self, *columns: NamedExprABC, **cols: Optional[bool]) -> 'ViewABC':
         return self.clone(groups=[
@@ -232,39 +277,45 @@ class ViewABC(Object):
     #     """ Make a View object with a single result """
     #     return SingleView(self)
 
-    def join(self, join_type: JoinLike, view: Union['ViewABC', Name], *exprs: ExprABC, **_coleqs: Union[Name, NamedExprABC]) -> 'ViewABC':
+    def join(self,
+        join_type: JoinLike,
+        view: 'ViewABC',
+        expr: ExprABC,
+        *cols: NamedExprABC,
+        **as_cols: NamedExprABC,
+    ) -> 'ViewABC':
         """ Make a Joined View """
-        coleqs = {n: self.column(v) for n, v in _coleqs.items()}
-        return self.clone(joins=[(
-            self._proc_view(view),
-            JoinType.make(join_type),
-            self._proc_terms(*exprs, **coleqs)
-        )])
+        return self.clone(
+            join_type = JoinType.make(join_type),
+            join_view = view,
+            join_expr = expr,
+            add_nexprs= (*cols, *(c.as_(n) for n, c in as_cols.items())),
+        )
 
-    def inner_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: Union[Name, NamedExprABC]) -> 'ViewABC':
+    def inner_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
         """ Make a INNER Joined View """
-        return self.join(JoinType.INNER, view, *exprs, **coleqs)
+        return self.join(JoinType.INNER, view, expr, *cols, **as_cols)
 
-    def left_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: Union[Name, NamedExprABC]) -> 'ViewABC':
+    def left_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
         """ Make a LEFT Joined View """
-        return self.join(JoinType.LEFT, view, *exprs, **coleqs)
+        return self.join(JoinType.LEFT, view, expr, *cols, **as_cols)
 
-    def right_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: Union[Name, NamedExprABC]) -> 'ViewABC':
+    def right_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
         """ Make a RIGHT Joined View """
-        return self.join(JoinType.RIGHT, view, *exprs, **coleqs)
+        return self.join(JoinType.RIGHT, view, expr, *cols, **as_cols)
 
-    def outer_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: Union[Name, NamedExprABC]) -> 'ViewABC':
+    def outer_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
         """ Make a OUTER Joined View """
-        return self.join(JoinType.OUTER, view, *exprs, **coleqs)
+        return self.join(JoinType.OUTER, view, expr, *cols, **as_cols)
 
-    def cross_join(self, view: Union['ViewABC', Name], *exprs: ExprABC, **coleqs: Union[Name, NamedExprABC]) -> 'ViewABC':
+    def cross_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
         """ Make a CROSS Joined View """
-        return self.join(JoinType.CROSS, view, *exprs, **coleqs)
+        return self.join(JoinType.CROSS, view, expr, *cols, **as_cols)
 
     def __getitem__(self, val):
 
         if isinstance(val, int):
-            return self.clone(offset=val, limit=1)
+            return self.clone(offset=val, limit=1) # TODO: Implementation
 
         if isinstance(val, slice):
             assert not val.step # TODO: Implementation
@@ -284,38 +335,9 @@ class ViewABC(Object):
             return self.clone(where=val)
 
         raise TypeError('Invalid type %s (%s)' % (type(val), val))
-
-
-    def refresh_query_data(self) -> None:
-        """ Refresh QueryData """
-        self._query_data = self.db.select_query(
-            *self.iter_named_exprs(),
-            froms  = self.get_froms(),
-            joins  = self.get_joins(),
-            where  = self.get_where(),
-            groups = self.get_groups(),
-            orders = self.get_orders(),
-            limit  = self.get_limit(),
-            offset = self.get_offset(),
-        )
-
-    def prepare_query_data(self) -> None:
-        """ Prepare QueryData """
-        if self._query_data is None:
-            self.refresh_query_data()
-    
-    @property
-    def is_query_data_ready(self) -> bool:
-        return self._query_data is not None
-
-    @property
-    def query_data(self) -> 'QueryData':
-        self.prepare_query_data()
-        assert self._query_data is not None
-        return self._query_data
     
     def refresh_result(self) -> None:
-        self._result = self.db.query_qd(self.query_data)
+        self._result = self.db.query_qd(self.query_select)
 
     def prepare_result(self) -> None:
         if self._result is None:
@@ -334,6 +356,12 @@ class ViewABC(Object):
     def __iter__(self):
         return iter(self.result)
 
+    def __len__(self):
+        return len(self.result)
+
+    def __bool__(self):
+        return bool(self.result)
+
     def __eq__(self, value):
         if isinstance(value, TableData):
             return self.result == value
@@ -343,19 +371,19 @@ class ViewABC(Object):
         if not isinstance(value, ViewABC):
             raise TypeError('Invalid value type.')
         view = value
-        return [*self.iter_named_exprs()] == [*view.iter_named_exprs()] \
-            and self._database == view._database \
-            and self._name == view._name \
-            and self.get_froms()  == view.get_froms() \
-            and self.get_joins()  == view.get_joins() \
-            and self.get_where()  == view.get_where() \
-            and self.get_groups() == view.get_groups() \
-            and self.get_orders() == view.get_orders() \
-            and self.get_limit()  == view.get_limit() \
-            and self.get_offset() == view.get_offset()
-    
-    def __hash__(self) -> int:
-        return super().__hash__()
+        return (
+            self.named_exprs == view.named_exprs
+            and self._name == view._name
+            and self.base_view == view.base_view
+            and self.join_type == view.join_type
+            and self.view_to_join == view.view_to_join
+            and self.expr_for_join == view.expr_for_join
+            and self.where_expr  == view.where_expr
+            and self.groups == view.groups
+            and self.orders == view.orders
+            and self.limit_value  == view.limit_value
+            and self.offset_value == view.offset_value
+        )
 
     def drop(self, *, if_exists=False):
         """ Run DROP VIEW query """
@@ -376,82 +404,233 @@ class ViewABC(Object):
         # self._exists_on_db = True
         # TODO: Implementation
 
-    @classmethod
-    def _make_tuple(cls, t: Optional[Iterable]) -> tuple:
-        if t is None:
-            return ()
-        if isinstance(t, tuple):
-            return t
-        return tuple(t)
-
-    @classmethod
-    def _join_as_tuple(cls, t1: Optional[Iterable], t2: Optional[Iterable]) -> tuple:
-        if t1 is None:
-            return cls._make_tuple(t2)
-        if t2 is None:
-            return cls._make_tuple(t1)
-        return (*t1, *t2)
-
     def _proc_view(self, viewlike: Union['ViewABC', Name]) -> 'ViewABC':
         if isinstance(viewlike, ViewABC):
             return viewlike
         return self.database[viewlike]
 
-    def _proc_terms(self, *exprs: Optional[ExprABC], **coleqs: ExprABC) -> Optional[ExprABC]:
-        return OP.AND.call_joined_opt(
-            OP.AND.call_joined_opt(*exprs),
-            OP.AND.call_joined_opt(*(self.column(n) == v for n, v in coleqs.items()))
-        )
-
-    @abstractmethod
-    def _new_view(self, *args, **kwargs) -> 'ViewABC':
-        """ Make a new view with arguments """
-
 
 class View(ViewABC):
     """ Table View """
     def __init__(self,
-        *_nexprs: Optional[NamedExprABC], 
-        database : Optional['Database'] = None,
+        *,
+        base_view: ViewABC,
+        cur_nexprs: Iterable[NamedExprABC] = (),
+        sel_nexprs: Iterable[NamedExprABC] = (),
+        add_nexprs: Iterable[NamedExprABC] = (),
+        join_type: Optional[JoinLike] = None,
+        join_view: Optional[ViewABC] = None,
+        join_expr: Optional[ExprABC] = None,
         name     : Optional[Name] = None,
-        froms    : Optional[Iterable[Union['View', Name]]] = None,
-        joins    : Optional[Iterable[Tuple[Union['View', Name], JoinLike, Optional[ExprABC]]]] = None,
-        where    : Optional[ExprABC] = None,
-        groups   : Optional[Iterable[NamedExprABC]] = None,
-        orders   : Optional[Iterable[NamedExprABC]] = None,
+        where    : ExprABC = NoneExpr,
+        groups   : Iterable[NamedExprABC] = (),
+        orders   : Iterable[NamedExprABC] = (),
         limit    : Optional[int] = None,
         offset   : Optional[int] = None,
+        outer_orders   : Optional[Iterable[NamedExprABC]] = None,
+        outer_nexprs   : Optional[Iterable[NamedExprABC]] = None,
+        force_join_subquery: bool = False,
+        column_alias_format: Name = b'%s',
+        dynamic: bool = False,
+        exists_on_db: bool = False,
+        **options,
     ):
-        super().__init__(name or b'', *_nexprs, database=database)
+        super().__init__(name if name is not None else base_view.name)
 
-        self._froms  : Tuple['Table', ...] = self._make_tuple(froms)
-        self._joins  : Tuple[Tuple['Table', JoinType, ExprABC], ...] = self._make_tuple(joins)
-        self._where  : Optional[ExprABC] = where
-        self._groups : Tuple[NamedExprABC, ...] = self._make_tuple(groups)
-        self._orders : Tuple[NamedExprABC, ...] = self._make_tuple(orders)
-        self._limit  : Optional[int] = limit
-        self._offset : Optional[int] = offset
+        if join_type is not None and not (isinstance(join_view, ViewABC) and isinstance(join_expr, ExprABC)):
+            raise errors.ObjectArgsError('Join view or Join expr is not set.')
 
-    def get_froms(self):
-        return self._froms
+        self._base_view = base_view
+        
+        self._join_type = JoinType.make(join_type) if join_type is not None else join_type
+        self._view_to_join = join_view
+        self._expr_for_join = join_expr
 
-    def get_joins(self):
-        return self._joins
+        base_nexprs = cur_nexprs or self.base_view.outer_named_exprs
+        if not base_nexprs:
+            raise errors.ObjectError('Base NamedExprs are not set.')
 
-    def get_where(self) -> Optional[ExprABC]:
+        if sel_nexprs:
+            self._named_exprs = OrderedFrozenObjectSet(*sel_nexprs)
+        else:
+            if add_nexprs:
+                self._named_exprs = OrderedFrozenObjectSet(*base_nexprs, *add_nexprs)
+            else:
+                if self._view_to_join is not None:
+                    self._named_exprs = OrderedFrozenObjectSet(*base_nexprs, *self._view_to_join.outer_named_exprs)
+                else:
+                    self._named_exprs = OrderedFrozenObjectSet(*base_nexprs)
+        assert len(self._named_exprs)
+
+        self._where = where
+        self._groups = OrderedFrozenObjectSet(*groups)
+        self._orders = OrderedFrozenObjectSet(*orders, *base_view.outer_orders)
+        self._limit  = limit
+        self._offset = offset
+
+        self._outer_named_exprs  = self._named_exprs if outer_nexprs is None else OrderedFrozenObjectSet(outer_nexprs)
+        self._outer_orders  = orders if outer_orders is None else tuple(outer_orders)
+        self._force_join_subquery = force_join_subquery
+        self._column_alias_format = to_name(column_alias_format)
+        self._exists_on_db = exists_on_db
+        self._dynamic = dynamic
+        self._options = options
+
+        # Calculate all available NamedExpr objects (Virtual Columns)
+        self._available_nexprs = FrozenObjectSet(
+            *base_view.available_named_exprs,
+            *(join_view.available_named_exprs if join_view is not None else ())
+        )
+
+        for nexpr in self._named_exprs:
+            if id(nexpr) not in self._available_nexprs and not nexpr.consists_of(self._available_nexprs):
+                raise errors.ObjectExprError('NamedExpr not consists of available columns.', nexpr)
+
+        # Generate a dictionary from expression name to expression
+        self._nexpr_dict: Dict[bytes, NamedExprABC] = {}
+        for nexpr in self.named_exprs:
+            if nexpr.name not in self._nexpr_dict:
+                self._nexpr_dict[nexpr.name] = nexpr
+            # alias_name = self._column_alias_format % nexpr.name
+            # if alias_name in self._nexpr_dict:
+            #     raise errors.ObjectNameAlreadyExistsError('Alias already exists.', alias_name)
+            # self._nexpr_dict[alias_name] = nexpr
+
+
+    @property
+    def base_view(self) -> 'ViewABC':
+        """ Get a base View object """
+        return self._base_view
+
+    @property
+    def available_named_exprs(self) -> Iterable[NamedExprABC]:
+        return self._available_nexprs
+
+    @property
+    def named_exprs(self) -> Iterable[NamedExprABC]:
+        """ NamedExpr objects in this View """
+        return self._named_exprs
+
+    @property
+    def outer_named_exprs(self) -> Iterable[NamedExprABC]:
+        """ NamedExpr objects for Outer View (which joins this view) """
+        return self._outer_named_exprs
+
+    @property
+    def join_type(self) -> Optional[JoinType]:
+        return self._join_type
+
+    @property
+    def view_to_join(self) -> 'ViewABC':
+        if self._view_to_join is None:
+            raise errors.ObjectNotSetError('View to join is not set.')
+        return self._view_to_join
+
+    @property
+    def expr_for_join(self) -> 'ExprABC':
+        if self._expr_for_join is None:
+            raise errors.ObjectNotSetError('Expr for join is not set.')
+        return self._expr_for_join
+
+    @property
+    def where_expr(self) -> ExprABC:
         return self._where
 
-    def get_groups(self) -> Optional[Iterable[NamedExprABC]]:
+    @property
+    def groups(self) -> Iterable[NamedExprABC]:
         return self._groups
 
-    def get_orders(self) -> Optional[Iterable[NamedExprABC]]:
+    @property
+    def orders(self) -> Iterable[NamedExprABC]:
         return self._orders
 
-    def get_limit(self) -> Optional[int]:
+    @property
+    def outer_orders(self) -> Iterable[NamedExprABC]:
+        """ NamedExpr objects for Outer View (which joins this view) """
+        return self._outer_orders
+
+    @property
+    def limit_value(self) -> Optional[int]:
         return self._limit
 
-    def get_offset(self) -> Optional[int]:
+    @property
+    def offset_value(self) -> Optional[int]:
         return self._offset
+
+    @property
+    def force_join_subquery(self) -> bool:
+        return self._force_join_subquery
+
+    @property
+    def is_dynamic(self):
+        return self._dynamic
+
+    def refresh_query_table_expr(self) -> QueryData:
+        """ Refresh QueryData for table FROM """
+        if self.join_type is not None:
+            on_expr = self.expr_for_join & self.expr_for_outer_join
+            # print('on_expr = ', on_expr)
+            qd = QueryData(
+                b'(', self.base_view.query_table_expr, (
+                    self.join_type, b'JOIN', self.view_to_join.query_table_expr_for_join,
+                    (b'ON', on_expr) if on_expr is not NoneExpr else None
+                ), b')'
+            )
+        else:
+            qd = QueryData(self.base_view.query_table_expr)
+        self._qd_table_expr = qd
+        return qd
+
+    @property
+    def query_table_expr(self) -> QueryData:
+        if self._qd_table_expr is None:
+            return self.refresh_query_table_expr()
+        return self._qd_table_expr
+
+
+    def column(self, val: Union[Name, NamedExprABC]) -> NamedExprABC:
+        """ Get a Column object with the specified name
+                or check existing Column object is valid for this Table object
+            (Overrided from `ViewABC`)
+
+        Args:
+            val (bytes | str | NamedExprABC): Column name or Column object
+
+        Raises:
+            errors.ObjectNotFoundError: _description_
+            errors.NotaSelfObjectError: _description_
+            errors.ObjectArgTypeError: _description_
+
+        Returns:
+            Column: Column object with the specified name or Column object itself
+        """
+        if isinstance(val, (bytes, str)):
+            name = to_name(val)
+            if name not in self._nexpr_dict:
+                if not self.is_dynamic:
+                    raise errors.ObjectNotFoundError('Undefined column name `%r` on view `%r`' % (name, self._name))
+                self._nexpr_dict[name] = NamedExpr(name)
+            return self._nexpr_dict[name]
+            
+        if isinstance(val, NamedExprABC):
+            if not val in self._nexpr_dict.values():
+                if not self.is_dynamic:
+                    raise errors.NotaSelfObjectError('Not a column of this view.', val)
+                self._nexpr_dict[val.name] = val
+            return val
+
+        raise errors.ObjectArgTypeError('Invalid type.', val)
+
+    def append_named_expr_object(self, nexpr: NamedExprABC) -> None:
+        """ Append (existing) named expression object
+            (Overrided from `ViewABC`)
+
+        Args:
+            nexpr (NamedExprABC): Named expression object
+        """
+        if nexpr.name in self._nexpr_dict:
+            raise errors.ObjectNameAlreadyExistsError('NamedExpr name already exists.', nexpr)
+        self._nexpr_dict[nexpr.name] = nexpr
 
     def _new_view(self, *args, **kwargs) -> 'ViewABC':
         return View(*args, **kwargs)
