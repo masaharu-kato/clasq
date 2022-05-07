@@ -168,7 +168,7 @@ class ViewABC(Object):
 
     @property
     def query_table_expr_for_join(self) -> QueryData:
-        if self.subquery_required_for_join:
+        if self.subquery_required_for_join: # Not working
             return QueryData(b'(', self.query_select, b')', b'AS', self.name)
         return self.base_view.query_table_expr
 
@@ -206,6 +206,7 @@ class ViewABC(Object):
         orders: Iterable[NamedExprABC] = (),
         limit : Optional[int] = None,
         offset: Optional[int] = None,
+        force_join_subquery: bool = False,
     ) -> 'ViewABC':
         assert self.named_exprs
         new_view = self._new_view(
@@ -222,6 +223,7 @@ class ViewABC(Object):
             orders = (*self.orders, *orders),
             limit = limit if limit is not None else self.limit_value,
             offset = offset if offset is not None else self.offset_value,
+            force_join_subquery = force_join_subquery,
         )
         if join_type is not None:
             return self._new_view(base_view=new_view)
@@ -568,7 +570,7 @@ class View(ViewABC):
     def refresh_query_table_expr(self) -> QueryData:
         """ Refresh QueryData for table FROM """
         if self.join_type is not None:
-            on_expr = self.expr_for_join & self.expr_for_outer_join
+            on_expr = self.expr_for_join & self.view_to_join.expr_for_outer_join
             # print('on_expr = ', on_expr)
             qd = QueryData(
                 b'(', self.base_view.query_table_expr, (
