@@ -23,6 +23,22 @@ class _FrozenOrderedSet(FrozenSetABC[T], Generic[T]):
     def __iter__(self):
         return iter(self._dict)
 
+    def __le__(self, oset: SetLike[T]) -> bool:
+        """ Returns if oset contains all values of self """
+        return all(v in oset for v in self)
+
+    def __lt__(self, oset: SetLike[T]) -> bool:
+        """ Returns if oset contains all values of self and self != oset """
+        return self.__le__(oset) and (oset - self)
+
+    def __ge__(self, oset: SetLike[T]) -> bool:
+        """ Returns if self contains all values of oset """
+        return all(v in self for v in oset)
+
+    def __gt__(self, oset: SetLike[T]) -> bool:
+        """ Returns if self contains all values of oset and self != oset """
+        return self.__ge__(oset) and (self - oset)
+
     def __and__(self, oset: SetLike[T]):
         return type(self)(v for v in self._dict if v in oset)
 
@@ -55,7 +71,7 @@ class FrozenOrderedSet(_FrozenOrderedSet[T], Generic[T]):
 class OrderedSet(SetABC[T], _FrozenOrderedSet[T], Generic[T]):
     
     def __iand__(self, oset: SetLike[T]):
-        for v in self._dict:
+        for v in list(self._dict):
             if v not in oset:
                 del self._dict[v]
         return self
@@ -66,7 +82,7 @@ class OrderedSet(SetABC[T], _FrozenOrderedSet[T], Generic[T]):
         return self
 
     def __isub__(self, oset: SetLike[T]):
-        for v in self._dict:
+        for v in list(self._dict):
             if v in oset:
                 self.remove(v)
         return self
@@ -81,10 +97,22 @@ class OrderedSet(SetABC[T], _FrozenOrderedSet[T], Generic[T]):
         if val not in self._dict:
             self._dict[val] = None
 
-    def update(self, *vals_list: Iterable[T]) -> None:
-        for objs in vals_list:
-            for v in objs:
-                self.add(v)
+    def discard(self, val: T) -> None:
+        if val in self._dict:
+            self.remove(val)
 
     def remove(self, val: T) -> None:
         del self._dict[val]
+
+    def pop(self) -> T:
+        last_val = list(self._dict)[-1]
+        self.remove(last_val)
+        return last_val
+
+    def pop_first(self) -> T:
+        first_val = list(self._dict)[0]
+        self.remove(first_val)
+        return first_val
+
+    def clear(self) -> None:
+        self._dict.clear()

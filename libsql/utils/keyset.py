@@ -72,6 +72,22 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[T]):
     def __rxor__(self, objs: SetLike[T]):
         return type(self)(*self._to_objs(self._key_set.__rxor__(self._to_keys(objs))))
 
+    def __le__(self, objs: SetLike[T]) -> bool:
+        """ Returns if objs contains all values of self """
+        return all(v in objs for v in self)
+
+    def __lt__(self, objs: SetLike[T]) -> bool:
+        """ Returns if objs contains all values of self and self != objs """
+        return self.__le__(objs) and (objs - self)
+
+    def __ge__(self, objs: SetLike[T]) -> bool:
+        """ Returns if self contains all values of objs """
+        return all(v in self for v in objs)
+
+    def __gt__(self, objs: SetLike[T]) -> bool:
+        """ Returns if self contains all values of objs and self != objs """
+        return self.__ge__(objs) and (self - objs)
+
     def __repr__(self):
         return '%s(%s)' % (type(self).__name__, ', '.join(map(repr, self)))
 
