@@ -92,3 +92,13 @@ def test_view_1(dynamic):
         ]
     )
 
+
+def test_view_2():
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    cates, prods, sales = db['categories', 'products', 'user_sale_products']
+
+    comp_cates = cates.where((cates['id'] == 1) | (cates['id'] == 2))
+    comps = prods.inner_join(comp_cates, comp_cates['id'] == prods['category_id'], )
+    comps.result
+    assert comps.result[2]['price'] == 89000
+
