@@ -1,7 +1,7 @@
 """
     Database class definition
 """
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, List, Tuple, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, List, Tuple, Set, Union, overload
 from libsql.schema.view import ViewABC
 
 from libsql.syntax.query_data import QueryData
@@ -117,7 +117,15 @@ class Database(Object):
 
         raise errors.ObjectArgsError('Invalid type %s (%s)' % (type(val), val))
         
-    def __getitem__(self, val: Union[Name, Table]) -> Table:
+    @overload
+    def __getitem__(self, val: Union[Name, Table]) -> Table: ...
+    
+    @overload
+    def __getitem__(self, val: Tuple[Union[Name, Table], ...]) -> Tuple[Table, ...]: ...
+
+    def __getitem__(self, val):
+        if isinstance(val, tuple):
+            return (*(self.table(v) for v in val),)
         return self.table(val)
 
     def table_or_none(self, val: Union[Name, Table]) -> Optional[Table]:

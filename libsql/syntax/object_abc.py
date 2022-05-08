@@ -2,7 +2,7 @@
     Definition Object class and subclasses
 """
 from abc import abstractproperty
-from typing import Iterator, TYPE_CHECKING, Type, Union
+from typing import Generic, Iterator, TYPE_CHECKING, Type, TypeVar, Union
 
 from ..utils.keyset import FrozenKeySetABC, KeySetABC, OrderedFrozenKeySetABC, OrderedKeySetABC
 from .query_abc import QueryABC
@@ -10,6 +10,8 @@ from . import errors
 
 if TYPE_CHECKING:
     from .query_data import QueryData
+
+T = TypeVar('T')
 
 Name = Union[bytes, str]
 
@@ -85,25 +87,25 @@ def object_key(obj):
     return id(obj)
 
 
-class FrozenObjectSet(FrozenKeySetABC):
+class FrozenObjectSet(FrozenKeySetABC[T], Generic[T]):
 
-    def _key(self, obj):
+    def _key(self, obj: T):
         return object_key(obj)
 
 
-class ObjectSet(KeySetABC):
+class ObjectSet(KeySetABC[T], Generic[T]):
 
-    def _key(self, obj):
+    def _key(self, obj: T):
         return object_key(obj)
 
 
-class OrderedFrozenObjectSet(OrderedFrozenKeySetABC):
+class OrderedFrozenObjectSet(OrderedFrozenKeySetABC[T], Generic[T]):
 
-    def _key(self, obj):
+    def _key(self, obj: T):
         return object_key(obj)
 
 
-class OrderedObjectSet(OrderedKeySetABC):
+class OrderedObjectSet(OrderedKeySetABC[T], Generic[T]):
 
-    def _key(self, obj):
+    def _key(self, obj: T):
         return object_key(obj)

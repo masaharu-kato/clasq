@@ -2,9 +2,9 @@
     View classes
 """
 from abc import abstractmethod, abstractproperty
-from typing import TYPE_CHECKING, Dict, Iterable, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, Optional, Tuple, Union, overload
 
-from ..syntax.object_abc import Object, Name, to_name, FrozenObjectSet, OrderedFrozenObjectSet
+from ..syntax.object_abc import Object, Name, OrderedObjectSet, to_name, FrozenObjectSet, OrderedFrozenObjectSet
 from ..syntax.exprs import ExprABC, NoneExpr, OP, NamedExprABC, NamedExpr
 from ..syntax.keywords import JoinType, JoinLike, OrderLike
 from ..syntax.query_data import QueryData
@@ -33,19 +33,24 @@ class ViewABC(Object):
         """ Get a base View object """
 
     @abstractproperty
-    def available_named_exprs(self) -> Iterable[NamedExprABC]:
+    def available_named_exprs(self) -> FrozenObjectSet[NamedExprABC]:
         """ Iterate available NamedExpr objects """
     
     @abstractproperty
-    def named_exprs(self) -> Iterable[NamedExprABC]:
+    def named_exprs(self) -> OrderedFrozenObjectSet[NamedExprABC]:
         """ Iterate NamedExpr objects """
+        
+    @property
+    def nexprs(self) -> OrderedFrozenObjectSet[NamedExprABC]:
+        """ Iterate NamedExpr objects (Synonym of `named_exprs`) """
+        return self.named_exprs
 
     @abstractproperty
     def query_table_expr(self) -> QueryData:
         """ QueryData for SELECT FROM """
 
     @abstractproperty
-    def outer_named_exprs(self) -> Iterable[NamedExprABC]:
+    def outer_named_exprs(self) -> OrderedFrozenObjectSet[NamedExprABC]:
         """ NamedExpr objects for Outer View (which joins this view) """
 
     @abstractmethod
@@ -195,8 +200,7 @@ class ViewABC(Object):
 
     def clone(self,
         *,
-        sel_nexprs: Iterable[NamedExprABC] = (),
-        add_nexprs: Iterable[NamedExprABC] = (),
+        nexprs: Optional[Iterable[NamedExprABC]] = None,
         name  : Optional[Name] = None,
         join_type: Optional[JoinLike] = None,
         join_view: Optional['ViewABC'] = None,
@@ -208,12 +212,11 @@ class ViewABC(Object):
         offset: Optional[int] = None,
         force_join_subquery: bool = False,
     ) -> 'ViewABC':
+        # print('Clone to a new view ...')
         assert self.named_exprs
-        new_view = self._new_view(
+        new_view = self._new_view(  
             base_view = self.base_view,
-            cur_nexprs = self.named_exprs,
-            sel_nexprs = sel_nexprs,
-            add_nexprs = add_nexprs,
+            nexprs = nexprs if nexprs is not None else self.nexprs,
             name = name if name is not None else self._name,
             join_type = join_type,
             join_view = join_view,
@@ -226,7 +229,9 @@ class ViewABC(Object):
             force_join_subquery = force_join_subquery,
         )
         if join_type is not None:
+            # print('Return the new view with base.')
             return self._new_view(base_view=new_view)
+        # print('Retrun the new view.')
         return new_view
 
     # def merged(self, view: 'View') -> 'ViewABC':
@@ -242,13 +247,21 @@ class ViewABC(Object):
     #         offset = view.offset_value,
     #     )
 
+    def select_view_column(self, view: 'ViewABC', *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+        """ Make a View object with specific columns (NamedExpr objects) """
+        return self.clone(nexprs=(self.nexprs - view.nexprs) | self._proc_col_args(*cols, **as_cols))
+
+    def select_table_column(self, view: 'ViewABC', *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+        """ Make a View object with specific columns (NamedExpr objects) """
+        return self.select_view_column(view, *cols, **as_cols)
+
     def select_column(self, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
         """ Make a View object with specific columns (NamedExpr objects) """
-        return self.clone(sel_nexprs=(*cols, *(c.as_(n) for n, c in as_cols.items())))
+        return self.clone(nexprs=self._proc_col_args(*cols, **as_cols))
 
     def add_column(self, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
         """ Make a View object with additional columns (NamedExpr objects) """
-        return self.clone(add_nexprs=(*cols, *(c.as_(n) for n, c in as_cols.items())))
+        return self.clone(nexprs=self.nexprs | self._proc_col_args(*cols, **as_cols))
 
     def where(self, *exprs, **coleqs) -> 'ViewABC':
         """ Make a View object with WHERE clause """
@@ -279,41 +292,43 @@ class ViewABC(Object):
     #     """ Make a View object with a single result """
     #     return SingleView(self)
 
-    def join(self,
-        join_type: JoinLike,
-        view: 'ViewABC',
-        expr: ExprABC,
-        *cols: NamedExprABC,
-        **as_cols: NamedExprABC,
-    ) -> 'ViewABC':
+    def join(self, join_type: JoinLike, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a Joined View """
         return self.clone(
             join_type = JoinType.make(join_type),
             join_view = view,
             join_expr = expr,
-            add_nexprs= (*cols, *(c.as_(n) for n, c in as_cols.items())),
         )
 
-    def inner_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+    def inner_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a INNER Joined View """
-        return self.join(JoinType.INNER, view, expr, *cols, **as_cols)
+        return self.join(JoinType.INNER, view, expr)
 
-    def left_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+    def left_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a LEFT Joined View """
-        return self.join(JoinType.LEFT, view, expr, *cols, **as_cols)
+        return self.join(JoinType.LEFT, view, expr)
 
-    def right_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+    def right_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a RIGHT Joined View """
-        return self.join(JoinType.RIGHT, view, expr, *cols, **as_cols)
+        return self.join(JoinType.RIGHT, view, expr)
 
-    def outer_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+    def outer_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a OUTER Joined View """
-        return self.join(JoinType.OUTER, view, expr, *cols, **as_cols)
+        return self.join(JoinType.OUTER, view, expr)
 
-    def cross_join(self, view: 'ViewABC', expr: ExprABC, *cols: NamedExprABC, **as_cols: NamedExprABC) -> 'ViewABC':
+    def cross_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a CROSS Joined View """
-        return self.join(JoinType.CROSS, view, expr, *cols, **as_cols)
+        return self.join(JoinType.CROSS, view, expr)
 
+    @overload
+    def __getitem__(self, val: Union[int, slice, ExprABC, Tuple[ExprABC, ...]]) -> 'ViewABC': ...
+
+    @overload
+    def __getitem__(self, val: Union[bytes, str]) -> NamedExpr: ...
+
+    @overload
+    def __getitem__(self, val: Tuple[Union[bytes, str], ...]) -> Tuple[NamedExpr, ...]: ...
+        
     def __getitem__(self, val):
 
         if isinstance(val, int):
@@ -334,9 +349,16 @@ class ViewABC(Object):
             return self.column(val)
         
         if isinstance(val, ExprABC):
-            return self.clone(where=val)
+            return self.where(val)
 
-        raise TypeError('Invalid type %s (%s)' % (type(val), val))
+        if isinstance(val, tuple):
+            if all(isinstance(v, (bytes, str)) for v in val):
+                return (*(self.column(v) for v in val),)
+            if all(isinstance(v, ExprABC) for v in val):
+                return self.where(*val)
+            raise errors.ObjectArgTypeError('Invalid tuple value type.', val)
+
+        raise errors.ObjectArgTypeError('Invalid type.', val)
     
     def refresh_result(self) -> None:
         self._result = self.db.query_qd(self.query_select)
@@ -411,15 +433,16 @@ class ViewABC(Object):
             return viewlike
         return self.database[viewlike]
 
+    def _proc_col_args(self, *cols: NamedExprABC, **as_cols: NamedExprABC) -> OrderedFrozenObjectSet[NamedExprABC]:
+        return OrderedFrozenObjectSet(*cols, *(c.as_(n) for n, c in as_cols.items()))
+
 
 class View(ViewABC):
     """ Table View """
     def __init__(self,
         *,
         base_view: ViewABC,
-        cur_nexprs: Iterable[NamedExprABC] = (),
-        sel_nexprs: Iterable[NamedExprABC] = (),
-        add_nexprs: Iterable[NamedExprABC] = (),
+        nexprs   : Iterable[NamedExprABC] = (),
         join_type: Optional[JoinLike] = None,
         join_view: Optional[ViewABC] = None,
         join_expr: Optional[ExprABC] = None,
@@ -448,21 +471,16 @@ class View(ViewABC):
         self._view_to_join = join_view
         self._expr_for_join = join_expr
 
-        base_nexprs = cur_nexprs or self.base_view.outer_named_exprs
-        if not base_nexprs:
-            raise errors.ObjectError('Base NamedExprs are not set.')
-
-        if sel_nexprs:
-            self._named_exprs = OrderedFrozenObjectSet(*sel_nexprs)
-        else:
-            if add_nexprs:
-                self._named_exprs = OrderedFrozenObjectSet(*base_nexprs, *add_nexprs)
-            else:
-                if self._view_to_join is not None:
-                    self._named_exprs = OrderedFrozenObjectSet(*base_nexprs, *self._view_to_join.outer_named_exprs)
-                else:
-                    self._named_exprs = OrderedFrozenObjectSet(*base_nexprs)
-        assert len(self._named_exprs)
+        self._named_exprs = OrderedFrozenObjectSet(
+            *(nexprs or list(self.base_view.outer_named_exprs)),
+            *(list(self._view_to_join.outer_named_exprs) if self._view_to_join else ()),
+        )
+        
+        # print('arg nexprs=', nexprs)
+        # print('self nexprs=', self._named_exprs)
+        # print('base outer nexprs=', self.base_view.outer_named_exprs)
+        if not self._named_exprs:
+            raise errors.ObjectNotSetError('NamedExprs are empty.')
 
         self._where = where
         self._groups = OrderedFrozenObjectSet(*groups)
@@ -470,7 +488,8 @@ class View(ViewABC):
         self._limit  = limit
         self._offset = offset
 
-        self._outer_named_exprs  = self._named_exprs if outer_nexprs is None else OrderedFrozenObjectSet(outer_nexprs)
+        self._outer_named_exprs  = self._named_exprs if outer_nexprs is None else OrderedFrozenObjectSet(*outer_nexprs)
+        # print('outer_nexprs=', self._outer_named_exprs)
         self._outer_orders  = orders if outer_orders is None else tuple(outer_orders)
         self._force_join_subquery = force_join_subquery
         self._column_alias_format = to_name(column_alias_format)
@@ -480,12 +499,12 @@ class View(ViewABC):
 
         # Calculate all available NamedExpr objects (Virtual Columns)
         self._available_nexprs = FrozenObjectSet(
-            *base_view.available_named_exprs,
-            *(join_view.available_named_exprs if join_view is not None else ())
+            *list(base_view.available_named_exprs),
+            *(list(join_view.available_named_exprs) if join_view is not None else ())
         )
 
         for nexpr in self._named_exprs:
-            if id(nexpr) not in self._available_nexprs and not nexpr.consists_of(self._available_nexprs):
+            if nexpr not in self._available_nexprs and not nexpr.consists_of(self._available_nexprs):
                 raise errors.ObjectExprError('NamedExpr not consists of available columns.', nexpr)
 
         # Generate a dictionary from expression name to expression
@@ -505,16 +524,16 @@ class View(ViewABC):
         return self._base_view
 
     @property
-    def available_named_exprs(self) -> Iterable[NamedExprABC]:
+    def available_named_exprs(self) -> FrozenObjectSet[NamedExprABC]:
         return self._available_nexprs
 
     @property
-    def named_exprs(self) -> Iterable[NamedExprABC]:
+    def named_exprs(self) -> OrderedFrozenObjectSet[NamedExprABC]:
         """ NamedExpr objects in this View """
         return self._named_exprs
 
     @property
-    def outer_named_exprs(self) -> Iterable[NamedExprABC]:
+    def outer_named_exprs(self) -> OrderedFrozenObjectSet[NamedExprABC]:
         """ NamedExpr objects for Outer View (which joins this view) """
         return self._outer_named_exprs
 

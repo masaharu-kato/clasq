@@ -4,7 +4,7 @@
 from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Tuple, Type, Union
 
 from ..syntax.keywords import ReferenceOption
-from ..syntax.object_abc import to_name
+from ..syntax.object_abc import FrozenObjectSet, OrderedFrozenObjectSet, to_name
 from ..syntax.exprs import NamedExprABC, ObjectABC, Object, Name
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData
@@ -67,15 +67,15 @@ class Table(ViewABC):
         return tuple(self.iter_columns())
 
     @property
-    def available_named_exprs(self) -> Iterable[NamedExprABC]:
+    def available_named_exprs(self) -> FrozenObjectSet[NamedExprABC]:
         return self.columns
 
     @property
-    def named_exprs(self) -> Iterable[NamedExprABC]:
-        return self.available_named_exprs
+    def named_exprs(self) -> OrderedFrozenObjectSet[NamedExprABC]:
+        return OrderedFrozenObjectSet(*self.available_named_exprs)
 
     @property
-    def outer_named_exprs(self) -> Iterable[NamedExprABC]:
+    def outer_named_exprs(self) -> OrderedFrozenObjectSet[NamedExprABC]:
         return self.named_exprs
 
     @property
