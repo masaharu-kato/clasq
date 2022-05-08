@@ -1,8 +1,9 @@
 """
     Table data class
 """
+import html
+from typing import Any, Callable, Iterator, List, Optional, Tuple, Union
 
-from typing import Any, Iterator, List, Tuple, Union
 
 TABLE_REPR_LIMIT = 100
 
@@ -76,11 +77,12 @@ class TableData:
             return NotImplemented
         return self._col_meta == val._col_meta and self._rows == val._rows
 
-    def make_html(self) -> str:
-        return '<TABLE>\n' \
-            + '<TR>' + ''.join('<TH>%s</TH>' % c for c in self.iter_columns()) + '</TR>\n' \
-            + '\n'.join(('<TR>' + ''.join('<TD>%s</TD>' % v for v in row) + '</TR>') for row in self) \
+    def make_html(self, *, name_attr: Optional[str] = None, formatter: Callable[[Any], str] = str) -> str:
+        return ('<TABLE>\n'
+            + self._col_meta.make_html(name_attr=name_attr) + '\n'
+            + '\n'.join(row.make_html(name_attr=name_attr, formatter=formatter) for row in self)
             + '\n</TABLE>'
+        )
 
     def __repr__(self):
         res = 'TableData#%d\n' % id(self)
@@ -120,6 +122,13 @@ class ColumnMetadata:
 
     def has_column(self, column: str) -> bool:
         return column in self._col_to_i
+
+    def make_html(self, *, name_attr: Optional[str] = None):
+        if name_attr:
+            _cell_html = lambda c: '<TH %s="%s">%s</TH>' % (name_attr, _escape_attr(c), _escape_val(c))
+        else:
+            _cell_html = lambda c: '<TH>%s</TH>' % _escape_val(c)
+        return '<TR>' + ''.join(_cell_html(v) for v in self.iter_columns()) + '</TR>'
 
     def __contains__(self, column: str) -> bool:
         return self.has_column(column)
@@ -193,6 +202,13 @@ class RowData:
     def make_dict(self):
         return dict(self.items())
 
+    def make_html(self, *, name_attr: Optional[str] = None, formatter: Callable[[Any], str] = str):
+        if name_attr:
+            _cell_html = lambda k, v: '<TD %s="%s">%s</TD>' % (name_attr, _escape_attr(k), _escape_val(formatter(v)))
+        else:
+            _cell_html = lambda k, v: '<TD>%s</TD>' % _escape_val(formatter(v))
+        return '<TR>' + ''.join(_cell_html(k, v) for k, v in self.items()) + '</TR>'
+
     @property
     def __dict__(self):
         """ Generate a dictionary of this row
@@ -201,3 +217,10 @@ class RowData:
             dict: A dictionary of this row
         """
         return self.make_dict()
+
+
+def _escape_attr(val):
+    return html.escape(val, quote=True)
+
+def _escape_val(val):
+    return html.escape(val)
