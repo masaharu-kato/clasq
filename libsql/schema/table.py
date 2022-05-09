@@ -86,6 +86,10 @@ class Table(ViewABC):
     def query_table_expr(self) -> QueryData:
         return QueryData(self)
 
+    @property
+    def query_table_expr_for_join(self) -> QueryData:
+        return self.query_table_expr
+
     def set_database(self, database: 'Database') -> None:
         if self._database is not None:
             raise errors.ObjectAlreadySetError('Database is already set.')

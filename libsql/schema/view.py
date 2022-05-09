@@ -5,8 +5,9 @@ from abc import abstractmethod, abstractproperty
 from typing import TYPE_CHECKING, Dict, Iterable, Optional, Tuple, Union, overload
 
 from ..syntax.object_abc import Object, Name, OrderedObjectSet, to_name, FrozenObjectSet, OrderedFrozenObjectSet
-from ..syntax.exprs import ExprABC, NoneExpr, OP, NamedExprABC, NamedExpr
+from ..syntax.exprs import ExprABC, ExprLike, NoneExpr, OP, NamedExprABC, NamedExpr
 from ..syntax.keywords import JoinType, JoinLike, OrderLike
+from ..syntax.values import ValueType
 from ..syntax.query_data import QueryData
 from ..syntax import errors
 from ..utils.tabledata import TableData
@@ -152,11 +153,11 @@ class ViewABC(Object):
         return () # Default Implementation
 
     @property
-    def limit_value(self) -> Optional[int]:
+    def limit_value(self) -> Optional[ExprLike]:
         return None # Default Implementation
 
     @property
-    def offset_value(self) -> Optional[int]:
+    def offset_value(self) -> Optional[ExprLike]:
         return None # Default Implementation
 
     @property
@@ -181,9 +182,9 @@ class ViewABC(Object):
 
     @property
     def query_table_expr_for_join(self) -> QueryData:
-        if self.subquery_required_for_join: # Not working
+        if self.subquery_required_for_join: # Not working ?
             return QueryData(b'(', self.query_select, b')', b'AS', self.name)
-        return self.base_view.query_table_expr
+        return self.query_table_expr
 
     def refresh_query_select(self) -> QueryData:
         """ Refresh QueryData """
@@ -197,8 +198,13 @@ class ViewABC(Object):
             (b'LIMIT', self.limit_value) if self.limit_value else None,
             (b'OFFSET', self.offset_value) if self.offset_value else None,
         )
-        self._qd_select = qd
-        return qd
+        if self.argvals or self.kwargvals:
+            # print('Set args...')
+            # print('self.kwargvals=', self.kwargvals)
+            self._qd_select = qd.call(*self.argvals, **dict(self.kwargvals))
+        else:
+            self._qd_select = qd
+        return self._qd_select
 
     @property
     def query_select(self) -> QueryData:
@@ -216,9 +222,11 @@ class ViewABC(Object):
         where : ExprABC = NoneExpr,
         groups: Iterable[NamedExprABC] = (),
         orders: Iterable[NamedExprABC] = (),
-        limit : Optional[int] = None,
-        offset: Optional[int] = None,
+        limit : Optional[ExprLike] = None,
+        offset: Optional[ExprLike] = None,
         force_join_subquery: bool = False,
+        argvals: Iterable[ValueType] = (),
+        kwargvals: Iterable[Tuple[str, ValueType]] = (),
     ) -> 'ViewABC':
         # print('Clone to a new view ...')
         assert self.named_exprs
@@ -235,6 +243,8 @@ class ViewABC(Object):
             limit = limit if limit is not None else self.limit_value,
             offset = offset if offset is not None else self.offset_value,
             force_join_subquery = force_join_subquery,
+            argvals = (*self.argvals, *argvals),
+            kwargvals = (*self.kwargvals, *kwargvals),
         )
         if join_type is not None:
             # print('Return the new view with base.')
@@ -271,9 +281,9 @@ class ViewABC(Object):
         """ Make a View object with additional columns (NamedExpr objects) """
         return self.clone(nexprs=self.nexprs | self._proc_col_args(*cols, **as_cols))
 
-    def where(self, *exprs, **coleqs) -> 'ViewABC':
+    def where(self, *exprs: ExprABC, **coleqs: ExprABC) -> 'ViewABC':
         """ Make a View object with WHERE clause """
-        return self.clone(where=OP.AND(*exprs, **coleqs))
+        return self.clone(where=OP.AND(*exprs, *(self.column(c) == v for c, v in coleqs.items())))
 
     def group_by(self, *columns: NamedExprABC, **cols: Optional[bool]) -> 'ViewABC':
         return self.clone(groups=[
@@ -288,11 +298,11 @@ class ViewABC(Object):
             *(self.column(c).ordered(v) for c, v in col_orders.items() if v is not None)
         ])
 
-    def limit(self, limit: int) -> 'ViewABC':
+    def limit(self, limit: ExprABC) -> 'ViewABC':
         """ Make a View object with LIMIT OFFSET clause """
         return self.clone(limit=limit)
 
-    def offset(self, offset: int) -> 'ViewABC':
+    def offset(self, offset: ExprABC) -> 'ViewABC':
         """ Make a View object with LIMIT OFFSET clause """
         return self.clone(offset=offset)
 
@@ -327,6 +337,9 @@ class ViewABC(Object):
     def cross_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a CROSS Joined View """
         return self.join(JoinType.CROSS, view, expr)
+
+    def self_based_view(self) -> 'ViewABC':
+        return self._new_view(base_view=self)
 
     @overload
     def __getitem__(self, val: Union[int, slice, ExprABC, Tuple[ExprABC, ...]]) -> 'ViewABC': ...
@@ -378,6 +391,7 @@ class ViewABC(Object):
         return self.result_with_args(*argvals, **kwargvals)
     
     def refresh_result(self) -> None:
+        # assert not self.query_select.args
         self._result = self.db.query_qd(self.query_select)
 
     def prepare_result(self) -> None:
@@ -467,8 +481,8 @@ class View(ViewABC):
         where    : ExprABC = NoneExpr,
         groups   : Iterable[NamedExprABC] = (),
         orders   : Iterable[NamedExprABC] = (),
-        limit    : Optional[int] = None,
-        offset   : Optional[int] = None,
+        limit    : Optional[ExprLike] = None,
+        offset   : Optional[ExprLike] = None,
         outer_orders   : Optional[Iterable[NamedExprABC]] = None,
         outer_nexprs   : Optional[Iterable[NamedExprABC]] = None,
         argvals: Iterable[ValueType] = (),
@@ -593,11 +607,11 @@ class View(ViewABC):
         return self._outer_orders
 
     @property
-    def limit_value(self) -> Optional[int]:
+    def limit_value(self) -> Optional[ExprLike]:
         return self._limit
 
     @property
-    def offset_value(self) -> Optional[int]:
+    def offset_value(self) -> Optional[ExprLike]:
         return self._offset
 
     @property
@@ -614,13 +628,13 @@ class View(ViewABC):
             on_expr = self.expr_for_join & self.view_to_join.expr_for_outer_join
             # print('on_expr = ', on_expr)
             qd = QueryData(
-                b'(', self.base_view.query_table_expr, (
+                b'(', self.base_view.query_table_expr_for_join, (
                     self.join_type, b'JOIN', self.view_to_join.query_table_expr_for_join,
                     (b'ON', on_expr) if on_expr is not NoneExpr else None
                 ), b')'
             )
         else:
-            qd = QueryData(self.base_view.query_table_expr)
+            qd = QueryData(self.base_view.query_table_expr_for_join)
         self._qd_table_expr = qd
         return qd
 
@@ -628,6 +642,7 @@ class View(ViewABC):
     def query_table_expr(self) -> QueryData:
         if self._qd_table_expr is None:
             return self.refresh_query_table_expr()
+
         return self._qd_table_expr
 
     @property
