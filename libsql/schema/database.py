@@ -1,16 +1,14 @@
 """
     Database class definition
 """
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, List, Tuple, Set, Union, overload
-from libsql.schema.view import ViewABC
+from typing import TYPE_CHECKING, Collection, Dict, Iterable, Iterator, Optional, Tuple, Union, overload
 
-from libsql.syntax.query_data import QueryData
-
-from ..syntax.exprs import ExprABC, Object, Name
+from ..syntax.exprs import Object, Name
+from ..syntax.query_data import QueryLike, QueryArgVals
+from ..syntax.values import ValueType
 from ..syntax import errors
-from .table import Table, iter_tables
-from .column import Column, NamedExpr, OrderedColumn
 from ..utils.tabledata import TableData
+from .table import Table
 
 if TYPE_CHECKING:
     from ..connection import ConnectionABC
@@ -206,145 +204,17 @@ class Database(Object):
         self.execute(*self.q_create(if_not_exists=if_not_exists))
         self._exists = True
 
-    @property
-    def last_qd(self):
-        return self.cnx.last_qd
+    def query(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> TableData:
+        return self.cnx.query(*exprs, prms=prms)
 
-    def execute_qd(self, qd: QueryData) -> None:
-        return self.cnx.execute_qd(qd)
+    def query_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> Iterator[TableData]:
+        return self.cnx.query_many(*exprs, data=data)
 
-    def execute(self, *args, **kwargs) -> None:
-        return self.cnx.execute(*args, **kwargs)
+    def execute(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> None:
+        return self.cnx.execute(*exprs, prms=prms)
 
-    def query_qd(self, qd: QueryData) -> TableData:
-        return self.cnx.query_qd(qd)
-
-    def query(self, *args, **kwargs) -> TableData:
-        return self.cnx.query(*args, **kwargs)
+    def execute_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> None:
+        return self.cnx.execute_many(*exprs, data=data)
 
     def commit(self) -> None:
         return self.cnx.commit()
-
-    # def select(self,
-    #     *nexprs: NamedExprABC,
-    #     views : Iterable[ViewABC] = (),
-    #     where : ExprABC = NoneExpr,
-    #     groups: Iterable[NamedExprABC] = (),
-    #     orders: Iterable[NamedExprABC] = (),
-    #     limit : Optional[int] = None,
-    #     offset: Optional[int] = None,
-    # ) -> TableData:
-    #     """ Run SELECT query
-
-    #     Returns:
-    #         TableData: Result data
-    #     """
-    #     return self.query_qd(self.select_query(
-    #         *nexprs,
-    #         views = views,
-    #         where = where,
-    #         groups = groups,
-    #         orders = orders,
-    #         limit = limit,
-    #         offset = offset,
-    #     ))
-
-    def insert(self,
-        tablelike: Union[Name, Table],
-        data: Optional[Dict[NamedExpr, Any]] = None,
-        **values,
-    ) -> int:
-        """ Run INSERT query
-
-        Args:
-            tablelike (Union[Name, Table]): Table to insert
-            data (Optional[Union[Dict[ColumnLike, Any], TableData]], optional): Data to insert. Defaults to None.
-
-        Returns:
-            int: _description_
-        """
-        table = self.table(tablelike)
-        column_values = self._proc_colval_args(table, data, **values)
-        self.execute(
-            b'INSERT', b'INTO', table, b'(', column_values.keys(), b')',
-            b'VALUES', b'(', column_values.values(),  b')',
-        )
-        return self.cnx.last_row_id()
-
-
-    def insert_data(self,
-        tablelike: Union[Name, Table],
-        data: TableData,
-    ) -> int:
-        """ Run INSERT with TableData """
-        table = self.table(tablelike)
-        columns = [table.column(name) for name in data.iter_columns()]
-        self.cnx.execute_with_many_prms((
-            b'INSERT', b'INTO', table, b'(', columns, b')',
-            b'VALUES', b'(', [b'?' for _ in columns],  b')',
-        ), data)
-        return self.cnx.last_row_id()
-
-
-    def update(self,
-        tablelike: Union[Name, Table],
-        data: Optional[Dict[NamedExpr, Any]] = None,
-        *,
-        where: Optional[ExprABC],
-        orders: Optional[List[OrderedColumn]] = None,
-        limit: Optional[int] = None,
-        **values,
-    ) -> None:
-        """ Run UPDATE query """
-
-        table = self.table(tablelike)
-        column_values = self._proc_colval_args(table, data, **values)
-        self.execute(
-            b'UPDATE', table, b'SET', [(c, b'=', v) for c, v in column_values.items()],
-            (b'WHERE', where) if where else None,
-            (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
-            (b'LIMIT', limit) if limit else None,
-        )
-
-
-    def update_data(self,
-        tablelike: Union[Name, Table],
-        data: TableData,
-        keys: List[Union[Name, Column]],
-    ) -> None:
-        """ Run UPDATE query with TableData """
-        table = self.table(tablelike)
-
-        data_columns = [c for c in data.columns if c not in keys]
-        sorted_columns = [*data_columns, *keys]
-        assert len(sorted_columns) == len(data.columns)
-        
-        self.cnx.execute_with_many_prms((
-            b'UPDATE', table, b'SET', [(c, b'=', b'?') for c in data_columns],
-            b'WHERE', [(c, b'==', b'?') for c in keys]
-        ), data.copy_with_columns(sorted_columns))
-
-
-    def delete(self,
-        tablelike: Union[Name, Table],
-        *,
-        where: Optional[ExprABC],
-        orders: Optional[List[OrderedColumn]] = None,
-        limit: Optional[int] = None,
-    ) -> None:
-        """ Run DELETE query """
-        table = self.table(tablelike)
-        self.execute(
-            b'DELETE', b'FROM', table,
-            (b'WHERE', where) if where else None,
-            (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
-            (b'LIMIT', limit) if limit else None,
-        )
-
-
-    def _proc_colval_args(self,
-        table: Table, 
-        value_dict: Optional[Dict[NamedExpr, Any]],
-        **values
-    ):
-        return {table.column(c): v for c, v in [*(value_dict.items() if value_dict else []), values.items()]}

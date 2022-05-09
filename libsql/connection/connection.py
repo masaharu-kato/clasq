@@ -2,19 +2,14 @@
     SQL Connection classes and functions
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Collection, Dict, Iterable, Iterator, List, Literal, Optional, Set, Tuple, Union, overload
+from typing import Collection, Iterable, Iterator, Optional, Union
 
 from ..utils.tabledata import TableData
 from ..schema.database import Database
 from ..syntax.sql_values import SQLValue
-from ..syntax.query_data import QueryData, QueryLike
+from ..syntax.query_data import QueryData, QueryLike, ValueType, QueryArgVals
 from . import errors
 
-if TYPE_CHECKING:
-    from ..syntax.values import ValueType
-    from ..syntax.exprs import ArgName
-
-ArgVals = Union[Collection['ValueType'], Dict['ArgName', 'ValueType']]
 
 class ConnectionABC:
     """ Database connection ABC """
@@ -46,41 +41,41 @@ class ConnectionABC:
     def run_stmt_many_prms(self, stmt: bytes, prms_list: Iterable[Collection[SQLValue]]) -> Iterator[Optional[TableData]]:
         """ Execute a query with multiple lists of params and get result if exists """
 
-    def query(self, *exprs: Optional[QueryLike], prms: Collection['ValueType'] = ()) -> TableData:
+    def query(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> TableData:
         if (result := self.run(*exprs, prms)) is None:
             raise errors.NoResultsError('No results.')
         return result
 
-    def query_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[ArgVals]]) -> Iterator[TableData]:
+    def query_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> Iterator[TableData]:
         for result in self.run_many(*exprs, data=data):
             if result is None:
                 raise errors.NoResultsError('No results.')
             yield result
 
-    def execute(self, *exprs: Optional[QueryLike], prms: Collection['ValueType'] = ()) -> None:
+    def execute(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> None:
         if self.run(*exprs, prms=prms) is not None:
             raise errors.ResultExistsError('Result exists.')
 
-    def execute_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[ArgVals]]) -> None:
+    def execute_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> None:
         for _result in self.run_many(*exprs, data=data):
             if _result is not None:
                 raise errors.ResultExistsError('Result exists.')
 
-    def run(self, *exprs: Optional[QueryLike], prms: Optional[Collection['ValueType']]=None) -> Optional[TableData]:
+    def run(self, *exprs: Optional[QueryLike], prms: Optional[Collection[ValueType]]=None) -> Optional[TableData]:
         """ Run with optional single parameters """
         # Make QueryData
         qd = exprs[0] if len(exprs) == 1 and isinstance(exprs[0], QueryData) and not prms else QueryData(*exprs, prms=prms)
         # Run and handle result
         return self.run_stmt_prms(qd.stmt, qd.prms)
 
-    def run_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[ArgVals]]) -> Iterator[Optional[TableData]]:
+    def run_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> Iterator[Optional[TableData]]:
         """ Run with multiple list of parameters """
         # Make QueryData
         qd = exprs[0] if len(exprs) == 1 and isinstance(exprs[0], QueryData) and not data else QueryData(*exprs)
         # Make argument values iterator
-        iter_argvals = data.iter_rows_dict() if isinstance(data, TableData) else data
+        iter_QueryArgVals = data.iter_rows_dict() if isinstance(data, TableData) else data
         # Run and handle result
-        return self.run_stmt_many_prms(qd.stmt, qd.calc_prms_many(iter_argvals))
+        return self.run_stmt_many_prms(qd.stmt, qd.calc_prms_many(iter_QueryArgVals))
 
     @abstractmethod
     def commit(self) -> None:

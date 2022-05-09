@@ -1,11 +1,12 @@
 """
     Table classes
 """
-from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
 
 from ..syntax.keywords import ReferenceOption
 from ..syntax.object_abc import FrozenObjectSet, OrderedFrozenObjectSet, to_name
-from ..syntax.exprs import NamedExprABC, ObjectABC, Object, Name
+from ..syntax.exprs import OP, Arg, ExprABC, NamedExprABC, ObjectABC, Object, Name
+from ..syntax.values import ValueType
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData
 from ..syntax import sqltypes
@@ -206,19 +207,89 @@ class Table(ViewABC):
 
     def select(self, *exprs, **options) -> TableData:
         """ Run SELECT query """
+        # TODO: Upgrade with view methods
         return self.clone(*exprs, **options).result
 
-    def insert(self, data, **values) -> int:
-        """ Run INSERT query """
-        return self.db.insert(self, data, **values)
+    def insert(self, data: Optional[Dict[Union[Name, Column], ValueType]] = None, **values: ValueType) -> int:
+        """ Run INSERT query
 
-    def update(self, data, **options) -> None:
+        Args:
+            data (Optional[Union[Dict[ColumnLike, Any], TableData]], optional): Data to insert. Defaults to None.
+
+        Returns:
+            int: Last inserted row ID
+        """
+        column_values = self._proc_colval_args(data, **values)
+        self.cnx.execute(
+            b'INSERT', b'INTO', self, b'(', column_values.keys(), b')',
+            b'VALUES', b'(', column_values.values(),  b')',
+        )
+        return self.cnx.last_row_id()
+
+    def insert_data(self, data: TableData[ValueType]) -> int:
+        """ Run INSERT with TableData """
+        name_and_col = [(name, self.table_column(name)) for name in data.columns]
+        self.cnx.execute_many(
+            b'INSERT', b'INTO', self, b'(', [col for _, col in name_and_col], b')',
+            b'VALUES', b'(', [Arg(name) for name, _ in name_and_col],  b')',
+            data=data
+        )
+        return self.cnx.last_row_id()
+
+    def update(self,
+        data: Optional[Dict[Union[Name, Column], ValueType]] = None,
+        *,
+        where: Optional[ExprABC],
+        orders: Optional[List[Column]] = None,
+        limit: Optional[int] = None,
+        **values: ValueType,
+    ) -> None:
         """ Run UPDATE query """
-        self.db.update(self, data, **options)
 
-    def delete(self, **options) -> None:
+        column_values = self._proc_colval_args(data, **values)
+        self.cnx.execute(
+            b'UPDATE', self, b'SET', [(c, b'=', v) for c, v in column_values.items()],
+            (b'WHERE', where) if where else None,
+            (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
+            (b'LIMIT', limit) if limit else None,
+        )
+
+
+    def update_data(self, data: TableData[ValueType], keys: List[Union[Name, Column]]) -> None:
+        """ Run UPDATE query with TableData """
+        data_name_and_col = [(c, self.table_column(c)) for c in data.columns if c not in keys]
+        key_name_and_col  = [(c, self.table_column(c)) for c in data.columns if c in keys]
+        if not (len(data_name_and_col) + len(key_name_and_col) == len(data.columns)):
+            raise ValueError('Invalid key values.')
+        
+        self.cnx.execute_many(
+            b'UPDATE', self, b'SET', [(col, b'=', Arg(name)) for name, col in data_name_and_col],
+            b'WHERE', OP.AND(col == Arg(name) for name, col in key_name_and_col),
+            data=data
+        )
+
+    def delete(self, *,
+        where: Optional[ExprABC],
+        orders: Optional[List[Column]] = None,
+        limit: Optional[int] = None,
+    ) -> None:
         """ Run DELETE query """
-        self.db.delete(self, **options)
+        self.cnx.execute(
+            b'DELETE', b'FROM', self,
+            (b'WHERE', where) if where else None,
+            (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
+            (b'LIMIT', limit) if limit else None,
+        )
+
+    def delete_data(self, data: TableData[ValueType]) -> int:
+        """ Run DELETE with TableData """
+        name_and_col = [(name, self.table_column(name)) for name in data.columns]
+        self.cnx.execute_many(
+            b'DELETE', b'FROM', self,
+            b'WHERE', OP.AND(col == Arg(name) for name, col in name_and_col),
+            data=data
+        )
+        return self.cnx.last_row_id()
 
     def truncate(self) -> None:
         """ Run TRUNCATE TABLE query """
@@ -246,6 +317,9 @@ class Table(ViewABC):
         
     def _new_view(self, *args, **kwargs) -> 'ViewABC':
         return View(*args, **kwargs)
+        
+    def _proc_colval_args(self, value_dict: Optional[Dict[Union[Name, Column], ValueType]], **values: ValueType) -> Dict[Column, ValueType]:
+        return {self.table_column(c): v for c, v in [*(value_dict.items() if value_dict else []), *values.items()]}
 
     def __repr__(self):
         return 'Table(%s)' % str(self)

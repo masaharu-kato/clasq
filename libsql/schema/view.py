@@ -4,7 +4,7 @@
 from abc import abstractmethod, abstractproperty
 from typing import TYPE_CHECKING, Dict, Iterable, Optional, Tuple, Union, overload
 
-from ..syntax.object_abc import Object, Name, OrderedObjectSet, to_name, FrozenObjectSet, OrderedFrozenObjectSet
+from ..syntax.object_abc import Object, Name, to_name, FrozenObjectSet, OrderedFrozenObjectSet
 from ..syntax.exprs import ExprABC, ExprLike, NoneExpr, OP, NamedExprABC, NamedExpr
 from ..syntax.keywords import JoinType, JoinLike, OrderLike
 from ..syntax.values import ValueType
@@ -392,7 +392,7 @@ class ViewABC(Object):
     
     def refresh_result(self) -> None:
         # assert not self.query_select.args
-        self._result = self.db.query_qd(self.query_select)
+        self._result = self.db.query(self.query_select)
 
     def prepare_result(self) -> None:
         if self._result is None:
