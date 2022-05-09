@@ -1,13 +1,16 @@
 """
     Query data class
 """
-from typing import TYPE_CHECKING, Iterable, Optional, Union, cast
+from typing import TYPE_CHECKING, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast
 
 from .query_abc import QueryABC
-from .values import NULL, ValueType, is_value_type
+from .values import NullType, ValueType, is_value_type
+from .sql_values import SQLValue
+from .exprs import ExprABC, Arg, ValueOrArg
 
-if TYPE_CHECKING:
-    from .exprs import ExprABC
+
+class QueryArgumentError(RuntimeError):
+    """ Query Argument Error """
 
 
 class QueryData(QueryABC):
@@ -19,25 +22,68 @@ class QueryData(QueryABC):
 
     def __init__(self,
         *vals,
-        prms: Optional[list] = None,
+        stmt: Optional[bytes] = None,
+        args: Optional[List[Arg]] = None,
+        prms: Optional[List[ValueOrArg]] = None,
     ):
-        self._stmt = b''
+        self._stmt = stmt if stmt is not None else b''
+        self._argdict = {arg.name: arg for arg in args} if args is not None else {}
         self._prms = prms if prms else []
         if vals:
             self.append(*vals)
 
     @property
-    def stmt(self):
+    def stmt(self) -> bytes:
         return self._stmt
 
     @property
-    def prms(self):
-        return self._prms
+    def args(self) -> Tuple[Arg, ...]:
+        return tuple(self._argdict.values())
 
-    def iter_prms(self):
-        return iter(self._prms)
+    @property
+    def prms_with_args(self) -> Tuple[ValueOrArg, ...]:
+        return tuple(self._prms)
 
-    def _append(self, stmt: bytes, prms: Iterable[ValueType] = None) -> 'QueryData':
+    def iter_prms(self) -> Iterator[SQLValue]:
+        nondefault_args = [arg for arg in self._argdict.values() if not arg.has_default]
+        if nondefault_args:
+            raise QueryArgumentError('Argument value(s) are not set: %s' % ', '.join(str(arg) for arg in nondefault_args))
+        for prm in self._prms:
+            prmval = prm.default if isinstance(prm, Arg) else prm
+            yield None if isinstance(prmval, NullType) else prmval
+    
+    @property
+    def prms(self) -> Tuple[SQLValue, ...]:
+        return (*self.iter_prms(),)
+
+    def call(self, *argvals: ValueType, **kwargvals: ValueType) -> 'QueryData':
+        all_argvals: Dict[Union[int, str], ValueType] = {}
+
+        for i, argval in enumerate(argvals):
+            if i not in self._argdict:
+                raise QueryArgumentError('Positional argument %s not found.' % i)
+            all_argvals[i] = argval
+        
+        for argname, argval in kwargvals.items():
+            if argname not in self._argdict:
+                raise QueryArgumentError('Keyword argument `%s` not found.' % argname)
+            all_argvals[argname] = argval
+
+        unset_args = [arg for arg in self._argdict.values() if arg.name not in all_argvals]
+
+        new_prms = [
+            all_argvals[prm.name] if isinstance(prm, Arg) and prm.name in all_argvals else prm
+            for prm in self._prms
+        ]
+
+        # print('all_argvals, unset_args, new_prms=', all_argvals, unset_args, new_prms)
+
+        return QueryData(stmt=self._stmt, args=unset_args, prms=new_prms)
+
+    def __call__(self, *argvals, **kwargvals):
+        return self.call(*argvals, **kwargvals)
+
+    def _append(self, stmt: bytes, prms: Iterable[ValueOrArg] = None) -> 'QueryData':
         if stmt:
             if self._stmt \
                 and stmt[0:1] not in _R_NOSP_SYMS \
@@ -46,9 +92,9 @@ class QueryData(QueryABC):
             self._stmt += stmt 
         if prms:
             for prm in prms:
-                if not is_value_type(prm):
+                if not (is_value_type(prm) or isinstance(prm, Arg)):
                     raise TypeError('Invalid parameter value type %s (%s)' % (type(prm), repr(prm)))
-                self._prms.append(None if prm == NULL else prm)
+                self._prms.append(prm)
         return self
 
     def _append_qd(self, qd: 'QueryData') -> 'QueryData':
@@ -57,18 +103,24 @@ class QueryData(QueryABC):
     def append_query_data(self, qd: 'QueryData') -> None:
         qd._append_qd(self)
 
-    def append_value(self, val: ValueType) -> 'QueryData':
+    def append_value(self, val: ValueOrArg) -> 'QueryData':
         """ Append as value
 
         Args:
-            val (ValueType): value to append
+            val (ValueOrArg): value to append
 
         Returns:
             QueryData: This object
         """
+        if isinstance(val, Arg):
+            if val.name in self._argdict:
+                if not self._argdict[val.name].is_same_arg(val):
+                    raise QueryArgumentError('Cannot specify different arguments with same name.', val.name)
+            else:
+                self._argdict[val.name] = val
         return self._append(self.PLACEHOLDER, [val])
 
-    def append_values(self, *vals: ValueType) -> 'QueryData':
+    def append_values(self, *vals: ValueOrArg) -> 'QueryData':
         """ Append multiple args as values
 
         Returns:
@@ -105,9 +157,9 @@ class QueryData(QueryABC):
         if isinstance(val, bytes):
             return self._append(val, prms)
 
-        if is_value_type(val):
+        if is_value_type(val) or isinstance(val, Arg):
         # if isinstance(val, ValueType):
-            return self.append_value(cast(ValueType, val))
+            return self.append_value(cast(ValueOrArg, val))
 
         if isinstance(val, tuple):
             return self.append(*val)
@@ -141,7 +193,7 @@ class QueryData(QueryABC):
     def __repr__(self) -> str:
         return 'QueryData(%s, [%s])' % (self._stmt.decode(), ', '.join(map(repr, self._prms)))
 
-QueryLike = Union[ValueType, 'ExprABC', QueryABC, tuple, Iterable]
+QueryLike = Union[ValueOrArg, ExprABC, QueryABC, tuple, Iterable]
 
 
 _R_NOSP_SYMS = {b' ', b')', b',', b'.'}

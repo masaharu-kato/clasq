@@ -160,6 +160,14 @@ class ViewABC(Object):
         return None # Default Implementation
 
     @property
+    def argvals(self) -> Iterable[ValueType]:
+        return () # Default Implementation
+
+    @property
+    def kwargvals(self) -> Iterable[Tuple[str, ValueType]]:
+        return () # Default Implementation
+
+    @property
     def force_join_subquery(self) -> bool:
         return False # Default Implementation
 
@@ -359,6 +367,15 @@ class ViewABC(Object):
             raise errors.ObjectArgTypeError('Invalid tuple value type.', val)
 
         raise errors.ObjectArgTypeError('Invalid type.', val)
+
+    def with_args(self, *argvals, **kwargvals) -> 'ViewABC':
+        return self.clone(argvals=argvals, kwargvals=kwargvals.items())
+
+    def result_with_args(self, *argvals, **kwargvals) -> TableData:
+        return self.with_args(*argvals, **kwargvals).result
+
+    def __call__(self, *argvals, **kwargvals) -> TableData:
+        return self.result_with_args(*argvals, **kwargvals)
     
     def refresh_result(self) -> None:
         self._result = self.db.query_qd(self.query_select)
@@ -454,6 +471,8 @@ class View(ViewABC):
         offset   : Optional[int] = None,
         outer_orders   : Optional[Iterable[NamedExprABC]] = None,
         outer_nexprs   : Optional[Iterable[NamedExprABC]] = None,
+        argvals: Iterable[ValueType] = (),
+        kwargvals: Iterable[Tuple[str, ValueType]] = (),
         force_join_subquery: bool = False,
         column_alias_format: Name = b'%s',
         dynamic: bool = False,
@@ -516,6 +535,9 @@ class View(ViewABC):
             # if alias_name in self._nexpr_dict:
             #     raise errors.ObjectNameAlreadyExistsError('Alias already exists.', alias_name)
             # self._nexpr_dict[alias_name] = nexpr
+
+        self._argvals = tuple(argvals)
+        self._kwargvals = tuple(kwargvals)
 
 
     @property
@@ -608,6 +630,13 @@ class View(ViewABC):
             return self.refresh_query_table_expr()
         return self._qd_table_expr
 
+    @property
+    def argvals(self):
+        return self._argvals
+
+    @property
+    def kwargvals(self):
+        return self._kwargvals
 
     def column(self, val: Union[Name, NamedExprABC]) -> NamedExprABC:
         """ Get a Column object with the specified name
