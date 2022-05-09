@@ -2,12 +2,13 @@
     Mysql Connection class implementation
 """
 from abc import abstractmethod
-from typing import Dict, Iterable, Iterator, Optional
+from typing import Collection, Dict, Iterable, Iterator, Optional
 
 import mysql.connector # type: ignore
 from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
 # from mysql.connector.pooling import MySQLConnectionPool # type: ignore
 
+from ...syntax.sql_values import SQLValue
 from ...utils.tabledata import TableData
 from ..prepared_stmt import ConnectionABC, PreparedStatementExecutorABC
 from .prepared_stmt import MySQLPreparedStatementExecutor
@@ -49,25 +50,25 @@ class MySQLConnectionABC(ConnectionABC):
         column_names = [c[0] for c in qres['columns']]
         return TableData(column_names, rows)
 
-    def execute_with_stmt_prms(self, stmt: bytes, params: Optional[list] = None) -> None:
+    def execute_with_stmt_prms(self, stmt: bytes, params: Optional[Collection[SQLValue]] = None) -> None:
         """ Execute a query using prepared statement """
         if not params:
             return self.execute_plain(stmt)
         self._get_or_make_pstmt(stmt).execute_params(params)
 
-    def execute_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[list]) -> None:
+    def execute_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[Collection[SQLValue]]) -> None:
         """ Execute a query using prepared statement """
         pstmt = self._get_or_make_pstmt(stmt)
         for params in params_list:
             pstmt.execute_params(params)
 
-    def query_with_stmt_prms(self, stmt: bytes, params: Optional[list] = None) -> TableData:
+    def query_with_stmt_prms(self, stmt: bytes, params: Optional[Collection[SQLValue]] = None) -> TableData:
         """ Execute a query using prepared statement, and get result """
         if not params:
             return self.query_plain(stmt)
         return self._get_or_make_pstmt(stmt).query_params(params)
     
-    def query_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[list]) -> Iterator[TableData]:
+    def query_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[Collection[SQLValue]]) -> Iterator[TableData]:
         """ Execute a query using prepared statement, and get result """
         pstmt = self._get_or_make_pstmt(stmt)
         for params in params_list:

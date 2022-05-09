@@ -1,30 +1,25 @@
 """
     Values
 """
-from enum import Enum
-from typing import Union, get_args
-import datetime
+from typing import TYPE_CHECKING, Union, get_args
 
-from .keywords import KeywordABC
+from .query_abc import QueryABC
+from . import sql_values
 
-Date = datetime.date
-Time = datetime.time
-DateTime = datetime.datetime
+if TYPE_CHECKING:
+    from .query_data import QueryData
 
-DateLike = Union[Date, DateTime]
-TimeLike = Union[DateTime, Time]
+class NullType(QueryABC):
+    """ SQL NULL Type """
 
-class Value(KeywordABC):
-    """ Special values """
-    NULL = b'NULL'
-    # NOT_NULL = b'NOT NULL'
-    # EVAL_TRUE = b'EVAL_TRUE'
-    # EVAL_FALSE = b'EVAL_FALSE'
-    # EVAL_FALSE_OR_NULL = b'EVAL_FALSE_OR_NULL'
+    def append_query_data(self, qd: 'QueryData') -> None:
+        qd.append(b'NULL')
 
-NULL = Value.NULL
 
-ValueType = Union[bool, int, float, bytes, str, Date, Time, DateTime, Value]
+NULL = NullType()
+
+ValueType = Union[sql_values.SQLNotNullValue, NullType]
+
 
 def is_value_type(value) -> bool:
     return isinstance(value, get_args(ValueType))

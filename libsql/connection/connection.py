@@ -2,13 +2,13 @@
     SQL Connection classes and functions
 """
 from abc import abstractmethod
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
+from typing import Any, Collection, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
 
 from libsql.syntax.query_data import QueryData
 
 from ..utils.tabledata import TableData
 from ..schema.database import Database
-
+from ..syntax.sql_values import SQLValue
 
 class ConnectionABC:
     """ Database connection ABC """
@@ -50,7 +50,7 @@ class ConnectionABC:
         """
 
     @abstractmethod
-    def execute_with_stmt_prms(self, stmt: bytes, params: Optional[list] = None) -> None:
+    def execute_with_stmt_prms(self, stmt: bytes, params: Optional[Collection[SQLValue]] = None) -> None:
         """ Execute a query.
 
         Args:
@@ -60,7 +60,7 @@ class ConnectionABC:
         """
 
     @abstractmethod
-    def execute_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[list]) -> None:
+    def execute_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[Collection[SQLValue]]) -> None:
         """ Execute a query with multiple lists of parameters.
 
         Args:
@@ -70,7 +70,7 @@ class ConnectionABC:
         """
 
     @abstractmethod
-    def query_with_stmt_prms(self, stmt: bytes, params: Optional[list] = None) -> TableData:
+    def query_with_stmt_prms(self, stmt: bytes, params: Optional[Collection[SQLValue]] = None) -> TableData:
         """ Execute a query and get result.
 
         Args:
@@ -83,7 +83,7 @@ class ConnectionABC:
         """
 
     @abstractmethod
-    def query_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[list]) -> Iterator[TableData]:
+    def query_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[Collection[SQLValue]]) -> Iterator[TableData]:
         """ Execute a query with multiple lists of parameters, and get results.
 
         Args:

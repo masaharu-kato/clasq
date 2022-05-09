@@ -1,10 +1,11 @@
 """
 """
-from typing import List, Tuple
+from typing import Collection, List, Tuple
 
 from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
 from mysql.connector.constants import ServerFlag # type: ignore
 
+from ...syntax.sql_values import SQLValue
 from ...utils.tabledata import TableData
 from ..prepared_stmt import PreparedStatementExecutorABC
 
@@ -27,7 +28,7 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
         res = self._cnx.cmd_stmt_prepare(self._stmt)
         return res['statement_id'], res['num_params']
 
-    def _send_params(self, params: list):
+    def _send_params(self, params: Collection[SQLValue]):
         """ Execute a specific prepared statement """
         return self._cnx.cmd_stmt_execute(
             self._stmt_id,
@@ -44,7 +45,7 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
         if hasattr(self, '_stmt_id') and self._cnx.is_connected():
             self._cnx.cmd_stmt_close(self._stmt_id)
 
-    def _send_params_and_get_data(self, params: list) -> TableData:
+    def _send_params_and_get_data(self, params: Collection[SQLValue]) -> TableData:
 
         res = self._send_params(params)
         if not isinstance(res[1], list):

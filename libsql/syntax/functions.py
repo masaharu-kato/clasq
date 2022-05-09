@@ -1,10 +1,10 @@
 """
     MySQL Functions
 """
-from typing import Optional, Union
+from typing import Optional
 import datetime
 from .exprs import ExprABC as Ext, Func, NoArgsFunc, OP, BasicFunc
-from .values import DateLike, TimeLike
+from .sql_values import DateLike, TimeLike
 
 class FunctionsABC():
     """ Functions ABC """
