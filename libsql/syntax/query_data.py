@@ -17,7 +17,7 @@ class QueryData(QueryABC):
     DEFAULT_SEP = b','
     OBJECT_QUOTE = b'`'
     OBJECT_SEP = b'.'
-    RE_KEYWORD = re.compile(b'[\s\w()+\-*/%<>=!&|^~,.]*')
+    RE_KEYWORD = re.compile(rb'[\s\w()+\-*/%<>=!&|^~,.]*')
 
     def __init__(self,
         *vals: Optional['QueryLike'],
@@ -373,6 +373,8 @@ class QueryData(QueryABC):
 
 
 QueryLike = Union[ValueOrArg, ExprABC, QueryABC, tuple, Iterable]
+
+QueryArgVals = Union[Collection[ValueType], Dict[ArgName, ValueType]]
 
 
 _R_NOSP_SYMS = {b' ', b')', b',', b'.'}
