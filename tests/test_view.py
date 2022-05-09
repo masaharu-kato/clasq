@@ -3,6 +3,8 @@
 """
 import pytest
 import libsql
+from libsql.syntax.exprs import Arg
+from libsql.syntax.query_data import QueryArgumentError
 from libsql.utils.tabledata import TableData
 from libsql.syntax.keywords import OrderType
 
@@ -52,6 +54,8 @@ def test_view_1(dynamic):
         ]
     )
 
+    assert keyboards.result == products.where(category_id=4).result
+
     ordered_keyboards = keyboards.order_by(-products['price'])  # (-keyboards['price'])
     assert ordered_keyboards.result == TableData(
         ['id', 'category_id', 'name', 'price'], [
@@ -98,7 +102,110 @@ def test_view_2():
     cates, prods, sales = db['categories', 'products', 'user_sale_products']
 
     comp_cates = cates.where((cates['id'] == 1) | (cates['id'] == 2))
-    comps = prods.inner_join(comp_cates, comp_cates['id'] == prods['category_id'], )
+    comps = prods.inner_join(comp_cates, comp_cates['id'] == prods['category_id'])
     comps.result
     assert comps.result[2]['price'] == 89000
 
+
+def test_view_3():
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    cates, prods, sales = db['categories', 'products', 'user_sale_products']
+
+    sales_count = sales['count'].sum().as_('sales_count')
+    sales_price = (sales['count'] * sales['price']).sum().as_('sales_price')
+
+    base_view = (prods
+        .inner_join(cates, prods['category_id'] == cates['id'])
+        .left_join(sales, sales['product_id'] == prods['id'])
+        .group_by(prods['id'])
+        .select_view_column(cates, cate_id=cates['id'], cate_name=cates['name'])
+        .add_column(sales_count, sales_price)
+        .order_by(-sales_price, -sales_count, -prods['price'])
+    )
+
+    assert len(base_view) == 30
+    assert base_view.result[7]['name'] == 'Gaming Mouse'
+
+    filtered_view = base_view.where(sales_price >= 5000)
+
+
+
+
+def test_view_with_args():
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    cates, prods, sales = db['categories', 'products', 'user_sale_products']
+
+    view = (prods
+        .inner_join(cates, prods['category_id'] == cates['id'])
+        .select_view_column(cates, category_name = cates['name'])
+        .where(cates['id'] == Arg(0))
+        .order_by(-prods['price'])
+    )
+
+    with pytest.raises(QueryArgumentError):
+        view.prepare_result()
+
+    res_argval_2 = view.with_args(2).result
+    assert len(res_argval_2) == 3
+    assert res_argval_2[1]['price'] == 79000
+
+    with pytest.raises(QueryArgumentError):
+        view.with_args(1, 2).result
+
+    view2 = (prods
+        .inner_join(cates, prods['category_id'] == cates['id'])
+        .select_view_column(cates, category_name = cates['name'])
+        .where(cates['name'].like(Arg('cate_name_like')))
+        .order_by(-prods['price'])
+    )
+
+    res_argval_comp = view2(cate_name_like='%Computer')
+    assert len(res_argval_comp) == 9
+    assert res_argval_comp[7]['name'] == 'Notebook CPU 2cores, RAM 4GB, SSD 128GB'
+
+    res_argval_laptop = view2(cate_name_like='Laptop%')
+    assert res_argval_2 == res_argval_laptop
+
+    with pytest.raises(QueryArgumentError):
+        view2('%Computer')
+
+    view3 = view2.limit(Arg('limit', default=5))
+
+    assert len(view3(cate_name_like='%Computer')) == 5
+    assert len(view3(cate_name_like='%Computer', limit=3)) == 3
+
+    with pytest.raises(QueryArgumentError):
+        view3(limit=3)
+
+    with pytest.raises(QueryArgumentError):
+        view4 = (prods
+            .inner_join(cates, prods['category_id'] == cates['id'])
+            .select_view_column(cates, category_name = cates['name'])
+            .where(name=Arg('name'))
+            .where(category_name=Arg('name', default='Cables'))
+            .order_by(-prods['price'])
+        )
+        view4(name='Cables')
+
+
+# def test_view_4():
+#     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+#     cates, prods, sales = db['categories', 'products', 'user_sale_products']
+
+#     base_view = (prods
+#         .inner_join(cates, prods['category_id'] == cates['id'])
+#         .left_join(sales, sales['product_id'] == prods['id'])
+#         .group_by(prods['id'])
+#     )
+#     base_view = base_view.select_column(
+#         cate_id=cates['id'],
+#         cate_name=cates['name'],
+#         id=prods['id'],
+#         name=prods['name'],
+#         price=prods['price'],
+#         sales_count=sales['count'].sum(),
+#         sales_price=(sales['count'] * sales['price']).sum(),
+#     )
+#     base_view = base_view.order_by(sales_price=False, sales_count=False, price=False)
+
+#     base_view.self_based_view().where(base_view['sales_price'] >= 5000).query_select
