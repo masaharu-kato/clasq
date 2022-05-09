@@ -16,7 +16,7 @@ from libsql.syntax.query_data import QueryData
     [b'bbb_cde ', b'`bbb_cde `'],
 ])
 def test_asobj(objname, result):
-    assert QueryData(Object(objname)) == QueryData(result)
+    assert QueryData(Object(objname)) == QueryData(stmt=result)
 
 
 # @pytest.mark.parametrize('objs, result', [
@@ -52,4 +52,4 @@ def test_table_columns():
     assert db.table(b'mytable2').col(b'mycol5').name == b'mycol5'
 
     assert db['mytable'].name == b'mytable'
-    assert QueryData(db['mytable']['mycol2']) == QueryData(b'`mytable`.`mycol2`')
+    assert QueryData(db['mytable']['mycol2']) == QueryData(stmt=b'`mytable`.`mycol2`')

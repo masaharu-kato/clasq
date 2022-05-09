@@ -2,10 +2,10 @@
     Syntax Errors
 """
 
-class SyntaxError(RuntimeError):
+class SyntaxError(Exception):
     """ Syntax Error """
 
-class ObjectError(RuntimeError):
+class ObjectError(Exception):
     """ Object Error """
 
 class ObjectArgsError(ObjectError):
@@ -40,3 +40,17 @@ class ObjectAmbiguousError(ObjectError):
 
 class ObjectExprError(ObjectError):
     """ Object expression error """
+
+
+class QueryError(Exception):
+    """ Query Error  """
+
+class QueryValueError(QueryError, ValueError):
+    """ Query Value Error """
+
+class QueryTypeError(QueryError, TypeError):
+    """ Query Type Error """
+
+class QueryArgumentError(QueryError):
+    """ Query Argument Error """
+

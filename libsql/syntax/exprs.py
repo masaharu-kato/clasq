@@ -595,10 +595,12 @@ class NoneExprType(ExprABC):
 NoneExpr = NoneExprType()
 
 
-class Arg(QueryExprABC):
-    """ Argument (Placeholder) type """
+ArgName = Union[int, str]
 
-    def __init__(self, name: Union[int, str], *, default: Optional[ValueType] = None) -> None:
+class Arg(QueryExprABC):
+    """ Query argument (Placeholder) object """
+
+    def __init__(self, name: ArgName, *, default: Optional[ValueType] = None) -> None:
         super().__init__()
         self._name = name
         self._default = default
@@ -626,7 +628,7 @@ class Arg(QueryExprABC):
         return str(self._name)
 
     def __repr__(self) -> str:
-        return 'Arg(%s)' % str(self)
+        return 'Arg(%s' % str(self) + (', default=%s' % repr(self._default) if self._default else '') + ')'
 
 
 ValueOrArg = Union[ValueType, Arg]

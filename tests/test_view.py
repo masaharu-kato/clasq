@@ -4,7 +4,7 @@
 import pytest
 import libsql
 from libsql.syntax.exprs import Arg
-from libsql.syntax.query_data import QueryArgumentError
+from libsql.syntax.errors import QueryArgumentError
 from libsql.utils.tabledata import TableData
 from libsql.syntax.keywords import OrderType
 
