@@ -2,7 +2,7 @@
     Prepared statement executor abstract class
 """
 from abc import abstractmethod
-from typing import Collection, Tuple
+from typing import Collection, Optional, Tuple
 
 from ..syntax.sql_values import SQLValue
 from ..utils.tabledata import TableData
@@ -23,11 +23,7 @@ class PreparedStatementExecutorABC:
         """
 
     @abstractmethod
-    def _send_params(self, params: Collection[SQLValue]) -> None:
-        """ Execute a specific prepared statement """
-
-    @abstractmethod
-    def _send_params_and_get_data(self, params: Collection[SQLValue]) -> TableData:
+    def _send_params(self, params: Collection[SQLValue]) -> Optional[TableData]:
         """ Execute a specific prepared statement """
 
     @abstractmethod
@@ -42,21 +38,14 @@ class PreparedStatementExecutorABC:
         # Make self prepared statement available
         try:
             self.reset()
-        except errors.ProgrammingError:
+        except errors.ProgrammingError: # TODO: Check
             self._stmt_id = self._new()
 
-    def _execute_params(self, params: Collection[SQLValue]):
+    def run_with_params(self, params: Collection[SQLValue]) -> Optional[TableData]:
         self.reset_or_new()
         if not len(params) == self.n_params:
-            raise errors.ProgrammingError('Incorrect number of arguments for prepared statements.')
+            raise errors.PreparedStatementPrametersError('Incorrect number of arguments for prepared statements.', self._stmt, len(params), self.n_params)
         return self._send_params(params)
-
-    def execute_params(self, params: Collection[SQLValue]) -> None:
-        self._execute_params(params)
-
-    def query_params(self, params: Collection[SQLValue]) -> TableData:
-        return self._send_params_and_get_data(params)
-
 
     def __del__(self) -> None:
         self.close()

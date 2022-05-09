@@ -1,7 +1,7 @@
 """
     Mysql Connection class implementation
 """
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 from typing import Collection, Dict, Iterable, Iterator, Optional
 
 import mysql.connector # type: ignore
@@ -21,58 +21,47 @@ def connect(*args, **kwargs):
 
 class MySQLConnectionABC(ConnectionABC):
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self._cnx: MySQLConnectionAbstract = self.new_cnx()
+    def __init__(self, **cnx_options) -> None:
         self._prepared_stmts: Dict[bytes, PreparedStatementExecutorABC] = {}
-        self.initialize_database()
+        super().__init__(**cnx_options)
 
-    @abstractmethod
-    def new_cnx(self) -> MySQLConnectionAbstract:
-        """ Create a new connection """
+    @abstractproperty
+    def cnx(self) -> MySQLConnectionAbstract:
+        """ Get a connection """
 
     def commit(self):
         """ Commit the current transaction (Override) """
-        return self._cnx.commit()
+        return self.cnx.commit()
 
     ### =========================================================================================================== ###
     #    Execute and Query
     ### =========================================================================================================== ###
-
-    def execute_plain(self, stmt: bytes) -> None:
-        """ Execute a query using prepared statement """
-        self._cnx.cmd_query(stmt)
-
-    def query_plain(self, stmt: bytes) -> TableData:
-        """ Execute a query using prepared statement, and get result """
-        qres = self._cnx.cmd_query(stmt)
-        rows, eof = self._cnx.get_rows()
-        column_names = [c[0] for c in qres['columns']]
-        return TableData(column_names, rows)
-
-    def execute_with_stmt_prms(self, stmt: bytes, params: Optional[Collection[SQLValue]] = None) -> None:
-        """ Execute a query using prepared statement """
-        if not params:
-            return self.execute_plain(stmt)
-        self._get_or_make_pstmt(stmt).execute_params(params)
-
-    def execute_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[Collection[SQLValue]]) -> None:
-        """ Execute a query using prepared statement """
-        pstmt = self._get_or_make_pstmt(stmt)
-        for params in params_list:
-            pstmt.execute_params(params)
-
-    def query_with_stmt_prms(self, stmt: bytes, params: Optional[Collection[SQLValue]] = None) -> TableData:
-        """ Execute a query using prepared statement, and get result """
-        if not params:
-            return self.query_plain(stmt)
-        return self._get_or_make_pstmt(stmt).query_params(params)
     
-    def query_with_stmt_many_prms(self, stmt: bytes, params_list: Iterable[Collection[SQLValue]]) -> Iterator[TableData]:
-        """ Execute a query using prepared statement, and get result """
+    def run_stmt_prms(self, stmt: bytes, prms: Collection[SQLValue] = ()) -> Optional[TableData]:
+        """ Execute a query with single list of params and get result if exists
+            (Override from `ConnectionABC`)
+        """
+        if not prms:
+            return self.run_stmt(stmt)
+        return self._get_or_make_pstmt(stmt).run_with_params(prms)
+
+    def run_stmt_many_prms(self, stmt: bytes, prms_list: Iterable[Collection[SQLValue]]) -> Iterator[Optional[TableData]]:
+        """ Execute a query with multiple lists of params and get result if exists
+            (Override from `ConnectionABC`)
+        """ 
         pstmt = self._get_or_make_pstmt(stmt)
-        for params in params_list:
-            yield pstmt.query_params(params)
+        for prms in prms_list:
+            yield pstmt.run_with_params(prms)
+
+    def run_stmt(self, stmt: bytes) -> Optional[TableData]:
+        """ Execute a query using prepared statement, and get result """
+        qres = self.cnx.cmd_query(stmt)
+        if isinstance(qres, dict) and 'columns' in qres:
+            column_names = [c[0] for c in qres['columns']]
+            self.cnx._unread_result = True
+            rows, eof = self.cnx.get_rows()
+            return TableData(column_names, rows)
+        return None
 
     def close_all_prepared_stmts(self):
         """ Close all prepared statements """
@@ -81,7 +70,7 @@ class MySQLConnectionABC(ConnectionABC):
 
     def __exit__(self, ex_type, ex_value, trace):
         """ Close the cursor """
-        self._cnx.close()
+        self.cnx.close()
         # if self.cnx is not None:
         #     try:
         #         self.cnx.close()
@@ -89,19 +78,47 @@ class MySQLConnectionABC(ConnectionABC):
         #         warnings.warn(str(e))
         #     self.cnx = None
 
-
     def _get_or_make_pstmt(self, stmt: bytes) -> PreparedStatementExecutorABC:
         if not (pstmt := self._prepared_stmts.get(stmt)):
-            pstmt = self._prepared_stmts[stmt] = MySQLPreparedStatementExecutor(self._cnx, stmt)
+            pstmt = self._prepared_stmts[stmt] = MySQLPreparedStatementExecutor(self, stmt)
         return pstmt
 
 
 class MySQLConnection(MySQLConnectionABC):
     """ MySQL Connection Class """
 
-    def new_cnx(self):
+    def __init__(self, **cnx_options) -> None:
+        self._cnx: Optional[MySQLConnectionAbstract] = None
+        super().__init__(**cnx_options)
+
+    @property
+    def cnx(self) -> MySQLConnectionAbstract:
+        """ Get a connection """
+        self.connect()
+        assert self._cnx is not None
+        return self._cnx
+
+    def new_cnx(self) -> MySQLConnectionAbstract:
         # TODO: Implementation with Cext of MySQL Connection
-        return mysql.connector.connect(*self._cnx_args, **self._cnx_kwargs, use_pure=True) # MySQL connection 
+        # print('new cnx')
+        return mysql.connector.connect(**self.cnx_options, use_pure=True) # MySQL connection
+
+    def is_connected(self) -> bool:
+        return self._cnx is not None # and self._cnx.is_connected()
+
+    def connect(self) -> None:
+        """ Make a connection if not connected """
+        if not self.is_connected():
+            self._cnx = self.new_cnx()
+
+    def disconnect(self) -> None:
+        """ Disconnect if connected """
+        if self.is_connected():
+            assert self._cnx is not None
+            self._cnx.disconnect()
+
+    
+
 
 
 # class MySQLPooledConnection(MySQLConnectionABC):
