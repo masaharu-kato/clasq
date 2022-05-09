@@ -146,10 +146,10 @@ class Column(NamedExpr):
     def q_order(self) -> tuple:
         return (self, self.order_type)
 
-    def append_query_data(self, qd: QueryData) -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         if self.table_or_none is not None:
             qd.append(self.table, b'.')
-        super().append_query_data(qd)
+        super().append_to_query_data(qd)
 
     def ordered(self, order: OrderLike):
         return OrderedColumn(self, OrderType.make(order))
@@ -207,8 +207,8 @@ class OrderedColumn(NamedExprABC):
     def iter_objects(self) -> Iterator[ObjectABC]:
         return self._original_expr.iter_objects()
 
-    def append_query_data(self, qd: QueryData) -> None:
-        return self._original_expr.append_query_data(qd)
+    def append_to_query_data(self, qd: QueryData) -> None:
+        return self._original_expr.append_to_query_data(qd)
 
     @property
     def query_for_select_column(self) -> QueryData:

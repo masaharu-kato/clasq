@@ -13,7 +13,7 @@ class QueryABC:
     """ Query abstract class """
 
     @abstractmethod
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: 'QueryData') -> None:
         """ Append this expression to the QueryData object
 
         Args:

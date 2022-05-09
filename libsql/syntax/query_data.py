@@ -97,11 +97,14 @@ class QueryData(QueryABC):
                 self._prms.append(prm)
         return self
 
-    def _append_qd(self, qd: 'QueryData') -> 'QueryData':
-        return self._append(qd._stmt, qd._prms)
+    def append_to_query_data(self, qd: 'QueryData') -> None:
+        """ Append to the existing QueryData
+            (Overrided from `QueryABC`)
 
-    def append_query_data(self, qd: 'QueryData') -> None:
-        qd._append_qd(self)
+        Args:
+            qd (QueryData): QueryData object to be appended
+        """
+        qd.append_query_data(self)
 
     def append_value(self, val: ValueOrArg) -> 'QueryData':
         """ Append as value
@@ -174,6 +177,18 @@ class QueryData(QueryABC):
         for val in vals:
             self.append_one(val)
         return self
+
+
+    def append_query_data(self, qd: 'QueryData') -> 'QueryData':
+        """ Append the other QueryData object 
+
+        Args:
+            qd (QueryData): QueryData to append
+
+        Returns:
+            QueryData: Self object
+        """
+        return self._append(qd._stmt, qd._prms)
 
     def __iadd__(self, value) -> 'QueryData':
         return self.append_one(value)

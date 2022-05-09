@@ -79,8 +79,8 @@ class Object(ObjectABC):
     def name(self):
         return self._name
 
-    def append_query_data(self, qd: 'QueryData') -> None:
-        qd.append_object(self.name) # Default Implementation
+    def append_to_query_data(self, qd: 'QueryData') -> None:
+        qd.append_object_name(self.name) # Default Implementation
 
 
 def object_key(obj):

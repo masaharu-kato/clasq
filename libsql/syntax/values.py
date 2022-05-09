@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class NullType(QueryABC):
     """ SQL NULL Type """
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: 'QueryData') -> None:
         qd.append(b'NULL')
 
 

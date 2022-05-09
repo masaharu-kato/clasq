@@ -287,7 +287,7 @@ class ForeignKeyReference(Object):
     def on_update(self):
         return self._on_update
 
-    def append_query_data(self, qd: QueryData) -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         """ Append this to query data"""
         qd.append(
             b'FOREIGN', b'KEY', self.name, b'(', [super(Object, c) for c in self._orig_columns], b')',

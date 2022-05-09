@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class KeywordABC(QueryABC, Enum):
     """ Keyword abstract class """
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: 'QueryData') -> None:
         qd.append_one(self.value)
 
     @classmethod

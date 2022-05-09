@@ -543,7 +543,7 @@ class Expr(QueryExprABC):
     def __repr__(self):
         return repr(self._v)
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: 'QueryData') -> None:
         qd.append_values(self._v)
 
 
@@ -616,7 +616,7 @@ class Arg(QueryExprABC):
         assert self._default is not None
         return self._default
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: 'QueryData') -> None:
         qd.append_value(self)
 
     def is_same_arg(self, arg: 'Arg') -> bool:
@@ -647,10 +647,10 @@ class NamedExprABC(QueryExprABC, ObjectABC):
     def order_type(self) -> OrderType:
         """ Return a order kind (ASC or DESC) """
 
-    # def append_query_data(self, qd: QueryData) -> None:
+    # def append_to_query_data(self, qd: QueryData) -> None:
     #     if self.original_expr is not self:
-    #         return self.original_expr.append_query_data(qd)
-    #     return super().append_query_data(qd)
+    #         return self.original_expr.append_to_query_data(qd)
+    #     return super().append_to_query_data(qd)
 
     def q_order(self) -> tuple:
         return (self.original_expr, self.order_type)
@@ -725,8 +725,8 @@ class OrderedNamedExpr(NamedExprABC):
     def query_for_select_column(self) -> 'QueryLike':
         return self._original_expr.query_for_select_column
 
-    def append_query_data(self, qd: 'QueryData') -> None:
-        return self._original_expr.append_query_data(qd)
+    def append_to_query_data(self, qd: 'QueryData') -> None:
+        return self._original_expr.append_to_query_data(qd)
 
     def iter_objects(self) -> Iterator['ObjectABC']:
         return self._original_expr.iter_objects()
@@ -754,7 +754,7 @@ class FuncCall(QueryExprABC):
     def args(self):
         return self._args
 
-    def append_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: 'QueryData') -> None:
         self._func.append_query_data_with_args(qd, self._args)
 
     def iter_objects(self) -> Iterator['ObjectABC']:
