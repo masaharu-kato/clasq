@@ -418,15 +418,6 @@ class RowData(Generic[T]):
             _cell_html = lambda k, v: '<TD>%s</TD>' % _escape_val(formatter(v))
         return '<TR>' + ''.join(_cell_html(k, v) for k, v in self.items()) + '</TR>'
 
-    @property
-    def __dict__(self):
-        """ Generate a dictionary of this row
-
-        Returns:
-            dict: A dictionary of this row
-        """
-        return self.make_dict()
-
 
 def _escape_attr(val):
     return html.escape(val, quote=True)
