@@ -102,7 +102,7 @@ class Table(TableViewABC):
         # TODO: Upgrade with view methods
         return self.clone(*exprs, **options).result
 
-    def insert(self, data: Optional[Dict[Union[Name, Column], ValueType]] = None, **values: ValueType) -> int:
+    def insert(self, data: Optional[Dict[Union[NameLike, TableColumn], ValueType]] = None, **values: ValueType) -> int:
         """ Run INSERT query
 
         Args:
@@ -129,7 +129,7 @@ class Table(TableViewABC):
         return self.cnx.last_row_id()
 
     def update(self,
-        data: Optional[Dict[Union[Name, Column], ValueType]] = None,
+        data: Optional[Dict[Union[NameLike, TableColumn], ValueType]] = None,
         *,
         where: Optional[ExprABC],
         orders: Optional[List[Column]] = None,

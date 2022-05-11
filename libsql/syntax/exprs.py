@@ -1,13 +1,12 @@
 """
     Definition Computable class and subclasses
 """
-from abc import ABC, abstractmethod, abstractproperty
-from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple, Union, Type
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Generic, Iterator, List, Optional, Tuple, TypeVar, Union, Type
 
 from .query_abc import QueryABC
-from .keywords import OrderType, OrderLike
 from .values import NULL, ValueType, is_value_type
-from .object_abc import Name, ObjectABC, Object
+from .object_abc import NameLike, ObjectABC, Object, ObjectName
 from . import errors
 
 if TYPE_CHECKING:
@@ -17,9 +16,8 @@ if TYPE_CHECKING:
 class FuncABC(ABC):
     """ Function ABC """
 
-    def __init__(self, name: bytes):
-        assert isinstance(name, bytes)
-        self._name = name
+    def __init__(self, name: NameLike):
+        self._name = ObjectName(name)
 
     def call(self, *args: 'ExprLike') -> 'ExprABC':
         """ Returns an expression representing a call to this function
@@ -45,7 +43,7 @@ class FuncABC(ABC):
         return self.call(*args)
 
     @property
-    def name(self) -> bytes:
+    def name(self) -> ObjectName:
         """ Returns a function name
 
         Returns:
@@ -60,7 +58,7 @@ class FuncABC(ABC):
         Returns:
             bytes: Function name
         """
-        return self.name
+        return bytes(self.name)
 
     def __str__(self) -> str:
         """ Returns a function name as string
@@ -68,7 +66,7 @@ class FuncABC(ABC):
         Returns:
             str: Function name
         """
-        return self.name.decode()
+        return str(self.name)
 
     @abstractmethod
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
@@ -128,7 +126,7 @@ class Func(NoArgsFuncABC):
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         self.check_args(args)
-        qd.append(self._name + b'(', list(args), b')')
+        qd.append(self.name.raw_name + b'(', list(args), b')')
 
     def __repr__(self):
         return str(self) + '(' + ','.join(repr(t) for t in self._argsets) if self._argsets else '' + ')'
@@ -169,7 +167,7 @@ class UnaryOp(OpABC):
             args (Tuple[ExprLike, ...]): Argument values for the function
         """
         assert len(args) == 1
-        qd.append(self._name, args[0])
+        qd.append(self.name.raw_name, args[0])
 
 
 class BinaryOp(OpABC):
@@ -189,7 +187,7 @@ class BinaryOp(OpABC):
         """
         assert len(args) >= 2
         qd.append(b'(') 
-        qd.append_joined(args, sep=self.name)
+        qd.append_joined(args, sep=self.name.raw_name)
         qd.append(b')')
         # TODO: Priority
 

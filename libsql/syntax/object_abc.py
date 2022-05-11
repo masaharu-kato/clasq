@@ -13,40 +13,56 @@ if TYPE_CHECKING:
 
 T = TypeVar('T')
 
-Name = Union[bytes, str]
+
+class ObjectName(QueryABC):
+    """ Object name """
+    def __init__(self, val: 'NameLike'):
+        if isinstance(val, ObjectName):
+            self._raw_name = val.raw_name
+        elif isinstance(val, bytes):
+            self._raw_name = val
+        elif isinstance(val, str):
+            self._raw_name = val.encode()
+        else:
+            raise TypeError('Invalid type of value.')
+
+    @property
+    def raw_name(self):
+        return self._raw_name
+
+    def append_to_query_data(self, qd: 'QueryData') -> None:
+        qd.append_object_name(self.raw_name)
+
+    def __bytes__(self) -> bytes:
+        return self.raw_name
+
+    def __str__(self) -> str:
+        return self.raw_name.decode()
+
+    def __eq__(self, obj: object) -> bool:
+        return isinstance(obj, ObjectName) and self.raw_name == obj.raw_name
+
+    def __hash__(self) -> int:
+        return hash(self.raw_name)
+
+
+NameLike = Union[bytes, str, ObjectName]
 
 
 class ObjectABC(QueryABC):
 
     @abstractproperty
-    def name(self) -> bytes:
+    def name(self) -> ObjectName:
         """ Get a name """
 
     def __bytes__(self):
-        return self.name
+        return bytes(self.name)
 
     def __str__(self):
-        return self.name.decode()
+        return str(self.name)
 
     def iter_objects(self) -> Iterator['ObjectABC']:
         yield self # Default implementation
-
-    # def q_create(self) -> tuple:
-    #     """ Get a query for creation """
-    #     return (self,) # Default implementation
-
-    # def __eq__(self, value) -> bool:
-    #     if isinstance(value, type(self)):
-    #         return self.name == value.name
-    #     return super().__eq__(value)
-
-    # @property
-    # def view_or_none(self) -> Optional['ViewABC']:
-    #     return None # Default Implementation
-
-    # @property
-    # def table_or_none(self) -> Optional['Table']:
-    #     return None # Default Implementation
 
     def __eq__(self, val) -> bool:
         if isinstance(val, ObjectABC):
@@ -57,30 +73,21 @@ class ObjectABC(QueryABC):
         return not self.__eq__(val)
 
     def __repr__(self):
-        return 'Obj(%s)' % str(self)
-
-
-def to_name(val) -> bytes:
-    if isinstance(val, bytes):
-        return val
-    if isinstance(val, str):
-        return val.encode()
-    raise TypeError('Invalid type of value.')
+        return 'Obj(%s)' % self.name.decode()
 
 
 class Object(ObjectABC):
     """ Column expression """
-    def __init__(self, name: Name):
-        self._name = to_name(name)
-        # if not self._name:
-        #     raise errors.ObjectArgsError('Name cannot be empty.')
+    def __init__(self, name: NameLike):
+        self._name = ObjectName(name)
 
     @property
-    def name(self):
+    def name(self) -> ObjectName:
         return self._name
 
     def append_to_query_data(self, qd: 'QueryData') -> None:
-        qd.append_object_name(self.name) # Default Implementation
+        qd.append(self.name) # Default Implementation
+
 
 
 def object_key(obj):

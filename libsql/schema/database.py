@@ -3,7 +3,8 @@
 """
 from typing import TYPE_CHECKING, Collection, Dict, Iterable, Iterator, Optional, Tuple, Union, overload
 
-from ..syntax.exprs import Object, Name
+from ..syntax.object_abc import NameLike, ObjectName
+from ..syntax.exprs import Object
 from ..syntax.query_data import QueryLike, QueryArgVals
 from ..syntax.values import ValueType
 from ..syntax import errors
@@ -80,7 +81,7 @@ class Database(Object):
     def tables(self):
         return list(self.iter_tables())
 
-    def table(self, val: Union[Name, Table]) -> Table:
+    def table(self, val: Union[NameLike, Table]) -> Table:
         """ Get a Table object with the specified name
 
         Args:
@@ -94,34 +95,28 @@ class Database(Object):
         Returns:
             Table: Table object with the specified name or Table object itself
         """
-        if isinstance(val, (bytes, str)):
-            name = val.encode() if isinstance(val, str) else val
-            if name not in self._table_dict:
-                if self.is_dynamic:
-                    return self.append_table(name, dynamic=True)
-                else:
-                    raise errors.ObjectNotFoundError('Undefined table name `%s` on database `%s`' % (str(name), str(self._name)))
-            return self._table_dict[name] 
-
         if isinstance(val, Table):
             if val.database == self:
                 return val
             raise errors.NotaSelfObjectError('Not a table of this database.')
+            
+        name = ObjectName(val)
+        if name not in self._table_dict:
+            raise errors.ObjectNotFoundError('Undefined table name `%s` on database `%s`' % (str(name), str(self._name)))
+        return self._table_dict[name]
 
-        raise errors.ObjectArgsError('Invalid type %s (%s)' % (type(val), val))
-        
     @overload
-    def __getitem__(self, val: Union[Name, Table]) -> Table: ...
+    def __getitem__(self, val: Union[NameLike, Table]) -> Table: ...
     
     @overload
-    def __getitem__(self, val: Tuple[Union[Name, Table], ...]) -> Tuple[Table, ...]: ...
+    def __getitem__(self, val: Tuple[Union[NameLike, Table], ...]) -> Tuple[Table, ...]: ...
 
     def __getitem__(self, val):
         if isinstance(val, tuple):
             return (*(self.table(v) for v in val),)
         return self.table(val)
 
-    def table_or_none(self, val: Union[Name, Table]) -> Optional[Table]:
+    def table_or_none(self, val: Union[NameLike, Table]) -> Optional[Table]:
         """ Get a Table object with the specified name if exists """
         try:
             return self.table(val)
@@ -129,7 +124,7 @@ class Database(Object):
             pass
         return None
 
-    def get(self, val: Union[Name, Table]) -> Optional[Table]:
+    def get(self, val: Union[NameLike, Table]) -> Optional[Table]:
         """ Synonym of `table_or_none` method """
         return self.table_or_none(val)
 
