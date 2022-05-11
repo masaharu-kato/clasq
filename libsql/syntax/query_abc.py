@@ -1,7 +1,7 @@
 """
     Query abstract class
 """
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Set
 
 if TYPE_CHECKING:
