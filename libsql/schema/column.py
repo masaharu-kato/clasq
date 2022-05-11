@@ -1,22 +1,96 @@
 """
     Column classes
 """
-from typing import TYPE_CHECKING, Iterator, Optional
+from abc import abstractmethod, abstractproperty
+from typing import TYPE_CHECKING, Generic, Iterator, Optional, TypeVar, Union
 
-from ..syntax.object_abc import Name, ObjectABC
-from ..syntax.exprs import ExprABC, NamedExpr, NamedExprABC
+from ..syntax.object_abc import NameLike, Object, ObjectABC, ObjectName
+from ..syntax.exprs import AliasedExpr, ExprABC, QueryExprABC
 from ..syntax.keywords import OrderType, OrderLike, ReferenceOption
 from ..syntax.query_abc import iter_objects
-from ..syntax.query_data import QueryData
+from ..syntax.query_data import QueryData, QueryLike
 from ..syntax import sqltypes
 from ..syntax import errors
 
 if TYPE_CHECKING:
-    from .view import ViewABC
+    from .view import BaseViewABC, ViewABC
     from .table import Table, ForeignKeyReference
+    from .database import Database
 
-class Column(NamedExpr):
-    """ Column expression """
+
+class ColumnABC(QueryExprABC, ObjectABC):
+    """ Column ABC """
+        
+    @property
+    def query_for_select_column(self) -> 'QueryLike':
+        """ Get a query for SELECT """
+        return self  # Default Implementation
+
+    @abstractproperty
+    def base_view(self) -> 'BaseViewABC':
+        """ Get a base View object """
+
+    @property
+    def database(self):
+        """ Get a parent Database object """
+        return self.base_view.database
+
+    @property
+    def cnx(self):
+        """ Get a database server connection """
+        return self.base_view.cnx
+
+    @property
+    def order_type(self) -> OrderType:
+        """ Return a order kind (ASC or DESC) """
+        return OrderType.ASC  # Default Implementation
+
+    @property
+    def ordered_query(self) -> QueryLike:
+        return (self, self.order_type)
+
+    def append_to_query_data(self, qd: QueryData) -> None:
+        """ Append this expression to the QueryData object
+
+        Args:
+            qd (QueryData): QueryData object to be appended
+        """
+        if self.base_view.name_or_none is None:
+            raise errors.ObjectError('Cannot append column which view is unnamed.')
+        qd.append(self.base_view, b'.')
+        super().append_to_query_data(qd)
+
+    def ordered(self, order: OrderLike):
+        """ Get a ordered column object from this column """
+        return OrderedColumn(self, OrderType.make(order))
+
+    def __pos__(self):
+        """ Get a ASC ordered expression """
+        return OrderedColumn(self, OrderType.ASC)
+
+    def __neg__(self):
+        """ Get a DESC ordered expression """
+        return OrderedColumn(self, OrderType.DESC)
+
+    def __repr__(self):
+        if self.base_view.name_or_none:
+            return 'Col(%s.%s)' % (str(self.base_view), str(self))
+        return 'Col(%s)' % str(self)
+
+ET = TypeVar('ET', bound=ExprABC)
+class ViewColumn(AliasedExpr[ET], ColumnABC, Generic[ET]):
+    """ View Column expression """
+
+    def __init__(self, base_view: 'BaseViewABC', name: NameLike, expr: ET) -> None:
+        super().__init__(expr, name)
+        self._base_view = base_view
+
+    @property
+    def base_view(self) -> 'BaseViewABC':
+        return self._base_view
+
+    def renamed(self, name: NameLike) -> 'ViewColumn':
+        return ViewColumn(self._base_view, name, self.expr)
 
 
 class TableColumnRef:
@@ -99,36 +173,22 @@ class TableColumn(ColumnABC, Object):
         return OrderType.ASC
 
     @property
-    def original_expr(self) -> ExprABC:
+    def original_column(self) -> ExprABC:
         return self
 
     @property
-    def view_or_none(self):
-        return self._view
+    def base_view(self) -> 'BaseViewABC':
+        return self._table
 
     @property
     def table_or_none(self):
         return self._table
 
     @property
-    def view(self) -> 'ViewABC':
-        if self._view is None:
-            return self.table
-        return self._view
-
-    @property
     def table(self) -> 'Table':
         if self._table is None:
             raise errors.ObjectNotSetError('Table is not set.')
         return self._table
-
-    @property
-    def database(self):
-        return self.table.database
-
-    @property
-    def cnx(self):
-        return self.table.cnx
 
     @property
     def default_value(self):
@@ -164,37 +224,48 @@ class TableColumn(ColumnABC, Object):
         )
 
 
-class OrderedColumn(NamedExprABC):
+class OrderedColumn(ColumnABC):
     """ Ordered Column Expr """
-    def __init__(self, expr: Column, order: OrderType):
-        self._original_expr = expr
-        self._order_kind = order
+    def __init__(self, column: ColumnABC, order: OrderType):
+        self._column = column
+        self._order_type = order
 
     @property
-    def name(self):
-        return self._original_expr.name
+    def name(self) -> ObjectName:
+        return self._column.name
 
     @property
-    def original_expr(self) -> ExprABC:
+    def original_column(self) -> ColumnABC:
         """ Get a original expr """
-        return self._original_expr
+        return self._column
+
+    @property
+    def query_for_select_column(self) -> 'QueryLike':
+        """ Get a query for SELECT """
+        return self._column.query_for_select_column
+
+    @property
+    def base_view(self) -> 'BaseViewABC':
+        """ Get a parent View object if exists """
+        return self._column.base_view
 
     @property
     def order_type(self) -> OrderType:
-        return self._order_kind
+        return self._order_type
 
     def iter_objects(self) -> Iterator[ObjectABC]:
-        return self._original_expr.iter_objects()
+        return self._column.iter_objects()
 
     def append_to_query_data(self, qd: QueryData) -> None:
-        return self._original_expr.append_to_query_data(qd)
+        """ Append this expression to the QueryData object
 
-    @property
-    def query_for_select_column(self) -> QueryData:
-        return self._original_expr.query_for_select_column
+        Args:
+            qd (QueryData): QueryData object to be appended
+        """
+        return self._column.append_to_query_data(qd)
 
 
 def iter_columns(*exprs: Optional[ObjectABC]):
     for e in iter_objects(*exprs):
-        if isinstance(e, Column):
+        if isinstance(e, TableColumn):
             yield e

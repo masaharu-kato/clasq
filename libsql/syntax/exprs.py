@@ -632,59 +632,9 @@ class Arg(QueryExprABC):
 ValueOrArg = Union[ValueType, Arg]
 
 
-class NamedExprABC(QueryExprABC, ObjectABC):
-    """ ColumnLike Object ABC """
-    
-    @abstractproperty
-    def query_for_select_column(self) -> 'QueryLike':
-        """ Get a query for SELECT """
-
-    @abstractproperty
-    def original_expr(self) -> ExprABC:
-        """ Get a original expr """
-    
-    @abstractproperty
-    def order_type(self) -> OrderType:
-        """ Return a order kind (ASC or DESC) """
-
-    # def append_to_query_data(self, qd: QueryData) -> None:
-    #     if self.original_expr is not self:
-    #         return self.original_expr.append_to_query_data(qd)
-    #     return super().append_to_query_data(qd)
-
-    def q_order(self) -> tuple:
-        return (self.original_expr, self.order_type)
-
-    def ordered(self, order: OrderLike):
-        return OrderedNamedExpr(self, OrderType.make(order))
-
-    def __pos__(self):
-        """ Get a ASC ordered expression """
-        return OrderedNamedExpr(self, OrderType.ASC)
-
-    def __neg__(self):
-        """ Get a DESC ordered expression """
-        return OrderedNamedExpr(self, OrderType.DESC)
-
-
-class NamedExpr(Object, NamedExprABC):
-    """ ColumnLike Object """
-
-    @property
-    def query_for_select_column(self) -> 'QueryLike':
-        return self.name
-
-    @property
-    def original_expr(self) -> ExprABC:
-        return self
-
-    @property
-    def order_type(self) -> OrderType:
-        return OrderType.ASC
-
-
-class AliasedExpr(NamedExpr):
-    def __init__(self, expr: ExprABC, name: Name) -> None:
+T = TypeVar('T', bound=ExprABC)
+class AliasedExpr(QueryExprABC, Object, Generic[T]):
+    def __init__(self, expr: T, name: NameLike) -> None:
         super().__init__(name)
         self._expr = expr
 
@@ -693,44 +643,12 @@ class AliasedExpr(NamedExpr):
         return self._expr
 
     @property
-    def query_for_select_column(self) -> 'QueryLike':
-        return (self._expr, b'AS', self)
+    def select_column_query(self) -> 'QueryLike':
+        return (self._expr, b'AS', self.name)
 
     def iter_objects(self) -> Iterator['ObjectABC']:
         if isinstance(self._expr, QueryABC):
             yield from self._expr.iter_objects()
-
-
-class OrderedNamedExpr(NamedExprABC):
-    """ Ordered Aliased Expr """
-    def __init__(self, expr: NamedExprABC, order: OrderType):
-        self._original_expr = expr
-        self._order_kind = order
-
-    @property
-    def name(self):
-        return self._original_expr.name
-
-    @property
-    def original_expr(self) -> ExprABC:
-        """ Get a original expr """
-        return self._original_expr
-
-    @property
-    def order_type(self) -> OrderType:
-        """ Get a order kind """
-        return self._order_kind
-
-    @property
-    def query_for_select_column(self) -> 'QueryLike':
-        return self._original_expr.query_for_select_column
-
-    def append_to_query_data(self, qd: 'QueryData') -> None:
-        return self._original_expr.append_to_query_data(qd)
-
-    def iter_objects(self) -> Iterator['ObjectABC']:
-        return self._original_expr.iter_objects()
-
 
 
 class FuncCall(QueryExprABC): 
