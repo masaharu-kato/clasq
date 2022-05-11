@@ -40,10 +40,22 @@ class ObjectName(QueryABC):
         return self.raw_name.decode()
 
     def __eq__(self, obj: object) -> bool:
-        return isinstance(obj, ObjectName) and self.raw_name == obj.raw_name
+        if isinstance(obj, ObjectName):
+            return self.raw_name == obj.raw_name
+        if isinstance(obj, str):
+            return str(self) == obj
+        if isinstance(obj, bytes):
+            return bytes(self) == obj
+        return False
+
+    def __ne__(self, obj: object) -> bool:
+        return not self.__eq__(obj)
 
     def __hash__(self) -> int:
         return hash(self.raw_name)
+
+    def __repr__(self) -> str:
+        return 'ObjName(%s)' % str(self)
 
 
 NameLike = Union[bytes, str, ObjectName]
@@ -73,7 +85,7 @@ class ObjectABC(QueryABC):
         return not self.__eq__(val)
 
     def __repr__(self):
-        return 'Obj(%s)' % self.name.decode()
+        return 'Obj(%s)' % self.name
 
 
 class Object(ObjectABC):

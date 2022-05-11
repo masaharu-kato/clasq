@@ -13,11 +13,11 @@ if TYPE_CHECKING:
     from .query_data import QueryData, QueryLike
 
 
-class FuncABC(ABC):
+class FuncABC(Object):
     """ Function ABC """
 
     def __init__(self, name: NameLike):
-        self._name = ObjectName(name)
+        super().__init__(name)
 
     def call(self, *args: 'ExprLike') -> 'ExprABC':
         """ Returns an expression representing a call to this function
@@ -25,12 +25,10 @@ class FuncABC(ABC):
         Returns:
             FuncExpr: Function call expression
         """
-        nn_args = [arg for arg in args if not isinstance(arg, NoneExprType)]
-        if not nn_args:
-            return NoneExpr
-        return self._call_nn(*nn_args)
+        self.check_args(args)
+        return self._func_call(*args)
 
-    def _call_nn(self, *nn_args: 'ExprLike') -> 'ExprABC':
+    def _func_call(self, *nn_args: 'ExprLike') -> 'ExprABC':
         return FuncCall(self, *nn_args)
 
     def __call__(self, *args) -> 'ExprABC':
@@ -41,6 +39,12 @@ class FuncABC(ABC):
             FuncExpr: Function call expression
         """
         return self.call(*args)
+
+    @abstractmethod
+    def check_args(self, args: Tuple['ExprLike', ...]) -> None:
+        """ Check the arguments
+            (Raise exception if there are errors)
+        """
 
     @property
     def name(self) -> ObjectName:
@@ -85,7 +89,7 @@ class FuncABC(ABC):
 
 class NoArgsFuncABC(FuncABC):
     """ Func with no arguments """
-    def __init__(self, name: bytes, returntype=None):
+    def __init__(self, name: NameLike, returntype=None):
         super().__init__(name)
         self._returntype = returntype
 
@@ -125,7 +129,6 @@ class Func(NoArgsFuncABC):
 
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
-        self.check_args(args)
         qd.append(self.name.raw_name + b'(', list(args), b')')
 
     def __repr__(self):
@@ -142,7 +145,18 @@ class NoArgsFunc(NoArgsFuncABC):
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments (Override) """
         assert not args
-        qd.append(self._name)
+        qd.append(self.name.raw_name)
+
+    def call(self, *args: 'ExprLike') -> 'ExprABC':
+        """ Returns an expression representing a call to this function
+            (Override from `FuncABC`)
+
+        Returns:
+            FuncExpr: Function call expression
+        """
+        if args:
+            raise errors.ObjectArgNumError('Function `%s` takes no arguments.' % self.name)
+        return self._func_call()
 
 
 class OpABC(Func):
@@ -173,13 +187,16 @@ class UnaryOp(OpABC):
 class BinaryOp(OpABC):
     """ Binary Operator """
 
-    def _call_nn(self, *nn_args: 'ExprLike') -> 'ExprABC':
+    def call(self, *args: 'ExprLike') -> 'ExprABC':
+        nn_args = [arg for arg in args if not isinstance(arg, NoneExprType)]
+        if not nn_args:
+            return NoneExpr
         if len(nn_args) == 1:
             arg = nn_args[0]
             if isinstance(arg, ExprABC):
                 return arg
             return Expr(arg)
-        return super()._call_nn(*nn_args)
+        return super()._func_call(*nn_args)
 
     def append_query_data_with_args(self, qd: 'QueryData', args: Tuple['ExprLike', ...]) -> None:
         """ Get a statement data of this function with a given list of arguments
@@ -526,6 +543,12 @@ class QueryExprABC(ExprABC, QueryABC):
     """ Query and Expr ABC """
 
 
+class ExprObject(QueryExprABC, Object):
+    """ Object with expressions """
+    def __init__(self, name: NameLike) -> None:
+        super().__init__(name)
+
+
 class Expr(QueryExprABC):
     """ Expression objerct with any value """
     def __init__(self, val):
@@ -633,7 +656,7 @@ ValueOrArg = Union[ValueType, Arg]
 
 
 T = TypeVar('T', bound=ExprABC)
-class AliasedExpr(QueryExprABC, Object, Generic[T]):
+class AliasedExpr(ExprObject, Generic[T]):
     def __init__(self, expr: T, name: NameLike) -> None:
         super().__init__(name)
         self._expr = expr
