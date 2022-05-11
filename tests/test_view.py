@@ -3,6 +3,7 @@
 """
 import pytest
 import libsql
+from libsql.schema.column import TableColumn, ViewColumn
 from libsql.syntax.exprs import Arg
 from libsql.syntax.errors import QueryArgumentError
 from libsql.utils.tabledata import TableData
@@ -12,6 +13,15 @@ def test_view_1():
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
 
     categories = db['categories']
+    assert [str(c.name) for c in categories.columns] == ['id', 'name']
+
+    cate_name_col = categories['name']
+    assert isinstance(cate_name_col, ViewColumn) 
+    assert str(cate_name_col.name) == 'name'
+    assert isinstance(cate_name_col.expr, TableColumn) 
+    assert cate_name_col.expr.table == categories 
+    assert str(cate_name_col.expr.name) == 'name'
+
     assert categories.result == TableData(
         ['id', 'name'], [
             (1, 'Desktop Computer'),
@@ -70,11 +80,11 @@ def test_view_1():
     joined_view = products\
     .inner_join(db['categories'], products['category_id'] == db['categories']['id'])\
     .select_column(
-        db['products']['id'],
-        db['products']['category_id'],
-        db['categories']['name'].as_('category_name'),
-        db['products']['name'],
-        db['products']['price'],
+        id = db['products']['id'],
+        category_id = db['products']['category_id'],
+        category_name = db['categories']['name'],
+        name = db['products']['name'],
+        price = db['products']['price'],
     )\
     .where(db['categories']['id'].in_(3, 4))\
     .order_by(-db['products']['price'])\
