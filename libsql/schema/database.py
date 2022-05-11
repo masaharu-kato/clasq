@@ -8,7 +8,8 @@ from ..syntax.query_data import QueryLike, QueryArgVals
 from ..syntax.values import ValueType
 from ..syntax import errors
 from ..utils.tabledata import TableData
-from .table import Table
+from .column import TableColumnArgs
+from .table import Table, TableArgs
 
 if TYPE_CHECKING:
     from ..connection import ConnectionABC
@@ -18,32 +19,30 @@ class Database(Object):
     """ Database Expr """
 
     def __init__(self,
-        name: Name,
-        *tables: Table,
+        name: NameLike,
+        *table_args: TableArgs,
         cnx: Optional['ConnectionABC'] = None,
-        charset: Optional[Name] = None,
-        collate: Optional[Name] = None,
+        charset: Optional[NameLike] = None,
+        collate: Optional[NameLike] = None,
         fetch_from_db: Optional[bool] = None,
-        dynamic: bool = False,
         **options
     ):
         super().__init__(name)
-        self._table_dict: Dict[bytes, Table] = {}
+        self._table_dict: Dict[ObjectName, Table] = {}
         self._cnx = cnx
-        self._charset = charset
-        self._collate = collate
+        self._charset = ObjectName(charset) if charset is not None else None
+        self._collate = ObjectName(collate) if collate is not None else None
         self._exists = bool(cnx)
-        self._dynamic = dynamic
         self._options = options
 
 
-        if fetch_from_db is True and tables:
+        if fetch_from_db is True and table_args:
             raise errors.ObjectArgsError('Tables are ignored when fetch_from_db is True')
-        if fetch_from_db is not False and not tables: 
+        if fetch_from_db is not False and not table_args: 
             self.fetch_from_db()
         else:
-            for table in tables:
-                self.append_table_object(table)
+            for table_arg in table_args:
+                self.append_table(table_arg)
 
     @property
     def cnx(self):
@@ -134,7 +133,7 @@ class Database(Object):
         """ Synonym of `table_or_none` method """
         return self.table_or_none(val)
 
-    def append_table_object(self, table: Table) -> None:
+    def append_table(self, table_arg: TableArgs) -> None:
         """ Append (existing) Table object to this Database
 
         Args:
@@ -143,29 +142,12 @@ class Database(Object):
         Raises:
             errors.NotaSelfObjectError: The Table object in the different database was specified
         """
-        if table.database_or_none is not None:
-            if not table.database == self:
-                raise errors.NotaSelfObjectError('Table of the different database.')
-        else:
-            table.set_database(self)
 
-        if table.name in self._table_dict:
-            raise errors.ObjectNameAlreadyExistsError('Table name object already exists.', table)
+        if table_arg.name in self._table_dict:
+            raise errors.ObjectNameAlreadyExistsError('Table name object already exists.', table_arg)
 
+        table = Table(self, table_arg)
         self._table_dict[table.name] = table
-
-    def append_table(self, name: Name, *, fetch=False, **options) -> 'Table':
-        """ Append new table to this Database
-
-        Args:
-            name (bytes | str): Table name
-            options: Table options
-
-        Returns:
-            Table: Appended new Table object
-        """
-        self.append_table_object(Table(name, database=self, fetch_from_db=fetch, **options))
-        return self.table(name)
 
     def remove_table(self, table: Table) -> None:
         table_name = self.table(table).name
@@ -174,7 +156,11 @@ class Database(Object):
     def fetch_from_db(self) -> None:
         """ Fetch tables of this database from the connection """
         for tabledata in self.query(b'SHOW', b'TABLES'):
-            self.append_table(tabledata[0], fetch=True)
+            table_name = str(tabledata[0]).encode()
+            self.append_table(TableArgs(table_name, *(
+                TableColumnArgs(coldata['Field'])
+                for coldata in self.query(b'SHOW', b'COLUMNS', b'FROM', table_name)
+            )))
 
     def q_create(self, *, if_not_exists=False) -> tuple:
         return (

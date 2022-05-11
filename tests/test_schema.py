@@ -3,8 +3,8 @@
 """
 import pytest
 from libsql.schema.database import Database
-from libsql.schema.table import Table
-from libsql.schema.column import Column
+from libsql.schema.table import TableArgs
+from libsql.schema.column import TableColumnArgs
 from libsql.syntax.sqltypes import Int, VarChar
 from libsql.syntax.exprs import Object
 from libsql.syntax.query_data import QueryData
@@ -34,15 +34,15 @@ def test_asobj(objname, result):
 def test_table_columns():
 
     db = Database('mydb',
-        Table('mytable',
-            Column('id', Int),
-            Column('mycol2', Int),
-            Column('mycol3', VarChar[64]),
+        TableArgs('mytable', 
+            TableColumnArgs('id', Int),
+            TableColumnArgs('mycol2', Int),
+            TableColumnArgs('mycol3', VarChar[64]),
         ),
-        Table('mytable2',
-            Column('id', Int),
-            Column('mycol4', Int),
-            Column('mycol5', VarChar[64]),
+        TableArgs('mytable2',
+            TableColumnArgs('id', Int),
+            TableColumnArgs('mycol4', Int),
+            TableColumnArgs('mycol5', VarChar[64]),
         )
     )
 

@@ -18,41 +18,72 @@ if TYPE_CHECKING:
 class Column(NamedExpr):
     """ Column expression """
 
+
+class TableColumnRef:
     def __init__(self,
-        name: Name,
+        database: 'Database',
+        table_like: Union[NameLike, 'Table'],
+        column_name: NameLike
+    ) -> None:
+        self.database = database
+        self.table_like = table_like
+        self.column_name = column_name
+
+    def resolve(self) -> 'TableColumn':
+        return self.database.table(self.table_like).table_column(self.column_name)
+
+
+class TableColumnArgs:
+    def __init__(self,
+        name: NameLike,
         sql_type: Optional[sqltypes.SQLType] = None,
         *,
-        view : Optional['ViewABC'] = None,
-        table: Optional['Table'] = None,
         not_null: bool = False,
         default = None, 
-        # comment: Optional[str] = None,
         unique: bool = False,
         primary: bool = False,
         auto_increment: bool = False,
-        ref_column: Optional['Column'] = None,
+        ref_column: Optional[Union[TableColumnRef, 'TableColumn']] = None,
         ref_on_delete: Optional[ReferenceOption] = None,
         ref_on_update: Optional[ReferenceOption] = None,
-        ref_index_name: Optional[Name] = None
+        ref_index_name: Optional[NameLike] = None
     ):
-        super().__init__(name)
-        self._sql_type = sqltypes.make_sql_type(sql_type) if sql_type is not None else None
-        self._not_null = not_null or primary
-        self._view = view
+        self.name = name
+        self.sql_type = sql_type
+        self.not_null = not_null
+        self.default = default
+        self.unique = unique
+        self.primary = primary
+        self.auto_increment = auto_increment
+        self.ref_column = ref_column
+        self.ref_on_delete = ref_on_delete
+        self.ref_on_update = ref_on_update
+        self.ref_index_name = ref_index_name
+
+
+class TableColumn(ColumnABC, Object):
+    """ Table Column expression """
+
+    def __init__(self, table: 'Table', args: TableColumnArgs):
+        ColumnABC.__init__(self)
+        Object.__init__(self, args.name)
+
+        self._sql_type = sqltypes.make_sql_type(args.sql_type) if args.sql_type is not None else None
+        self._not_null = args.not_null or args.primary
         self._table = table
-        self._default_value = default
-        # self._comment = comment
-        self._is_unique = unique
-        self._is_primary = primary
-        self._is_auto_increment = auto_increment
+        self._default_value = args.default
+        self._is_unique = args.unique
+        self._is_primary = args.primary
+        self._is_auto_increment = args.auto_increment
         self._reference: Optional['ForeignKeyReference'] =  None
 
-        if ref_column is not None:
-            self.set_reference(
-                ref_column,
-                on_update=ref_on_update,
-                on_delete=ref_on_delete,
-                index_name=ref_index_name,
+        if args.ref_column is not None:
+            self._reference = ForeignKeyReference(
+                self,
+                args.ref_column.resolve() if isinstance(args.ref_column, TableColumnRef) else args.ref_column,
+                on_update=args.ref_on_update,
+                on_delete=args.ref_on_delete,
+                name=args.ref_index_name,
             )
 
     @property
@@ -119,58 +150,6 @@ class Column(NamedExpr):
     def is_auto_increment(self):
         return self._is_auto_increment
 
-    def set_table(self, table: 'Table') -> None:
-        """ Set a table object """
-        if self._table is not None:
-            raise errors.ObjectAlreadySetError('Table already set.')
-        self._table = table
-
-    def set_reference(self, 
-        column: 'Column',
-        *,
-        on_delete: Optional[ReferenceOption] = None,
-        on_update: Optional[ReferenceOption] = None,
-        index_name: Optional[Name] = None
-    ) -> None:
-        """ Set foreign key reference from this column """
-        if self._reference is not None:
-            raise errors.ObjectAlreadySetError('Foreign key reference is already set.')
-        self._reference = ForeignKeyReference(
-            self,
-            column,
-            on_update=on_update,
-            on_delete=on_delete,
-            name=index_name,
-        )
-
-    def q_order(self) -> tuple:
-        return (self, self.order_type)
-
-    def append_to_query_data(self, qd: QueryData) -> None:
-        if self.table_or_none is not None:
-            qd.append(self.table, b'.')
-        super().append_to_query_data(qd)
-
-    def ordered(self, order: OrderLike):
-        return OrderedColumn(self, OrderType.make(order))
-
-    def __pos__(self):
-        """ Get a ASC ordered expression """
-        return OrderedColumn(self, OrderType.ASC)
-
-    def __neg__(self):
-        """ Get a DESC ordered expression """
-        return OrderedColumn(self, OrderType.DESC)
-
-    def __repr__(self):
-        if self._table is not None:
-            return 'Col(%s.%s)' % (str(self.table), str(self))
-        return 'Col(%s)' % str(self)
-
-    @property
-    def query_for_select_column(self) -> QueryData:
-        return QueryData(self)
-    
     @property
     def query_for_create_table(self) -> QueryData:
         return QueryData(
