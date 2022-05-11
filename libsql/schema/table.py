@@ -1,18 +1,18 @@
 """
     Table classes
 """
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ..syntax.keywords import ReferenceOption
-from ..syntax.object_abc import FrozenObjectSet, OrderedFrozenObjectSet, to_name
-from ..syntax.exprs import OP, Arg, ExprABC, NamedExprABC, ObjectABC, Object, Name
+from ..syntax.object_abc import ObjectName
+from ..syntax.exprs import OP, Arg, ExprABC, ObjectABC, Object, NameLike
 from ..syntax.values import ValueType
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData
-from ..syntax import sqltypes
 from ..syntax import errors
 from ..utils.tabledata import TableData
 from .column import TableColumn, TableColumnArgs
+from .view import TableViewABC, ViewABC, View
 
 if TYPE_CHECKING:
     from .database import Database
@@ -120,7 +120,7 @@ class Table(TableViewABC):
 
     def insert_data(self, data: TableData[ValueType]) -> int:
         """ Run INSERT with TableData """
-        name_and_col = [(name, self.table_column(name)) for name in data.columns]
+        name_and_col = [(name, self.column(name)) for name in data.columns]
         self.cnx.execute_many(
             b'INSERT', b'INTO', self, b'(', [col for _, col in name_and_col], b')',
             b'VALUES', b'(', [Arg(name) for name, _ in name_and_col],  b')',
@@ -132,7 +132,7 @@ class Table(TableViewABC):
         data: Optional[Dict[Union[NameLike, TableColumn], ValueType]] = None,
         *,
         where: Optional[ExprABC],
-        orders: Optional[List[Column]] = None,
+        orders: Optional[List[TableColumn]] = None,
         limit: Optional[int] = None,
         **values: ValueType,
     ) -> None:
@@ -142,15 +142,14 @@ class Table(TableViewABC):
         self.cnx.execute(
             b'UPDATE', self, b'SET', [(c, b'=', v) for c, v in column_values.items()],
             (b'WHERE', where) if where else None,
-            (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
+            (b'ORDER', b'BY', [c.ordered_query for c in orders]) if orders else None,
             (b'LIMIT', limit) if limit else None,
         )
 
-
-    def update_data(self, data: TableData[ValueType], keys: List[Union[Name, Column]]) -> None:
+    def update_data(self, data: TableData[ValueType], keys: List[Union[NameLike, TableColumn]]) -> None:
         """ Run UPDATE query with TableData """
-        data_name_and_col = [(c, self.table_column(c)) for c in data.columns if c not in keys]
-        key_name_and_col  = [(c, self.table_column(c)) for c in data.columns if c in keys]
+        data_name_and_col = [(c, self.column(c)) for c in data.columns if c not in keys]
+        key_name_and_col  = [(c, self.column(c)) for c in data.columns if c in keys]
         if not (len(data_name_and_col) + len(key_name_and_col) == len(data.columns)):
             raise ValueError('Invalid key values.')
         
@@ -162,20 +161,20 @@ class Table(TableViewABC):
 
     def delete(self, *,
         where: Optional[ExprABC],
-        orders: Optional[List[Column]] = None,
+        orders: Optional[List[TableColumn]] = None,
         limit: Optional[int] = None,
     ) -> None:
         """ Run DELETE query """
         self.cnx.execute(
             b'DELETE', b'FROM', self,
             (b'WHERE', where) if where else None,
-            (b'ORDER', b'BY', [c.q_order() for c in orders]) if orders else None,
+            (b'ORDER', b'BY', [c.ordered_query for c in orders]) if orders else None,
             (b'LIMIT', limit) if limit else None,
         )
 
     def delete_data(self, data: TableData[ValueType]) -> int:
         """ Run DELETE with TableData """
-        name_and_col = [(name, self.table_column(name)) for name in data.columns]
+        name_and_col = [(name, self.column(name)) for name in data.columns]
         self.cnx.execute_many(
             b'DELETE', b'FROM', self,
             b'WHERE', OP.AND(col == Arg(name) for name, col in name_and_col),
@@ -189,7 +188,6 @@ class Table(TableViewABC):
 
     def drop(self, *, temporary=False, if_exists=False) -> None:
         """ Run DROP TABLE query """
-        if_exists = if_exists or (not self._exists_on_db)
         self.db.execute(
             b'DROP', b'TEMPORARY' if temporary else None, b'TABLE',
             (b'IF', b'EXISTS') if if_exists else None, self)
@@ -203,30 +201,30 @@ class Table(TableViewABC):
         self.db.execute(
             b'CREATE', b'TEMPORARY' if temporary else None, b'TABLE',
             b'IF NOT EXISTS' if if_not_exists else None,
-            self, b'(', [c.query_for_create_table for c in self.columns], b')'
+            self, b'(', [c.query_for_create_table for c in self._table_columns], b')'
         )
-        self.fetch_from_db()
+        # TODO: Fetch
         
     def _new_view(self, *args, **kwargs) -> 'ViewABC':
         return View(*args, **kwargs)
         
-    def _proc_colval_args(self, value_dict: Optional[Dict[Union[Name, Column], ValueType]], **values: ValueType) -> Dict[Column, ValueType]:
+    def _proc_colval_args(self, value_dict: Optional[Dict[Union[NameLike, TableColumn], ValueType]], **values: ValueType) -> Dict[TableColumn, ValueType]:
         return {self.table_column(c): v for c, v in [*(value_dict.items() if value_dict else []), *values.items()]}
 
     def __repr__(self):
-        return 'Table(%s)' % str(self)
+        return 'Table(%s)' % self.name.decode()
 
 
 class ForeignKeyReference(Object):
     """ Foreign Key Reference """
 
     def __init__(self,
-        orig_column: Union[Column, Tuple[Column, ...]],
-        ref_column : Union[Column, Tuple[Column, ...]],
+        orig_column: Union[TableColumn, Tuple[TableColumn, ...]],
+        ref_column : Union[TableColumn, Tuple[TableColumn, ...]],
         *,
         on_delete: Optional[ReferenceOption] = None,
         on_update: Optional[ReferenceOption] = None,
-        name: Optional[Name] = None
+        name: Optional[NameLike] = None
     ):
         super().__init__(name or b'')
         
@@ -265,7 +263,7 @@ class ForeignKeyReference(Object):
 
 def iter_tables(*exprs: Optional[ObjectABC]):
     for e in iter_objects(*exprs):
-        if isinstance(e, Column):
+        if isinstance(e, TableColumn):
             if e.table_or_none is not None:
                 yield e.table
         elif isinstance(e, Table):
