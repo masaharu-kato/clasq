@@ -5,11 +5,12 @@
 from math import ceil, floor, trunc
 import pytest
 
-from libsql.syntax.exprs import NamedExpr as Obj
+from libsql.syntax.exprs import ExprObject as Obj
 from libsql.syntax.query_data import QueryData
+from libsql.syntax.values import NULL
 
 @pytest.mark.parametrize('term, result', [
-    [Obj(b'expr') == None , (b'(`expr` = NULL)' , [])],
+    [Obj(b'expr') == NULL , (b'(`expr` = NULL)' , [])],
     [Obj(b'expr') == True , (b'(`expr` = ?)' , [True])],
     [Obj(b'expr') == False, (b'(`expr` = ?)' , [False])],
     [Obj(b'expr') == 1    , (b'(`expr` = ?)' , [1])],
@@ -45,7 +46,7 @@ from libsql.syntax.query_data import QueryData
 def test_expr_op(term, result):
     qd = QueryData(term)
     true_stmt, true_prms = result
-    assert qd.stmt == true_stmt and qd.prms == true_prms
+    assert qd.stmt == true_stmt and qd.prms == tuple(true_prms)
 
 
 @pytest.mark.parametrize('args, result', [
@@ -75,5 +76,5 @@ def test_expr_op(term, result):
 def test_query_data(args, result):
     qd = QueryData(*args)
     true_stmt, true_prms = result
-    assert qd.stmt == true_stmt and qd.prms == true_prms
+    assert qd.stmt == true_stmt and qd.prms == tuple(true_prms)
 
