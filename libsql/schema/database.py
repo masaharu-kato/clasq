@@ -71,10 +71,6 @@ class Database(Object):
     def exists(self):
         return self._exists
 
-    @property
-    def is_dynamic(self):
-        return self._dynamic
-
     def __repr__(self):
         return 'DB(%s)' % str(self)
 

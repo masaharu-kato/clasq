@@ -14,14 +14,13 @@ from . import errors
 class ConnectionABC:
     """ Database connection ABC """
 
-    def __init__(self, database: str, dynamic=False, init_db=True, **other_cnx_options) -> None:
+    def __init__(self, database: str, init_db=True, **other_cnx_options) -> None:
         self._cnx_options = {'database': database, **other_cnx_options}
         self._dbname = database.encode()
         # self._last_qd: Optional[QueryData] = None
-        self._db_dynamic = dynamic
         self._db: Optional[Database] = None
         if init_db:
-            self._db = Database(self._dbname, cnx=self, dynamic=self._db_dynamic)
+            self._db = Database(self._dbname, cnx=self)
 
     @property
     def db(self) -> Database:

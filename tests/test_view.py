@@ -8,9 +8,8 @@ from libsql.syntax.errors import QueryArgumentError
 from libsql.utils.tabledata import TableData
 from libsql.syntax.keywords import OrderType
 
-@pytest.mark.parametrize('dynamic', [True, False])
-def test_view_1(dynamic):
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=dynamic)
+def test_view_1():
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
 
     categories = db['categories']
     assert categories.result == TableData(

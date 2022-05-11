@@ -15,10 +15,9 @@ from libsql.syntax.query_data import QueryData
 #     db.execute_plain(f.read())
 # del db
 
-@pytest.mark.parametrize('dynamic', [True, False])
-def test_basic_select(dynamic):
+def test_basic_select():
     # Normal selection
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=dynamic)
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
 
     SELECT_PRODUCTS_SQL = b'SELECT `products`.`id`, `products`.`category_id`, `products`.`name`, `products`.`price` FROM `products`'
 
@@ -45,10 +44,9 @@ def test_basic_select(dynamic):
     # displays = db.select(products, where=products['category_id'] == 3
     
 
-@pytest.mark.parametrize('dynamic', [True, False])
-def test_select(dynamic):
+def test_select():
     
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb', dynamic=dynamic)
+    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
     cates, prods, sales = db['categories'], db['products'], db['user_sale_products']
 
     sales_count = sales['count'].sum().as_('sales_count')
