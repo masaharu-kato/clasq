@@ -106,13 +106,13 @@ class ObjectSet(KeySetABC[T], Generic[T]):
         return object_key(obj)
 
 
-class OrderedFrozenObjectSet(OrderedFrozenKeySetABC[T], Generic[T]):
+class OrderedFrozenObjectSet(FrozenObjectSet[T], OrderedFrozenKeySetABC[T], Generic[T]):
 
     def _key(self, obj: T):
         return object_key(obj)
 
 
-class OrderedObjectSet(OrderedKeySetABC[T], Generic[T]):
+class OrderedObjectSet(ObjectSet[T], OrderedKeySetABC[T], Generic[T]):
 
     def _key(self, obj: T):
         return object_key(obj)

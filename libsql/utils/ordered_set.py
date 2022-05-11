@@ -8,7 +8,8 @@ from .set_abc import FrozenSetABC, SetABC, SetLike
 
 T = TypeVar('T')
 
-class _FrozenOrderedSet(FrozenSetABC[T], Generic[T]):
+class FrozenOrderedSet(FrozenSetABC[T], Generic[T]):
+    """ Frozen Ordered Set """
 
     def __init__(self, _iterable: Iterable[T]) -> None:
         """ Init """
@@ -64,11 +65,8 @@ class _FrozenOrderedSet(FrozenSetABC[T], Generic[T]):
         return type(self)((*(v for v in oset if v not in self._dict), *(v for v in self._dict if v not in oset)))
 
 
-class FrozenOrderedSet(_FrozenOrderedSet[T], Generic[T]):
-    """ Frozen Ordered Set """
-
-
-class OrderedSet(SetABC[T], _FrozenOrderedSet[T], Generic[T]):
+class OrderedSet(SetABC[T], FrozenOrderedSet[T], Generic[T]):
+    """ Ordered Set """
     
     def __iand__(self, oset: SetLike[T]):
         for v in list(self._dict):
