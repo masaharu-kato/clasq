@@ -1,11 +1,11 @@
 """
     Column classes
 """
-from abc import abstractmethod, abstractproperty
+from abc import abstractproperty
 from typing import TYPE_CHECKING, Generic, Iterator, Optional, TypeVar, Union
 
-from ..syntax.object_abc import NameLike, Object, ObjectABC, ObjectName
-from ..syntax.exprs import AliasedExpr, ExprABC, QueryExprABC
+from ..syntax.object_abc import NameLike, Object, ObjectABC
+from ..syntax.exprs import AliasedExpr, ExprABC, ExprObjectABC
 from ..syntax.keywords import OrderType, OrderLike, ReferenceOption
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData, QueryLike
@@ -13,7 +13,7 @@ from ..syntax.errors import ObjectNameAlreadyExistsError, ObjectNotSetError
 from ..syntax.sqltypes import SQLType, make_sql_type, get_type_sql
 
 if TYPE_CHECKING:
-    from .view import BaseViewABC, ViewABC
+    from .view import BaseViewABC
     from .table import Table, ForeignKeyReference
     from .database import Database
 
@@ -84,6 +84,10 @@ class ViewColumn(AliasedExpr[ET], ColumnABC, Generic[ET]):
     def renamed(self, name: NameLike) -> 'ViewColumn':
         return ViewColumn(self._base_view, name, self.expr)
 
+    def __repr__(self):
+        return ('VC[%s.%s](%s)'
+            % (repr(self.base_view), self.name, repr(self.expr)))
+        
 
 class TableColumnRef:
     def __init__(self,
@@ -99,7 +103,7 @@ class TableColumnRef:
         return self.database.to_table(self.table_like).table_column(self.column_name)
 
 
-class TableColumnArgs:
+class ColumnArgs:
     def __init__(self,
         name: NameLike,
         sql_type: Optional[SQLType] = None,
@@ -130,9 +134,12 @@ class TableColumnArgs:
 class TableColumn(ColumnABC, Object):
     """ Table Column expression """
 
-    def __init__(self, table: 'Table', args: TableColumnArgs):
+    def __init__(self, table: 'Table', args: ColumnArgs):
         ColumnABC.__init__(self)
         Object.__init__(self, args.name)
+
+        if self.name in table._table_columns_by_name:
+            raise ObjectNameAlreadyExistsError('Column name already exists.', self.name)
 
         self._sql_type = make_sql_type(args.sql_type) if args.sql_type is not None else None
         self._not_null = args.not_null or args.primary
