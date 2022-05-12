@@ -17,6 +17,9 @@ class ObjectArgNumError(ObjectArgsError):
 class ObjectArgTypeError(ObjectArgsError, TypeError):
     """ Object arguments type Error """
 
+class ObjectArgValueError(ObjectArgsError, ValueError):
+    """ Object arguments value Error """
+
 class ObjectNotSpecifiedError(ObjectArgsError):
     """ Object arguments not specified Error """
 
