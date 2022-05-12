@@ -9,8 +9,8 @@ from ..syntax.exprs import AliasedExpr, ExprABC, QueryExprABC
 from ..syntax.keywords import OrderType, OrderLike, ReferenceOption
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData, QueryLike
-from ..syntax import sqltypes
-from ..syntax import errors
+from ..syntax.errors import ObjectNameAlreadyExistsError, ObjectNotSetError
+from ..syntax.sqltypes import SQLType, make_sql_type, get_type_sql
 
 if TYPE_CHECKING:
     from .view import BaseViewABC, ViewABC
@@ -91,7 +91,7 @@ class TableColumnRef:
 class TableColumnArgs:
     def __init__(self,
         name: NameLike,
-        sql_type: Optional[sqltypes.SQLType] = None,
+        sql_type: Optional[SQLType] = None,
         *,
         not_null: bool = False,
         default = None, 
@@ -123,7 +123,7 @@ class TableColumn(ColumnABC, Object):
         ColumnABC.__init__(self)
         Object.__init__(self, args.name)
 
-        self._sql_type = sqltypes.make_sql_type(args.sql_type) if args.sql_type is not None else None
+        self._sql_type = make_sql_type(args.sql_type) if args.sql_type is not None else None
         self._not_null = args.not_null or args.primary
         self._table = table
         self._default_value = args.default
@@ -142,7 +142,7 @@ class TableColumn(ColumnABC, Object):
             )
 
     @property
-    def sql_type(self) -> Optional[sqltypes.SQLType]:
+    def sql_type(self) -> Optional[SQLType]:
         return self._sql_type
 
     @property
@@ -168,7 +168,7 @@ class TableColumn(ColumnABC, Object):
     @property
     def table(self) -> 'Table':
         if self._table is None:
-            raise errors.ObjectNotSetError('Table is not set.')
+            raise ObjectNotSetError('Table is not set.')
         return self._table
 
     @property
@@ -195,7 +195,7 @@ class TableColumn(ColumnABC, Object):
     def query_for_create_table(self) -> QueryData:
         return QueryData(
             self.name, b' ',
-            sqltypes.get_type_sql(self.sql_type).encode(),
+            get_type_sql(self.sql_type).encode(),
             (b'NOT', b'NULL') if self.is_not_null_type else None,
             (b'DEFAULT', self.default_value) if self.default_value else None,
             b'AUTO_INCREMENT' if self.is_auto_increment else None,

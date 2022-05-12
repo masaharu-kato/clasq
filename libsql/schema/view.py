@@ -10,8 +10,7 @@ from ..syntax.query_data import QueryData
 from ..syntax.exprs import AliasedExpr, ExprABC, ExprLike, NoneExpr, OP
 from ..syntax.keywords import JoinType, JoinLike, OrderLike
 from ..syntax.values import ValueType
-from ..syntax import errors
-from ..utils.tabledata import TableData
+from ..syntax.errors import NotaSelfObjectError, ObjectAlreadySetError, ObjectArgTypeError, ObjectArgValueError, ObjectNameAlreadyExistsError, ObjectNotFoundError, ObjectNotSetError, ObjectNotSpecifiedError
 from .column import ColumnABC, ViewColumn
 
 if TYPE_CHECKING:
@@ -48,7 +47,7 @@ class ViewABC(ABC):
                 ObjectNotSetError: The database is not set.
         """
         if self.database_or_none is None:
-            raise errors.ObjectNotSetError('Database is not set.')
+            raise ObjectNotSetError('Database is not set.')
         return self.database_or_none
 
     @property
@@ -106,7 +105,7 @@ class ViewABC(ABC):
     @property
     def name(self) -> ObjectName:
         if self.name_or_none is None:
-            raise errors.ObjectNotSetError('This view does not have a name.')
+            raise ObjectNotSetError('This view does not have a name.')
         return self.name_or_none
         
     @property
@@ -114,9 +113,7 @@ class ViewABC(ABC):
         """ Get a view name (if not exists, get from base view) """
         if self.name_or_none is None:
             if self.base_view is self:
-                raise errors.ObjectNotSpecifiedError('Cannot find base name.', self)
-            return self.base_view.base_name
-        return self.name
+                raise ObjectNotSpecifiedError('Cannot find base named view.', self)
 
     @abstractproperty
     def columns_by_name(self) -> Dict[ObjectName, ViewColumn]:
@@ -156,7 +153,7 @@ class ViewABC(ABC):
 
         name = ObjectName(val)
         if name not in self.columns_by_name:
-            raise errors.ObjectNotFoundError('Undefined column name.', name)
+            raise ObjectNotFoundError('Column not found.', name)
         return self.columns_by_name[name]
 
     def col(self, val: Union[NameLike, ColumnABC]):
@@ -467,9 +464,9 @@ class ViewABC(ABC):
                 return (*(self.column(v) for v in val),)
             if all(isinstance(v, ExprABC) for v in val):
                 return self.where(*val)
-            raise errors.ObjectArgTypeError('Invalid tuple value type.', val)
+            raise ObjectArgTypeError('Invalid tuple value type.', val)
 
-        raise errors.ObjectArgTypeError('Invalid type.', val)
+        raise ObjectArgTypeError('Invalid type.', val)
 
     def with_args(self, *argvals, **kwargvals) -> 'ViewABC':
         return ViewWithArgs(self, *argvals, **kwargvals)
@@ -746,7 +743,7 @@ class JoinedView(UnnamedTableViewABC):
         new_columns_by_name = {**dest_view.columns_by_name}
         for name, view_column in join_view.columns_by_name.items():
             if (new_name := b'%s.%s' % (join_view.base_name, name)) in new_columns_by_name:
-                raise errors.ObjectAlreadySetError('New column alias already exists.', new_name)
+                raise ObjectAlreadySetError('New column alias already exists.', new_name)
             renamed_view_column = view_column.renamed(new_name)
             new_columns_by_name[renamed_view_column.name] = renamed_view_column
 
@@ -778,13 +775,13 @@ class JoinedView(UnnamedTableViewABC):
     @property
     def view_to_join(self) -> 'ViewABC':
         if self._view_to_join is None:
-            raise errors.ObjectNotSetError('View to join is not set.')
+            raise ObjectNotSetError('View to join is not set.')
         return self._view_to_join
 
     @property
     def expr_for_join(self) -> 'ExprABC':
         if self._expr_for_join is None:
-            raise errors.ObjectNotSetError('Expr for join is not set.')
+            raise ObjectNotSetError('Expr for join is not set.')
         return self._expr_for_join
 
     def refresh_select_from_query(self) -> None:
@@ -839,7 +836,7 @@ class SubqueryView(TableViewABC):
     """ Subquery View """
     def __init__(self, target_view: NamedViewABC) -> None:
         if not isinstance(target_view, NamedViewABC):
-            raise errors.ObjectArgTypeError('View objects for subquery must have an alias name.', target_view)
+            raise ObjectArgTypeError('View objects for subquery must have an alias name.', target_view)
         super().__init__(target_view.columns_by_name)
         self._target_view = target_view
 
@@ -958,8 +955,7 @@ class View(CustomViewABC, ViewWithResult):
                 if not len(column_like) == 2:
                     raise errors.ObjectArgTypeError('Invalid type of column like.', column_like)
                 column_ref, alias = column_like
-                if (column := base_view.column_or_none(column_ref)) is None:
-                    raise errors.ObjectNotFoundError('Column not found.', column_ref)
+                    raise ObjectNotFoundError('Column not found.', column_ref)
                 view_column = column.renamed(alias)
             else:
                 if (column := base_view.column_or_none(column_like)) is not None:
@@ -970,11 +966,11 @@ class View(CustomViewABC, ViewWithResult):
                     view_column = ViewColumn(base_view, column_like.name, column_like)
             
             if view_column.name in self._vcols_by_name:
-                raise errors.ObjectNameAlreadyExistsError('Name already exists.', view_column)
+                raise ObjectNameAlreadyExistsError('Name already exists.', view_column)
             self._vcols_by_name[view_column.name] = view_column
             
         if not self._vcols_by_name:
-            raise errors.ObjectArgsError('Columns cannot be empty.')
+            raise ObjectArgValueError('Columns cannot be empty.')
 
     @property
     def columns_by_name(self):

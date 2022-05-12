@@ -7,7 +7,7 @@ from ..syntax.object_abc import NameLike, ObjectName
 from ..syntax.exprs import Object
 from ..syntax.query_data import QueryLike, QueryArgVals
 from ..syntax.values import ValueType
-from ..syntax import errors
+from ..syntax.errors import NotaSelfObjectError, ObjectArgsError, ObjectNameAlreadyExistsError, ObjectNotFoundError, ObjectNotSetError
 from ..utils.tabledata import TableData
 from .column import TableColumnArgs
 from .table import Table, TableArgs
@@ -38,7 +38,7 @@ class Database(Object):
 
 
         if fetch_from_db is True and table_args:
-            raise errors.ObjectArgsError('Tables are ignored when fetch_from_db is True')
+            raise ObjectArgsError('Tables are ignored when fetch_from_db is True')
         if fetch_from_db is not False and not table_args: 
             self.fetch_from_db()
         else:
@@ -48,7 +48,7 @@ class Database(Object):
     @property
     def cnx(self):
         if self._cnx is None:
-            raise errors.ObjectNotSetError('Connection is not set.')
+            raise ObjectNotSetError('Connection is not set.')
         return self._cnx
 
     @property
@@ -102,7 +102,7 @@ class Database(Object):
             
         name = ObjectName(val)
         if name not in self._table_dict:
-            raise errors.ObjectNotFoundError('Undefined table name `%s` on database `%s`' % (str(name), str(self._name)))
+            raise ObjectNotFoundError('Table not found.', name)
         return self._table_dict[name]
 
     @overload
@@ -120,7 +120,7 @@ class Database(Object):
         """ Get a Table object with the specified name if exists """
         try:
             return self.table(val)
-        except (errors.ObjectNotFoundError, errors.NotaSelfObjectError):
+        except ObjectNotFoundError:
             pass
         return None
 
@@ -139,7 +139,7 @@ class Database(Object):
         """
 
         if table_arg.name in self._table_dict:
-            raise errors.ObjectNameAlreadyExistsError('Table name object already exists.', table_arg)
+            raise ObjectNameAlreadyExistsError('Table name object already exists.', table_arg)
 
         table = Table(self, table_arg)
         self._table_dict[table.name] = table

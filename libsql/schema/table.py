@@ -9,7 +9,7 @@ from ..syntax.exprs import OP, Arg, ExprABC, ObjectABC, Object, NameLike
 from ..syntax.values import ValueType
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData
-from ..syntax import errors
+from ..syntax.errors import ObjectNameAlreadyExistsError, ObjectNotFoundError
 from ..utils.tabledata import TableData
 from .column import TableColumn, TableColumnArgs
 from .view import TableViewABC, ViewABC, View
@@ -66,11 +66,11 @@ class Table(TableViewABC):
     def table_column(self, val: Union[TableColumn, NameLike]) -> TableColumn:
         if isinstance(val, TableColumn):
             if val.table_or_none is not self:
-                raise errors.ObjectNotFoundError('Column of the different table.', val)
+                raise ObjectNotFoundError('Column of the different table.', val)
             return val
         key = ObjectName(val)
         if key not in self._table_columns_by_name:
-            raise errors.ObjectNotFoundError('Column not found.', key)
+            raise ObjectNotFoundError('Column not found.', key)
         return self._table_columns_by_name[key]
 
     def append_to_query_data(self, qd: 'QueryData') -> None:
