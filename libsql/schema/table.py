@@ -11,8 +11,8 @@ from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData
 from ..syntax.errors import ObjectNameAlreadyExistsError, ObjectNotFoundError
 from ..utils.tabledata import TableData
-from .column import TableColumn, TableColumnArgs
-from .view import TableViewABC, ViewABC, View
+from .column import TableColumn, ColumnArgs
+from .view import NamedViewWithColumnsABC, ViewABC, View
 
 if TYPE_CHECKING:
     from .database import Database
@@ -23,7 +23,7 @@ class TableArgs:
 
     def __init__(self,
         name: NameLike,
-        *column_args: TableColumnArgs,
+        *column_args: ColumnArgs,
         primary_key: Optional[Tuple[Union[NameLike, TableColumn], ...]] = None,
         unique: Optional[Tuple[Union[NameLike, TableColumn], ...]] = None,
         refs: Optional[List['ForeignKeyReference']] = None,
@@ -37,14 +37,24 @@ class TableArgs:
 
 
 # class Table(NamedViewABC, ViewWithColumns, Object): # <-- super() is not working correctly on these base classes
-class Table(TableViewABC):
+class Table(NamedViewWithColumnsABC):
     """ Table Expr """
 
     def __init__(self, database: 'Database', args: TableArgs):
         self._name = ObjectName(args.name)
+
+        if self.name in database:
+            raise ObjectNameAlreadyExistsError('Table name already exists.', self.name)
+
         self._database = database
-        self._table_columns = [TableColumn(self, colargs) for colargs in args.column_args]
-        self._table_columns_by_name = {col.name: col for col in self._table_columns}
+        self._table_columns: List[TableColumn] = []
+        self._table_columns_by_name: Dict[ObjectName, TableColumn] = {}
+
+        for colargs in args.column_args:
+            table_column = TableColumn(self, colargs)
+            self._table_columns.append(table_column)
+            self._table_columns_by_name[table_column.name] = table_column
+            
         super().__init__(self._table_columns_by_name)
         
         self._primary_key: Optional[List[TableColumn]] = None
@@ -120,7 +130,7 @@ class Table(TableViewABC):
 
     def insert_data(self, data: TableData[ValueType]) -> int:
         """ Run INSERT with TableData """
-        name_and_col = [(name, self.column(name)) for name in data.columns]
+        name_and_col = [(name, self.to_column(name)) for name in data.columns]
         self.cnx.execute_many(
             b'INSERT', b'INTO', self, b'(', [col for _, col in name_and_col], b')',
             b'VALUES', b'(', [Arg(name) for name, _ in name_and_col],  b')',
@@ -148,8 +158,8 @@ class Table(TableViewABC):
 
     def update_data(self, data: TableData[ValueType], keys: List[Union[NameLike, TableColumn]]) -> None:
         """ Run UPDATE query with TableData """
-        data_name_and_col = [(c, self.column(c)) for c in data.columns if c not in keys]
-        key_name_and_col  = [(c, self.column(c)) for c in data.columns if c in keys]
+        data_name_and_col = [(c, self.to_column(c)) for c in data.columns if c not in keys]
+        key_name_and_col  = [(c, self.to_column(c)) for c in data.columns if c in keys]
         if not (len(data_name_and_col) + len(key_name_and_col) == len(data.columns)):
             raise ValueError('Invalid key values.')
         
@@ -174,7 +184,7 @@ class Table(TableViewABC):
 
     def delete_data(self, data: TableData[ValueType]) -> int:
         """ Run DELETE with TableData """
-        name_and_col = [(name, self.column(name)) for name in data.columns]
+        name_and_col = [(name, self.to_column(name)) for name in data.columns]
         self.cnx.execute_many(
             b'DELETE', b'FROM', self,
             b'WHERE', OP.AND(col == Arg(name) for name, col in name_and_col),
@@ -204,15 +214,15 @@ class Table(TableViewABC):
             self, b'(', [c.query_for_create_table for c in self._table_columns], b')'
         )
         # TODO: Fetch
-        
+
+    def __repr__(self) -> str:
+        return 'T(%s)' % self.name
+ 
     def _new_view(self, *args, **kwargs) -> 'ViewABC':
         return View(*args, **kwargs)
         
     def _proc_colval_args(self, value_dict: Optional[Dict[Union[NameLike, TableColumn], ValueType]], **values: ValueType) -> Dict[TableColumn, ValueType]:
         return {self.table_column(c): v for c, v in [*(value_dict.items() if value_dict else []), *values.items()]}
-
-    def __repr__(self):
-        return 'Table(%s)' % self.name.decode()
 
 
 class ForeignKeyReference(Object):
