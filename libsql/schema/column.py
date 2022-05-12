@@ -70,6 +70,17 @@ class ViewColumn(AliasedExpr[ET], ColumnABC, Generic[ET]):
     def base_view(self) -> 'BaseViewABC':
         return self._base_view
 
+    @property
+    def select_column_query(self) -> 'QueryLike':
+        """ Get a query for SELECT column """
+        # If the alias equals to the original expression name,
+        #   returns original expr without alias
+        if isinstance(self.expr, ObjectABC) and self.name == self.expr.name:
+            return self.expr
+
+        # Get a query with alias
+        return super().select_column_query
+
     def renamed(self, name: NameLike) -> 'ViewColumn':
         return ViewColumn(self._base_view, name, self.expr)
 
