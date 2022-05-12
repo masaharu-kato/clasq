@@ -34,21 +34,41 @@ class ViewABC(ABC):
 
     @abstractproperty
     def database_or_none(self) -> Optional['Database']:
-        """ Get a parent Database object """
+        """ Get a parent Database object
+            If not exists, returns None.
+
+            [Abstract property]
+        """
 
     @property
     def database(self) -> 'Database':
-        """ Get a Database object of this view """
+        """ Get a parent Database object of this view
+
+            Raises:
+                ObjectNotSetError: The database is not set.
+        """
         if self.database_or_none is None:
             raise errors.ObjectNotSetError('Database is not set.')
         return self.database_or_none
 
     @property
     def db(self) -> 'Database':
+        """ Get a parent Database object of this view
+            Synonym of `database` property.
+
+            Raises:
+                ObjectNotSetError: The database is not set.
+
+        """
         return self.database
 
     @property
     def cnx(self) -> 'ConnectionABC':
+        """ Get a database connection from a parent Database object
+
+            Raises:
+                ObjectNotSetError: The database is not set.
+        """
         return self.database.cnx
 
     @property
@@ -100,14 +120,18 @@ class ViewABC(ABC):
 
     @abstractproperty
     def columns_by_name(self) -> Dict[ObjectName, ViewColumn]:
-        """ Returns a dictionary from name to View Column object """
+        """ Returns a dictionary from name to View Column object
+
+        Returns:
+            Dict[ObjectName, ViewColumn]: Dictionary of name -> ViewColumn object
+        """
 
     def iter_columns(self):
         return iter(self.columns_by_name.values()) 
         
     @property
     def columns(self) -> OrderedFrozenObjectSet[ViewColumn]:
-        """ Get a current set of columns """
+        """ Get a set of columns in this view """
         return OrderedFrozenObjectSet(*self.iter_columns())
 
     def column(self, val: Union[NameLike, ColumnABC]) -> ViewColumn:
@@ -115,7 +139,7 @@ class ViewABC(ABC):
                 or check existing Column object is valid for this Table object
 
         Args:
-            val (bytes | str | ColumnABC): NamedExpr name or Column object
+            val (NameLike | ColumnABC): NamedExpr name or Column object
 
         Returns:
             ColumnABC: Column object with the specified name or Column object itself
@@ -140,7 +164,22 @@ class ViewABC(ABC):
         return self.column(val)
 
     def column_or_none(self, val: Union[NameLike, ColumnABC]) -> Optional[ViewColumn]:
-        """ Get a Column object with the specified name if exists """
+        """ Get a Column of a specific name, or check the Column is valid
+
+            Get a Column object with the specified name
+            or check existing Column object is valid for this View object.
+            
+            Returns None if a column object with the specified name is not found
+            or the given column object is not valid for this View object.
+
+        Args:
+            val (NameLike | ColumnABC): Column name or Column object
+
+        Returns:
+            Optional[ViewColumn]: Column object with the specified name if exists,
+                or Column object itself if it is valid.
+                Otherwise, None.
+        """
         try:
             return self.column(val)
         except (errors.ObjectNotFoundError, errors.NotaSelfObjectError):
@@ -173,40 +212,145 @@ class ViewABC(ABC):
             offset = offset if offset is not None else self.offset_value,
         )
 
-    def select_view_column(self, view: 'ViewABC', *cols: Union[NameLike, ColumnABC], **as_cols: Union[NameLike, ExprABC]) -> 'ViewABC':
-        """ Make a View object with specific columns (NamedExpr objects) """
-        return self.clone(column_likes=itertools.chain(
-            (c for c in self.iter_columns() if not (isinstance(c.expr, ColumnABC) and view.column_or_none(c.expr) is not None)),
-            self._proc_col_args(*cols, **as_cols)))
-
-    def select_table_column(self, view: 'ViewABC', *cols: Union[NameLike, ColumnABC], **as_cols: Union[NameLike, ExprABC]) -> 'ViewABC':
-        """ Make a View object with specific columns (NamedExpr objects) """
-        return self.select_view_column(view, *cols, **as_cols)
-
     def select_column(self, *cols: Union[NameLike, ColumnABC], **as_cols: Union[NameLike, ExprABC]) -> 'ViewABC':
-        """ Make a View object with specific columns (NamedExpr objects) """
+        """ Clone this view with a new set of columns
+
+        Args:
+            *cols (NameLike | ColumnABC): Column object or its name to select
+
+            *as_cols (NameLike | ExprABC): Column name or any expression object to select
+                The keyword string will be an alias of the column or expression.
+
+            If a name specified, get the Column object from the base view.
+        
+        Raises:
+            ObjectNotFoundError: The specified name of column was not found.
+
+        Returns:
+            ViewABC: New View object with a new set of columns
+        """
         return self.clone(column_likes=self._proc_col_args(*cols, **as_cols))
 
     def add_column(self, *cols: Union[NameLike, ColumnABC], **as_cols: Union[NameLike, ExprABC]) -> 'ViewABC':
-        """ Make a View object with additional columns (NamedExpr objects) """
+        """ Clone this view with additional columns
+
+        Args:
+            *cols (NameLike | ColumnABC): Column object or its name to select
+
+            *as_cols (NameLike | ExprABC): Column name or any expression object to select
+                The keyword string will be an alias of the column or expression.
+
+            If a name specified, get the Column object from the base view.
+        
+        Raises:
+            ObjectNotFoundError: The specified name of column was not found.
+
+        Returns:
+            ViewABC: New View object with additional columns
+        """
         return self.clone(column_likes=itertools.chain(
             self.iter_columns(),
             self._proc_col_args(*cols, **as_cols)))
 
     def where(self, *exprs: ExprABC, **coleqs: ExprABC) -> 'ViewABC':
-        """ Make a View object with WHERE clause """
-        return self.clone(where=OP.AND(*exprs, *(self.column(c) == v for c, v in coleqs.items())))
+        """ Clone this view with additional WHERE condition(s)
 
-    def group_by(self, *columns: ColumnABC, **cols: Optional[bool]) -> 'ViewABC':
+        Args:
+            *exprs (ExprABC): Condition expression(s).
+                If multiple expressions are specified,
+                there will be joined with AND (`&`).
+
+            *coleqs (ExprABC): Equal condition with column names and value 
+                The Column object will be taken from the base view,
+                based on the keyword string.
+
+        Examples:
+            - column 'id' equals to 25:
+                - `view.where(view['id'] == 25)`
+                - `view.where(id=25)`
+            
+            - column 'name' equals to 'John' and column 'age' equals to 24
+                - `view.where((view['name'] == 'John') & (view['age'] == 24))`
+                - `view.where(view['name'] == 'John', view['age'] == 24)`
+                - `view.where(name='John', age=24)`
+            
+            - column 'age' is 24 or more
+                - `view.where(view['age'] >= 24)`
+
+        Returns:
+            ViewABC: New View object with WHERE conditions
+        """
+        return self.clone(where=OP.AND(
+            *exprs,
+            *(self.column(c) == v for c, v in coleqs.items()))
+        )
+
+    def group_by(self, *columns: Union[NameLike, ColumnABC], **cols: Optional[bool]) -> 'ViewABC':
+        """ Clone this view with additional grouping columns
+
+        Args:
+            *cols (NameLike | ColumnABC): Column object or its name for grouping
+
+            *as_cols (NameLike | ExprABC): Column names for grouping
+                Specify column name on keyword, `True` on value.
+
+            If a name specified, get the Column object from the base view.
+
+        Examples:
+            - Group by column 'A':
+                - `view.group_by('A')`  
+                - `view.order_by(view['A'])`  
+                - `view.order_by(A=True)`  
+            
+            - Group by column 'A' and column 'B'
+                - `view.group_by('A', 'B')`  
+                - `view.group_by(view['A'], view['B'])`  
+                - `view.group_by(A=True, B=True)`  
+
+        Returns:
+            ViewABC: New View object with grouping columns
+        """
         return self.clone(groups=[
-            *columns,
+            *(self.column(c) for c in columns),
             *(self.column(c) for c, v in cols.items() if v)
         ])
 
-    def order_by(self, *orders: ColumnABC, **col_orders: Optional[OrderLike]) -> 'ViewABC':
-        """ Make a View object with ORDER BY clause """
+    def order_by(self, *columns: Union[NameLike, ColumnABC], **col_orders: Optional[OrderLike]) -> 'ViewABC':
+        """ Clone this view with additional order columns
+
+        Args:
+            *cols (NameLike | ColumnABC): Column object or its name for order
+                The normal Column object will be treat as ASC order.
+                For column object, unary operator `+` or `-` can be used
+                for specifying ASC or DESC order.
+
+            *as_cols (NameLike | ExprABC): Column names for order
+                Specify column name on keyword.
+                If ASC order, specify `True` or `OrderType.ASC` on value.
+                If DESC order, specify `False` or `OrderType.DESC` on value.
+                If None is specified on value, the column will be ignored.
+
+            If a name specified, get the Column object from the base view.
+
+        Examples:
+            - Order by column 'A' with ASC order:
+                - `view.order_by('A')`  
+                - `view.order_by(view['A'])`  
+                - `view.order_by(A=True)`  
+            
+            - Order by column 'A' with DESC order:
+                - `view.order_by(-view['A'])`  
+                - `view.order_by(A=False)`
+            
+            - Order by column 'A' with ASC order, column 'B' with DESC order
+                - `view.order_by(view['A'], -view['B'])`  
+                - `view.order_by(A=True, B=False)`  
+
+        Returns:
+            ViewABC: New View object with grouping columns
+        """
         return self.clone(orders=[
-            *orders,
+            *(self.column(c) for c in columns),
             *(self.column(c).ordered(v) for c, v in col_orders.items() if v is not None)
         ])
 
@@ -223,14 +367,55 @@ class ViewABC(ABC):
     #     return SingleView(self)
 
     def join(self, join_type: JoinLike, view: 'ViewABC', expr: ExprABC) -> 'JoinedView':
-        """ Make a Joined View """
+        """ Make a Joined View
+
+        Args:
+            join_type (JoinLike): Join type. 
+                Speficy by strings from 
+                INNER, LEFT, RIGHT, OUTER, CROSS. (Case insensitive)
+
+            view (ViewABC): Other view object to join
+            expr (ExprABC): Condition for join 
+
+        Examples:
+            Inner join 'categories' view with the own column 'category_id':
+                `view.join('INNER', categories, view['category_id'] == categories['id'])`
+
+        Returns:
+            JoinedView: New Joined View object
+        """
         return JoinedView(self, JoinType.make(join_type), view, expr)
 
     def inner_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
-        """ Make a INNER Joined View """
+        """ Make a INNER Joined View
+
+        Args:
+            view (ViewABC): Other view object to join
+            expr (ExprABC): Condition for join 
+
+        Examples:
+            Inner join 'categories' view with the own column 'category_id':
+                `view.inner_join(categories, view['category_id'] == categories['id'])`
+
+        Returns:
+            JoinedView: New Joined View object
+        """
         return self.join(JoinType.INNER, view, expr)
 
     def left_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
+        """ Make a LEFT Joined View
+
+        Args:
+            view (ViewABC): Other view object to join
+            expr (ExprABC): Condition for join 
+
+        Examples:
+            Left join 'categories' view with the own column 'category_id':
+                `view.left_join(categories, view['category_id'] == categories['id'])`
+
+        Returns:
+            JoinedView: New Joined View object
+        """
         """ Make a LEFT Joined View """
         return self.join(JoinType.LEFT, view, expr)
 
@@ -245,9 +430,6 @@ class ViewABC(ABC):
     def cross_join(self, view: 'ViewABC', expr: ExprABC) -> 'ViewABC':
         """ Make a CROSS Joined View """
         return self.join(JoinType.CROSS, view, expr)
-
-    def self_based_view(self) -> 'ViewABC':
-        return self._new_view(base_view=self)
 
     @overload
     def __getitem__(self, val: Union[int, slice, ExprABC, Tuple[ExprABC, ...]]) -> 'ViewABC': ...
@@ -330,7 +512,13 @@ class ViewABC(ABC):
         return self.result_or_none is not None
 
     @property
-    def result(self):
+    def result(self) -> TableData:
+        """ Get a result table data
+            Results will be generated if not generated yet.
+
+        Returns:
+            TableData: Result table data
+        """
         self.prepare_result()
         assert self.result_or_none is not None
         return self.result_or_none
@@ -461,9 +649,26 @@ class ViewWithResult(ViewABC):
         return self._result
 
     def aliased(self, name: NameLike) -> 'NamedView':
+        """ Get a aliased View object of this view
+
+        Args:
+            name (NameLike): Alias name
+
+        Returns:
+            NamedView: Aliased view object of this view
+        """
         return NamedView(self, name)
 
     def as_(self, name: NameLike) -> 'NamedView':
+        """ Get a aliased View object of this view
+            Synonym of `aliased` method.
+
+        Args:
+            name (NameLike): Alias name
+
+        Returns:
+            NamedView: Aliased view object of this view
+        """
         return self.aliased(name)
         
 
