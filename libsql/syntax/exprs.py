@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Generic, Iterator, List, Optional, Tuple,
 from .query_abc import QueryABC
 from .values import NULL, ValueType, is_value_type
 from .object_abc import NameLike, ObjectABC, Object, ObjectName
+from .keywords import OrderType, OrderLike
 from . import errors
 
 if TYPE_CHECKING:
@@ -536,12 +537,6 @@ class QueryExprABC(ExprABC, QueryABC):
     """ Query and Expr ABC """
 
 
-class ExprObject(QueryExprABC, Object):
-    """ Object with expressions """
-    def __init__(self, name: NameLike) -> None:
-        super().__init__(name)
-
-
 class Expr(QueryExprABC):
     """ Expression objerct with any value """
     def __init__(self, val):
@@ -648,9 +643,74 @@ class Arg(QueryExprABC):
 ValueOrArg = Union[ValueType, Arg]
 
 
-T = TypeVar('T', bound=ExprABC)
-class AliasedExpr(ExprObject, Generic[T]):
-    def __init__(self, expr: T, name: NameLike) -> None:
+class ExprObjectABC(QueryExprABC, ObjectABC):
+    """ Object with expressions (Abstract class) """
+    
+    @property
+    def order_type(self) -> OrderType:
+        """ Return a order kind (ASC or DESC) """
+        return OrderType.ASC  # Default Implementation
+
+    @property
+    def ordered_query(self) -> 'QueryLike':
+        return (self, self.order_type)
+
+    def ordered(self, order: OrderLike):
+        """ Get a ordered column object from this column """
+        return OrderedExprObject(self, order)
+
+    @property
+    def non_ordered(self) -> 'ExprObjectABC':
+        """ Get a non-ordered (original) column """
+        return self  # Default Implementation
+
+    def __pos__(self):
+        """ Get a ASC ordered expression """
+        return self.ordered(OrderType.ASC)
+
+    def __neg__(self):
+        """ Get a DESC ordered expression """
+        return self.ordered(OrderType.DESC)
+        
+
+EO = TypeVar('EO', bound=ExprObjectABC)
+class OrderedExprObject(ExprObjectABC, Generic[EO]):
+    """ Ordered Column Expr """
+    def __init__(self, expr_obj: EO, order: OrderLike):
+        self._expr_obj = expr_obj
+        self._order_type = OrderType.make(order)
+
+    @property
+    def non_ordered(self) -> EO:
+        return self._expr_obj
+
+    @property
+    def name(self) -> ObjectName:
+        return self.non_ordered.name
+
+    @property
+    def order_type(self) -> OrderType:
+        return self._order_type
+
+    def iter_objects(self) -> Iterator[ObjectABC]:
+        return self.non_ordered.iter_objects()
+
+    def append_to_query_data(self, qd: 'QueryData') -> None:
+        """ Append this expression to the QueryData object
+
+        Args:
+            qd (QueryData): QueryData object to be appended
+        """
+        return self.non_ordered.append_to_query_data(qd)
+
+
+class ExprObject(ExprObjectABC, Object):
+    """ Object with expressions """
+
+
+ET = TypeVar('ET', bound=ExprABC)
+class AliasedExpr(ExprObject, Generic[ET]):
+    def __init__(self, expr: ET, name: NameLike) -> None:
         super().__init__(name)
         self._expr = expr
 
@@ -665,6 +725,9 @@ class AliasedExpr(ExprObject, Generic[T]):
     def iter_objects(self) -> Iterator['ObjectABC']:
         if isinstance(self._expr, QueryABC):
             yield from self._expr.iter_objects()
+
+    def __repr__(self):
+        return 'AE[%s](%s)' % (self.name, repr(self.expr))
 
 
 class FuncCall(QueryExprABC): 

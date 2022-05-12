@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from .database import Database
 
 
-class ColumnABC(QueryExprABC, ObjectABC):
+class ColumnABC(ExprObjectABC):
     """ Column ABC """
         
     @property
@@ -40,42 +40,23 @@ class ColumnABC(QueryExprABC, ObjectABC):
         """ Get a database server connection """
         return self.base_view.cnx
 
-    @property
-    def order_type(self) -> OrderType:
-        """ Return a order kind (ASC or DESC) """
-        return OrderType.ASC  # Default Implementation
-
-    @property
-    def ordered_query(self) -> QueryLike:
-        return (self, self.order_type)
-
     def append_to_query_data(self, qd: QueryData) -> None:
         """ Append this expression to the QueryData object
 
         Args:
             qd (QueryData): QueryData object to be appended
         """
-        if self.base_view.name_or_none is None:
-            raise errors.ObjectError('Cannot append column which view is unnamed.')
-        qd.append(self.base_view, b'.')
+        # if self.base_view.name_or_none is None:
+        #     raise ObjectError('Cannot append column which view is unnamed.')
+        
+        if self.base_view.name_or_none is not None:
+            qd.append(self.base_view, b'.')
         super().append_to_query_data(qd)
 
-    def ordered(self, order: OrderLike):
-        """ Get a ordered column object from this column """
-        return OrderedColumn(self, OrderType.make(order))
-
-    def __pos__(self):
-        """ Get a ASC ordered expression """
-        return OrderedColumn(self, OrderType.ASC)
-
-    def __neg__(self):
-        """ Get a DESC ordered expression """
-        return OrderedColumn(self, OrderType.DESC)
-
     def __repr__(self):
-        if self.base_view.name_or_none:
-            return 'Col(%s.%s)' % (str(self.base_view), str(self))
-        return 'Col(%s)' % str(self)
+        return 'Cabc(%s.%s)' % (self._typename, repr(self.base_view), self.name)
+
+
 
 ET = TypeVar('ET', bound=ExprABC)
 class ViewColumn(AliasedExpr[ET], ColumnABC, Generic[ET]):
@@ -223,46 +204,8 @@ class TableColumn(ColumnABC, Object):
             self._reference,
         )
 
-
-class OrderedColumn(ColumnABC):
-    """ Ordered Column Expr """
-    def __init__(self, column: ColumnABC, order: OrderType):
-        self._column = column
-        self._order_type = order
-
-    @property
-    def name(self) -> ObjectName:
-        return self._column.name
-
-    @property
-    def original_column(self) -> ColumnABC:
-        """ Get a original expr """
-        return self._column
-
-    @property
-    def query_for_select_column(self) -> 'QueryLike':
-        """ Get a query for SELECT """
-        return self._column.query_for_select_column
-
-    @property
-    def base_view(self) -> 'BaseViewABC':
-        """ Get a parent View object if exists """
-        return self._column.base_view
-
-    @property
-    def order_type(self) -> OrderType:
-        return self._order_type
-
-    def iter_objects(self) -> Iterator[ObjectABC]:
-        return self._column.iter_objects()
-
-    def append_to_query_data(self, qd: QueryData) -> None:
-        """ Append this expression to the QueryData object
-
-        Args:
-            qd (QueryData): QueryData object to be appended
-        """
-        return self._column.append_to_query_data(qd)
+    def __repr__(self):
+        return 'TC(%s->%s)' % (repr(self.base_view), self.name)
 
 
 def iter_columns(*exprs: Optional[ObjectABC]):
