@@ -167,7 +167,7 @@ class QueryData(QueryABC):
         if isinstance(val, tuple):
             return self.append(*val)
 
-        if isinstance(val, Iterable):
+        if isinstance(val, (set, list)):
             return self.append_joined(val)
 
         raise errors.QueryTypeError('Invalid value type %s (%s)' % (type(val), repr(val)))
