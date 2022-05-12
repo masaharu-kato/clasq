@@ -4,7 +4,7 @@
 import pytest
 from libsql.schema.database import Database
 from libsql.schema.table import TableArgs
-from libsql.schema.column import TableColumnArgs
+from libsql.schema.column import ColumnArgs
 from libsql.syntax.sqltypes import Int, VarChar
 from libsql.syntax.exprs import Object
 from libsql.syntax.query_data import QueryData
@@ -35,14 +35,14 @@ def test_table_columns():
 
     db = Database('mydb',
         TableArgs('mytable', 
-            TableColumnArgs('id', Int),
-            TableColumnArgs('mycol2', Int),
-            TableColumnArgs('mycol3', VarChar[64]),
+            ColumnArgs('id', Int),
+            ColumnArgs('mycol2', Int),
+            ColumnArgs('mycol3', VarChar[64]),
         ),
         TableArgs('mytable2',
-            TableColumnArgs('id', Int),
-            TableColumnArgs('mycol4', Int),
-            TableColumnArgs('mycol5', VarChar[64]),
+            ColumnArgs('id', Int),
+            ColumnArgs('mycol4', Int),
+            ColumnArgs('mycol5', VarChar[64]),
         )
     )
 
