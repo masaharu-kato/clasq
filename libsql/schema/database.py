@@ -9,7 +9,7 @@ from ..syntax.query_data import QueryLike, QueryArgVals
 from ..syntax.values import ValueType
 from ..syntax.errors import NotaSelfObjectError, ObjectArgsError, ObjectNameAlreadyExistsError, ObjectNotFoundError, ObjectNotSetError
 from ..utils.tabledata import TableData
-from .column import TableColumnArgs
+from .column import ColumnArgs
 from .table import Table, TableArgs
 
 if TYPE_CHECKING:
@@ -71,9 +71,6 @@ class Database(Object):
     def exists(self):
         return self._exists
 
-    def __repr__(self):
-        return 'DB(%s)' % str(self)
-
     def iter_tables(self):
         return iter(self._table_dict.values())
 
@@ -81,42 +78,35 @@ class Database(Object):
     def tables(self):
         return list(self.iter_tables())
 
-    def table(self, val: Union[NameLike, Table]) -> Table:
+    def table(self, val: NameLike) -> Table:
         """ Get a Table object with the specified name
 
         Args:
-            val (bytes | str | Table): Table name or table object
+            val (bytes | str | ObjectName): Table name
 
         Raises:
-            errors.ObjectNotFoundError: _description_
-            errors.NotaSelfObjectError: _description_
-            errors.ObjectArgsError: _description_
+            ObjectNotFoundError: Table not found.
 
         Returns:
-            Table: Table object with the specified name or Table object itself
+            Table: Table object with the specified name
         """
-        if isinstance(val, Table):
-            if val.database == self:
-                return val
-            raise errors.NotaSelfObjectError('Not a table of this database.')
-            
         name = ObjectName(val)
         if name not in self._table_dict:
             raise ObjectNotFoundError('Table not found.', name)
         return self._table_dict[name]
 
     @overload
-    def __getitem__(self, val: Union[NameLike, Table]) -> Table: ...
+    def __getitem__(self, val: NameLike) -> Table: ...
     
     @overload
-    def __getitem__(self, val: Tuple[Union[NameLike, Table], ...]) -> Tuple[Table, ...]: ...
+    def __getitem__(self, val: Tuple[NameLike, ...]) -> Tuple[Table, ...]: ...
 
     def __getitem__(self, val):
         if isinstance(val, tuple):
             return (*(self.table(v) for v in val),)
         return self.table(val)
 
-    def table_or_none(self, val: Union[NameLike, Table]) -> Optional[Table]:
+    def table_or_none(self, val: NameLike) -> Optional[Table]:
         """ Get a Table object with the specified name if exists """
         try:
             return self.table(val)
@@ -124,28 +114,50 @@ class Database(Object):
             pass
         return None
 
-    def get(self, val: Union[NameLike, Table]) -> Optional[Table]:
+    def get(self, val: NameLike) -> Optional[Table]:
         """ Synonym of `table_or_none` method """
         return self.table_or_none(val)
 
-    def append_table(self, table_arg: TableArgs) -> None:
-        """ Append (existing) Table object to this Database
+    def to_table(self, val: Union[NameLike, Table]) -> Table:
+        if not isinstance(val, Table):
+            return self.table(val)
+        if val.database == self:
+            return val
+        raise NotaSelfObjectError('Not a table of this database.')
 
-        Args:
-            table (Table): Table object
+    def to_table_or_none(self, val: Union[NameLike, Table]) -> Optional[Table]:
+        try:
+            return self.to_table(val)
+        except (ObjectNotFoundError, NotaSelfObjectError):
+            pass
+        return None
 
-        Raises:
-            errors.NotaSelfObjectError: The Table object in the different database was specified
-        """
+    def __contains__(self, val: Union[NameLike, Table])-> bool:
+        return self.to_table_or_none(val) is not None
+
+    @overload
+    def append_table(self, name: NameLike, /, *column_args: ColumnArgs, **options) -> Table: ...
+
+    @overload
+    def append_table(self, table_arg: TableArgs, /) -> Table: ...
+
+    def append_table(self, arg1, /, *cols, **kwargs) -> Table:
+        """ Append a new table to this Database """
+
+        if isinstance(arg1, TableArgs):
+            table_arg = arg1
+        else:
+            table_arg = TableArgs(arg1, *cols, **kwargs)
 
         if table_arg.name in self._table_dict:
             raise ObjectNameAlreadyExistsError('Table name object already exists.', table_arg)
 
         table = Table(self, table_arg)
         self._table_dict[table.name] = table
+        return self._table_dict[table.name]
 
     def remove_table(self, table: Table) -> None:
-        table_name = self.table(table).name
+        table_name = self.to_table(table).name
         del self._table_dict[table_name]
 
     def fetch_from_db(self) -> None:
@@ -153,7 +165,7 @@ class Database(Object):
         for tabledata in self.query(b'SHOW', b'TABLES'):
             table_name = str(tabledata[0]).encode()
             self.append_table(TableArgs(table_name, *(
-                TableColumnArgs(coldata['Field'])
+                ColumnArgs(coldata['Field'])
                 for coldata in self.query(b'SHOW', b'COLUMNS', b'FROM', table_name)
             )))
 

@@ -85,7 +85,7 @@ class TableColumnRef:
         self.column_name = column_name
 
     def resolve(self) -> 'TableColumn':
-        return self.database.table(self.table_like).table_column(self.column_name)
+        return self.database.to_table(self.table_like).table_column(self.column_name)
 
 
 class TableColumnArgs:
