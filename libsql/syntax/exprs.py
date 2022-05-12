@@ -147,16 +147,9 @@ class NoArgsFunc(NoArgsFuncABC):
         assert not args
         qd.append(self.name.raw_name)
 
-    def call(self, *args: 'ExprLike') -> 'ExprABC':
-        """ Returns an expression representing a call to this function
-            (Override from `FuncABC`)
-
-        Returns:
-            FuncExpr: Function call expression
-        """
+    def check_args(self, args: Tuple['ExprLike', ...]) -> None:
         if args:
             raise errors.ObjectArgNumError('Function `%s` takes no arguments.' % self.name)
-        return self._func_call()
 
 
 class OpABC(Func):
