@@ -6,7 +6,6 @@ from typing import Generic, Iterator, TYPE_CHECKING, Type, TypeVar, Union
 
 from ..utils.keyset import FrozenKeySetABC, KeySetABC, OrderedFrozenKeySetABC, OrderedKeySetABC
 from .query_abc import QueryABC
-from . import errors
 
 if TYPE_CHECKING:
     from .query_data import QueryData
@@ -24,10 +23,10 @@ class ObjectName(QueryABC):
         elif isinstance(val, str):
             self._raw_name = val.encode()
         else:
-            raise TypeError('Invalid type of value.')
+            raise TypeError('Invalid type of value.', val)
 
     @property
-    def raw_name(self):
+    def raw_name(self) -> bytes:
         return self._raw_name
 
     def append_to_query_data(self, qd: 'QueryData') -> None:
@@ -84,9 +83,6 @@ class ObjectABC(QueryABC):
     def __ne__(self, val) -> bool:
         return not self.__eq__(val)
 
-    def __repr__(self):
-        return 'Obj(%s)' % self.name
-
 
 class Object(ObjectABC):
     """ Column expression """
@@ -106,25 +102,25 @@ def object_key(obj):
     return id(obj)
 
 
-class FrozenObjectSet(FrozenKeySetABC[T], Generic[T]):
+class FrozenObjset(FrozenKeySetABC[T], Generic[T]):
 
     def _key(self, obj: T):
         return object_key(obj)
 
 
-class ObjectSet(KeySetABC[T], Generic[T]):
+class Objset(KeySetABC[T], Generic[T]):
 
     def _key(self, obj: T):
         return object_key(obj)
 
 
-class OrderedFrozenObjectSet(FrozenObjectSet[T], OrderedFrozenKeySetABC[T], Generic[T]):
+class OrderedFrozenObjset(FrozenObjset[T], OrderedFrozenKeySetABC[T], Generic[T]):
 
     def _key(self, obj: T):
         return object_key(obj)
 
 
-class OrderedObjectSet(ObjectSet[T], OrderedKeySetABC[T], Generic[T]):
+class OrderedObjset(Objset[T], OrderedKeySetABC[T], Generic[T]):
 
     def _key(self, obj: T):
         return object_key(obj)

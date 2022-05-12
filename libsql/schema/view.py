@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod, abstractproperty
 import itertools
 from typing import TYPE_CHECKING, Dict, Iterable, Mapping, Optional, Tuple, Union, cast, overload
 
-from ..syntax.object_abc import NameLike, ObjectABC, ObjectName, OrderedFrozenObjectSet
+from ..syntax.object_abc import NameLike, ObjectABC, ObjectName, OrderedFrozenObjset
 from ..syntax.query_data import QueryData
 from ..syntax.exprs import AliasedExpr, ExprABC, ExprLike, NoneExpr, OP
 from ..syntax.keywords import JoinType, JoinLike, OrderLike
