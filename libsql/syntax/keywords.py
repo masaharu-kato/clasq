@@ -63,6 +63,6 @@ class ReferenceOption(KeywordABC):
     def make(cls, val) -> 'ReferenceOption':
         return super()._make(val)
 
-OrderLike = Union[OrderType, bool, bytes, str]
+OrderTypeLike = Union[OrderType, bool, bytes, str]
 JoinLike = Union[JoinType, bytes, str]
 RefOptionLike = Union[ReferenceOption, bytes, str]
