@@ -3,24 +3,30 @@
 """
 
 from abc import ABC, abstractproperty, abstractmethod
-from typing import Generic, Hashable, Iterable, Iterator, Optional, TypeVar
+import itertools
+from typing import Generic, Hashable, Iterable, Iterator, List, Optional, Tuple, TypeVar, Union
 
 from .set_abc import FrozenSetABC, SetABC, SetLike
 from .ordered_set import FrozenOrderedSet, OrderedSet
 
+K = TypeVar('K', bound=Hashable)
 T = TypeVar('T')
 
-class _FrozenKeySetABC(FrozenSetABC[T], Generic[T]):
+class _FrozenKeySetABC(FrozenSetABC[T], Generic[K, T]):
     """ Frozen Set for object ABC (Method definitions) """
 
-    def __init__(self, *objs: T) -> None:
+    def __init__(self, objs: Iterable[T] = ()) -> None:
         """ Init """
         self._key_to_obj = {self._key(obj): obj for obj in objs}
-        self._key_set = self._to_keys(objs)
+        self._key_set = self._make_set(self._key_to_obj.keys())
 
     @abstractmethod
-    def _key(self, obj) -> Hashable:
+    def _key(self, obj: T) -> K:
         """ Get a key from object """
+
+    @abstractmethod
+    def _key_or_none(self, obj: Union[K, T]) -> Optional[K]:
+        """ Get a key from object if obj is a valid type """
 
     def _make_set(self, keys) -> SetLike[T]:
         """ Make Set from keys """
@@ -32,14 +38,15 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[T]):
     def _to_objs(self, keys) -> Iterator[T]:
         return (self._key_to_obj[key] for key in keys)
 
-    def __contains__(self, obj:T) -> bool:
-        key = self._key(obj)
-        return key in self._key_set
+    def __contains__(self, obj: Union[K, T]) -> bool:
+        if key := self._key_or_none(obj):
+            return key in self._key_set and obj is self._key_to_obj[key]
+        return obj in self._key_set
 
-    def __getitem__(self, key: Hashable) -> T:
+    def __getitem__(self, key: K) -> T:
         return self._key_to_obj[key]
 
-    def get(self, key: Hashable) -> Optional[T]:
+    def get(self, key: K) -> Optional[T]:
         return self._key_to_obj.get(key)
         
     def __len__(self) -> int:
@@ -49,28 +56,28 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[T]):
         return self._to_objs(self._key_set)
 
     def __and__(self, objs: SetLike[T]):
-        return type(self)(*self._to_objs(self._key_set.__and__(self._to_keys(objs))))
+        return type(self)(self._to_objs(self._key_set.__and__(self._to_keys(objs))))
 
     def __or__(self, objs: SetLike[T]):
-        return type(self)(*self, *(objs - self))
+        return type(self)(itertools.chain(self, objs - self))
 
     def __sub__(self, objs: SetLike[T]):
-        return type(self)(*self._to_objs(self._key_set.__sub__(self._to_keys(objs))))
+        return type(self)(self._to_objs(self._key_set.__sub__(self._to_keys(objs))))
 
     def __xor__(self, objs: SetLike[T]):
-        return type(self)(*self._to_objs(self._key_set.__xor__(self._to_keys(objs))))
+        return type(self)(self._to_objs(self._key_set.__xor__(self._to_keys(objs))))
 
     def __rand__(self, objs: SetLike[T]):
-        return type(self)(*self._to_objs(self._key_set.__rand__(self._to_keys(objs))))
+        return type(self)(self._to_objs(self._to_keys(objs).__and__(self._key_set)))
 
     def __ror__(self, objs: SetLike[T]):
-        return type(self)(*objs, *(self - objs))
+        return type(self)(itertools.chain(objs, self - objs))
 
     def __rsub__(self, objs: SetLike[T]):
-        return type(self)(*self._to_objs(self._key_set.__rsub__(self._to_keys(objs))))
+        return type(self)(self._to_objs(self._to_keys(objs).__sub__(self._key_set)))
 
     def __rxor__(self, objs: SetLike[T]):
-        return type(self)(*self._to_objs(self._key_set.__rxor__(self._to_keys(objs))))
+        return type(self)(self._to_objs(self._to_keys(objs).__xor__(self._key_set)))
 
     def __le__(self, objs: SetLike[T]) -> bool:
         """ Returns if objs contains all values of self """
@@ -92,11 +99,11 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[T]):
         return '%s(%s)' % (type(self).__name__, ', '.join(map(repr, self)))
 
 
-class FrozenKeySetABC(_FrozenKeySetABC[T], Generic[T]):
+class FrozenKeySetABC(_FrozenKeySetABC[K, T], Generic[K, T]):
     """ Frozen Set for object ABC """
 
 
-class KeySetABC(SetABC[T], _FrozenKeySetABC[T], Generic[T]):
+class KeySetABC(SetABC[T], _FrozenKeySetABC[K, T], Generic[K, T]):
 
     def __iand__(self, objs: SetLike[T]):
         self._key_set.__iand__(self._to_keys(objs))
@@ -133,11 +140,19 @@ class KeySetABC(SetABC[T], _FrozenKeySetABC[T], Generic[T]):
         self._key_set.remove(key)
         del self._key_to_obj[key]
 
-
     def _clean_objs(self) -> None:
         for key in self._key_to_obj:
             if key not in self._key_set:
                 del self._key_to_obj[key]
+
+    def discard(self, obj: T) -> None:
+        key = self._key(obj)
+        if key in self._key_to_obj:
+            self.remove(obj)
+
+    def clear(self) -> None:
+        self._key_set.clear()
+        self._key_to_obj.clear()
 
 
     # def difference(self, *s: Iterable[Any]) -> set[_T]: ...
@@ -157,13 +172,13 @@ class KeySetABC(SetABC[T], _FrozenKeySetABC[T], Generic[T]):
 
 
 
-class OrderedFrozenKeySetABC(FrozenKeySetABC[T], Generic[T]):
+class FrozenOrderedKeySetABC(FrozenKeySetABC[K, T], Generic[K, T]):
 
     def _make_set(self, keys):
         return FrozenOrderedSet(keys)
 
 
-class OrderedKeySetABC(KeySetABC[T], Generic[T]):
+class OrderedKeySetABC(KeySetABC[K, T], Generic[K, T]):
 
     def _make_set(self, keys):
         return OrderedSet(keys)
