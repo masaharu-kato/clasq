@@ -23,20 +23,22 @@ def test_basic_select():
 
     products = db['products']
     products.prepare_result()
-    assert products.query_select == QueryData(stmt=SELECT_PRODUCTS_SQL)
+    assert products.select_query == QueryData(stmt=SELECT_PRODUCTS_SQL)
     assert len(products) == 30
     assert products.result[0]['id'] == 1 and products.result[0]['price'] == 60000
 
     # Where 
     computers = products.where(products['category_id'] == 1)
     computers.result
-    assert computers.query_select == QueryData(stmt=SELECT_PRODUCTS_SQL + b' WHERE (`products`.`category_id` = ?)', prms=[1])
+    assert computers.select_query == QueryData(stmt=SELECT_PRODUCTS_SQL + b' WHERE (`products`.`category_id` = ?)', prms=[1])
     assert len(computers) == 6
     assert computers.result[0]['id'] == 1 and computers.result[0]['price'] == 60000
 
+    print([(vc.name, vc.expr) for vc in computers.columns])
+
     # Order (one column)
     sorted_computers = computers.order_by(-products['price'])
-    assert sorted_computers.query_select == QueryData(stmt=SELECT_PRODUCTS_SQL + b' WHERE (`products`.`category_id` = ?) ORDER BY `products`.`price` DESC', prms=[1])
+    assert sorted_computers.select_query == QueryData(stmt=SELECT_PRODUCTS_SQL + b' WHERE (`products`.`category_id` = ?) ORDER BY `products`.`price` DESC', prms=[1])
     assert len(sorted_computers) == 6
     assert sorted_computers.result[0]['id'] == 4 and sorted_computers.result[0]['price'] == 140000
 
@@ -72,6 +74,14 @@ def test_select():
             -prods['price']
         )
 
-    assert len(res) == 12
+    assert len(res.result) == 12
     assert str(res.result[0]['sales_price']) == '70000'
     assert str(res.result[1]['sales_price']) == '25000'
+
+
+def main():
+    test_basic_select()
+    test_select()
+
+if __name__ == '__main__':
+    main()
