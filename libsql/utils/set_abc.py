@@ -171,4 +171,5 @@ class SetABC(_FrozenSetABC[T], Generic[T]):
 
 FrozenSetLike = Union[FrozenSetABC[T], FrozenSet[T]]
 
-SetLike = Union[FrozenSetLike[T], SetABC[T], Set[T]]
+NonFrozenSetLike = Union[SetABC[T], Set[T]]
+SetLike = Union[FrozenSetLike[T], NonFrozenSetLike[T]]
