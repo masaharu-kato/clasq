@@ -11,7 +11,7 @@ T = TypeVar('T')
 class _FrozenSetABC(ABC, Generic[T]):
 
     @abstractmethod
-    def __init__(self, _iterable: Iterable[T]) -> None:
+    def __init__(self, _iterable: Iterable[T] = ()) -> None:
         """ Init """
         
     @abstractmethod
@@ -137,13 +137,13 @@ class SetABC(_FrozenSetABC[T], Generic[T]):
     def discard(self, val: T) -> None:
         """ Remove value if value exists """
 
-    @abstractmethod
-    def pop(self) -> T:
-        """ Pop last value (Get and remove last value) """
+    # @abstractmethod
+    # def pop(self) -> T:
+    #     """ Pop last value (Get and remove last value) """
 
-    @abstractmethod
-    def pop_first(self) -> T:
-        """ Pop first value (Get and remove first value) """
+    # @abstractmethod
+    # def pop_first(self) -> T:
+    #     """ Pop first value (Get and remove first value) """
 
     @abstractmethod
     def clear(self) -> None:

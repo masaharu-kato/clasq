@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Any, Generic, Iterator, List, Optional, Tuple,
 from .query_abc import QueryABC
 from .values import NULL, ValueType, is_value_type
 from .object_abc import NameLike, ObjectABC, Object, ObjectName
-from .keywords import OrderType, OrderLike
+from .keywords import OrderType, OrderTypeLike
+from ..utils.keyset import FrozenKeySetABC, FrozenOrderedKeySetABC, KeySetABC, OrderedKeySetABC
 from . import errors
 
 if TYPE_CHECKING:
@@ -655,6 +656,11 @@ class ExprObjectABC(QueryExprABC, ObjectABC):
     """ Object with expressions (Abstract class) """
     
     @property
+    def select_column_query(self) -> 'QueryLike':
+        """ Get a query for SELECT column """
+        return self  # Default Implementation
+    
+    @property
     def order_type(self) -> OrderType:
         """ Return a order kind (ASC or DESC) """
         return OrderType.ASC  # Default Implementation
@@ -663,7 +669,7 @@ class ExprObjectABC(QueryExprABC, ObjectABC):
     def ordered_query(self) -> 'QueryLike':
         return (self, self.order_type)
 
-    def ordered(self, order: OrderLike):
+    def ordered(self, order: OrderTypeLike):
         """ Get a ordered column object from this column """
         return OrderedExprObject(self, order)
 
@@ -684,9 +690,13 @@ class ExprObjectABC(QueryExprABC, ObjectABC):
 EO = TypeVar('EO', bound=ExprObjectABC)
 class OrderedExprObject(ExprObjectABC, Generic[EO]):
     """ Ordered Column Expr """
-    def __init__(self, expr_obj: EO, order: OrderLike):
+    def __init__(self, expr_obj: EO, order: OrderTypeLike):
         self._expr_obj = expr_obj
         self._order_type = OrderType.make(order)
+
+    @property
+    def select_column_query(self) -> 'QueryLike':
+        return self._expr_obj.select_column_query
 
     @property
     def non_ordered(self) -> EO:
@@ -711,19 +721,52 @@ class OrderedExprObject(ExprObjectABC, Generic[EO]):
         """
         return self.non_ordered.append_to_query_data(qd)
 
+    def __repr__(self) -> str:
+        return 'Ordered[%s](%s)' % (
+            ('+' if self.order_type == OrderType.ASC
+            else '-' if self.order_type == OrderType.DESC else '?'),
+            repr(self._expr_obj))
+
 
 class ExprObject(ExprObjectABC, Object):
     """ Object with expressions """
 
 
-ET = TypeVar('ET', bound=ExprABC)
-class AliasedExpr(ExprObject, Generic[ET]):
-    def __init__(self, expr: ET, name: NameLike) -> None:
+class ExprObjectSet(KeySetABC[ObjectName, ExprObjectABC]):
+    """ Set of ExprObjectABC objects """
+
+    def _key(self, obj: ExprObjectABC) -> ObjectName:
+        return obj.name
+
+    def _key_or_none(self, obj) -> Optional[ObjectName]:
+        return obj.name if isinstance(obj, ExprObjectABC) else None
+
+
+class FrozenExprObjectSet(FrozenKeySetABC[ObjectName, ExprObjectABC]):
+    """ Frozen set of ExprObjectABC objects """
+
+    def _key(self, obj: ExprObjectABC) -> ObjectName:
+        return obj.name
+
+    def _key_or_none(self, obj) -> Optional[ObjectName]:
+        return obj.name if isinstance(obj, ExprObjectABC) else None
+
+
+class OrderedExprObjectSet(ExprObjectSet, OrderedKeySetABC[ObjectName, ExprObjectABC]):
+    """ Ordered set of ExprObjectABC objects """
+
+
+class FrozenOrderedExprObjectSet(FrozenExprObjectSet, FrozenOrderedKeySetABC[ObjectName, ExprObjectABC]):
+    """ Frozen ordered set of ExprObjectABC objects """
+
+
+class AliasedExpr(ExprObject):
+    def __init__(self, expr: ExprABC, name: NameLike) -> None:
         super().__init__(name)
         self._expr = expr
 
     @property
-    def expr(self) -> ET:
+    def expr(self) -> ExprABC:
         return self._expr
 
     @property
@@ -735,7 +778,7 @@ class AliasedExpr(ExprObject, Generic[ET]):
             yield from self._expr.iter_objects()
 
     def __repr__(self):
-        return 'AE[%s](%s)' % (self.name, repr(self.expr))
+        return 'Aliased[%s](%s)' % (self.name, repr(self.expr))
 
 
 class FuncCall(QueryExprABC): 

@@ -2,15 +2,12 @@
     Definition Object class and subclasses
 """
 from abc import abstractproperty
-from typing import Generic, Iterator, TYPE_CHECKING, Type, TypeVar, Union
+from typing import Iterator, TYPE_CHECKING, Union
 
-from ..utils.keyset import FrozenKeySetABC, KeySetABC, OrderedFrozenKeySetABC, OrderedKeySetABC
 from .query_abc import QueryABC
 
 if TYPE_CHECKING:
     from .query_data import QueryData
-
-T = TypeVar('T')
 
 
 class ObjectName(QueryABC):
@@ -49,6 +46,28 @@ class ObjectName(QueryABC):
 
     def __ne__(self, obj: object) -> bool:
         return not self.__eq__(obj)
+
+    def __add__(self, obj: object) -> 'ObjectName':
+        if isinstance(obj, ObjectName):
+            return ObjectName(self.raw_name + b'.' + obj.raw_name)
+        if isinstance(obj, bytes):
+            return ObjectName(self.raw_name + obj)
+        return ObjectName(str(self) + str(obj))
+
+    def __iadd__(self, obj: object) -> 'ObjectName':
+        if isinstance(obj, ObjectName):
+            self._raw_name += b'.' + obj.raw_name
+        if isinstance(obj, bytes):
+            self._raw_name += obj
+        else:
+            self._raw_name = (str(self) + str(obj)).encode()
+        return self
+
+    def __mod__(self, vals) -> 'ObjectName':
+        if isinstance(vals, (tuple, list)):
+            return ObjectName(self.raw_name % (*(bytes(v) for v in vals),))
+        return ObjectName(self.raw_name % bytes(vals))
+
 
     def __hash__(self) -> int:
         return hash(self.raw_name)
@@ -95,32 +114,3 @@ class Object(ObjectABC):
 
     def append_to_query_data(self, qd: 'QueryData') -> None:
         qd.append(self.name) # Default Implementation
-
-
-
-def object_key(obj):
-    return id(obj)
-
-
-class FrozenObjset(FrozenKeySetABC[T], Generic[T]):
-
-    def _key(self, obj: T):
-        return object_key(obj)
-
-
-class Objset(KeySetABC[T], Generic[T]):
-
-    def _key(self, obj: T):
-        return object_key(obj)
-
-
-class OrderedFrozenObjset(FrozenObjset[T], OrderedFrozenKeySetABC[T], Generic[T]):
-
-    def _key(self, obj: T):
-        return object_key(obj)
-
-
-class OrderedObjset(Objset[T], OrderedKeySetABC[T], Generic[T]):
-
-    def _key(self, obj: T):
-        return object_key(obj)

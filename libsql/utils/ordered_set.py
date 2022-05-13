@@ -11,7 +11,7 @@ T = TypeVar('T')
 class FrozenOrderedSet(FrozenSetABC[T], Generic[T]):
     """ Frozen Ordered Set """
 
-    def __init__(self, _iterable: Iterable[T]) -> None:
+    def __init__(self, _iterable: Iterable[T] = ()) -> None:
         """ Init """
         self._dict = {v: None for v in _iterable}
 
