@@ -22,7 +22,10 @@ def test_basic_select():
     SELECT_PRODUCTS_SQL = b'SELECT `products`.`id`, `products`.`category_id`, `products`.`name`, `products`.`price` FROM `products`'
 
     products = db['products']
+    assert list(products.selected_exprs) == [products['id'], products['category_id'], products['name'], products['price']]
+
     products.prepare_result()
+
     assert products.select_query == QueryData(stmt=SELECT_PRODUCTS_SQL)
     assert len(products) == 30
     assert products.result[0]['id'] == 1 and products.result[0]['price'] == 60000
@@ -33,8 +36,6 @@ def test_basic_select():
     assert computers.select_query == QueryData(stmt=SELECT_PRODUCTS_SQL + b' WHERE (`products`.`category_id` = ?)', prms=[1])
     assert len(computers) == 6
     assert computers.result[0]['id'] == 1 and computers.result[0]['price'] == 60000
-
-    print([(vc.name, vc.expr) for vc in computers.columns])
 
     # Order (one column)
     sorted_computers = computers.order_by(-products['price'])
@@ -54,13 +55,12 @@ def test_select():
     sales_count = sales['count'].sum().as_('sales_count')
     sales_price = (sales['count'] * sales['price']).sum().as_('sales_price')
 
-    base_view = (prods
-        .inner_join(cates, prods['category_id'] == cates['id'])
-        .left_join(sales, sales['product_id'] == prods['id'])
-        .where(cates['id'].in_(3, 4))
-        .group_by(prods['id']))
+    view1 = prods.inner_join(cates, prods['category_id'] == cates['id'])
+    view2 = view1.left_join(sales, sales['product_id'] == prods['id'])
+    view3 = view2.where(cates['id'].in_(3, 4))
+    view = view3.group_by(prods['id'])
 
-    res = base_view.select_column(
+    res = view.select_column(
             cates['id'].as_('cate_id'),
             cates['name'].as_('cate_name'),    
             prods['id'],

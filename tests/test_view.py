@@ -3,7 +3,7 @@
 """
 import pytest
 import libsql
-from libsql.schema.column import TableColumn, ViewColumn
+from libsql.schema.column import NamedViewColumnABC, TableColumn, NamedViewColumn
 from libsql.syntax.exprs import Arg
 from libsql.syntax.errors import QueryArgumentError
 from libsql.utils.tabledata import TableData
@@ -13,14 +13,13 @@ def test_view_1():
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
 
     categories = db['categories']
-    assert [str(c.name) for c in categories.columns] == ['id', 'name']
+    assert [str(c.name) for c in categories.selected_exprs] == ['id', 'name']
 
     cate_name_col = categories['name']
-    assert isinstance(cate_name_col, ViewColumn) 
+    assert isinstance(cate_name_col, NamedViewColumnABC) 
     assert str(cate_name_col.name) == 'name'
-    assert isinstance(cate_name_col.expr, TableColumn) 
-    assert cate_name_col.expr.table == categories 
-    assert str(cate_name_col.expr.name) == 'name'
+    assert isinstance(cate_name_col, TableColumn) 
+    assert cate_name_col.table == categories
 
     assert categories.result == TableData(
         ['id', 'name'], [
@@ -124,10 +123,12 @@ def test_view_3():
     sales_price = (sales['count'] * sales['price']).sum().as_('sales_price')
 
     base_view = (prods
-        .inner_join(cates, prods['category_id'] == cates['id'])
+        .inner_join(
+            cates.select_column(cate_id=cates['id'], cate_name=cates['name']),
+            prods['category_id'] == cates['id']
+        )
         .left_join(sales, sales['product_id'] == prods['id'])
         .group_by(prods['id'])
-        .select_view_column(cates, cate_id=cates['id'], cate_name=cates['name'])
         .add_column(sales_count, sales_price)
         .order_by(-sales_price, -sales_count, -prods['price'])
     )
@@ -138,15 +139,13 @@ def test_view_3():
     filtered_view = base_view.where(sales_price >= 5000)
 
 
-
-
 def test_view_with_args():
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
     cates, prods, sales = db['categories', 'products', 'user_sale_products']
 
     view = (prods
-        .inner_join(cates, prods['category_id'] == cates['id'])
-        .select_view_column(cates, category_name = cates['name'])
+        .inner_join(cates.select_column(category_name = cates['name']),
+            prods['category_id'] == cates['id'])
         .where(cates['id'] == Arg(0))
         .order_by(-prods['price'])
     )
@@ -162,8 +161,8 @@ def test_view_with_args():
         view.with_args(1, 2).result
 
     view2 = (prods
-        .inner_join(cates, prods['category_id'] == cates['id'])
-        .select_view_column(cates, category_name = cates['name'])
+        .inner_join(cates.select_column(category_name = cates['name']),
+            prods['category_id'] == cates['id'])
         .where(cates['name'].like(Arg('cate_name_like')))
         .order_by(-prods['price'])
     )
@@ -188,8 +187,8 @@ def test_view_with_args():
 
     with pytest.raises(QueryArgumentError):
         view4 = (prods
-            .inner_join(cates, prods['category_id'] == cates['id'])
-            .select_view_column(cates, category_name = cates['name'])
+            .inner_join(cates.select_column(category_name = cates['name']),
+                prods['category_id'] == cates['id'])
             .where(name=Arg('name'))
             .where(category_name=Arg('name', default='Cables'))
             .order_by(-prods['price'])
@@ -218,3 +217,11 @@ def test_view_with_args():
 #     base_view = base_view.order_by(sales_price=False, sales_count=False, price=False)
 
 #     base_view.self_based_view().where(base_view['sales_price'] >= 5000).query_select
+
+
+def main():
+    test_view_with_args()
+
+if __name__ == '__main__':
+    main()
+

@@ -6,12 +6,9 @@ from typing import List
 import pytest
 
 import libsql
-from libsql.schema.column import TableColumn, ViewColumn
-from libsql.syntax.exprs import Arg
-from libsql.syntax.errors import ObjectNotFoundError, QueryArgumentError
+from libsql.schema.column import NamedViewColumnABC, TableColumn, NamedViewColumn
+from libsql.syntax.errors import ObjectNotFoundError
 from libsql.syntax.object_abc import ObjectName
-from libsql.utils.tabledata import TableData
-from libsql.syntax.keywords import OrderType
 
 TABLE_COLUMN_NAMES = [
     ['products', ['id', 'category_id', 'name', 'price']],
@@ -55,21 +52,23 @@ def test_table_column_get(tablename: str, colnames: List[str]):
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
-    assert all(isinstance(c, ViewColumn) for c in table.columns)
-    assert all(c.base_view is table for c in table.columns)
-    assert all(isinstance(c.expr, TableColumn) and c.expr.table is table for c in table.columns)
-    assert [str(c.name) for c in table.columns] == colnames
+    assert all(isinstance(c, NamedViewColumnABC) for c in table.selected_exprs)
+    assert all(isinstance(c, TableColumn) and c.table is table for c in table.selected_exprs)
+    assert [str(c.name) for c in table.selected_exprs] == colnames
 
-    columns = list(table.columns)
+    columns = list(table.selected_exprs)
     assert columns == [db[tablename][name] for name in colnames]
     assert columns == [table[name] for name in colnames]
     assert columns == [table.column(name) for name in colnames]
+    assert columns == [table.selected_column(name) for name in colnames]
     assert columns == [table.col(name) for name in colnames]
     assert columns == [table.column_or_none(name) for name in colnames]
     assert columns == [table.to_column(name) for name in colnames]
+    assert columns == [table.to_column(col) for col in table.selected_exprs]
+    assert columns == [table.to_selected_column(name) for name in colnames]
+    assert columns == [table.to_selected_column(col) for col in table.selected_exprs]
     assert columns == [table.to_column_or_none(name) for name in colnames]
-    assert columns == [table.to_column(col) for col in table.columns]
-    assert columns == [table.to_column_or_none(col) for col in table.columns]
+    assert columns == [table.to_column_or_none(col) for col in table.selected_exprs]
     assert columns == list(table[tuple(colnames)])
     assert list(reversed(columns)) == [table[name] for name in reversed(colnames)]
     
@@ -77,6 +76,8 @@ def test_table_column_get(tablename: str, colnames: List[str]):
     assert columns == [table[ObjectName(name)] for name in colnames]
     assert columns == [table.column(name.encode()) for name in colnames]
     assert columns == [table.column(ObjectName(name)) for name in colnames]
+    assert columns == [table.selected_column(name.encode()) for name in colnames]
+    assert columns == [table.selected_column(ObjectName(name)) for name in colnames]
 
     assert all(name in table for name in colnames)
     assert all(column in table for column in columns)
@@ -84,7 +85,14 @@ def test_table_column_get(tablename: str, colnames: List[str]):
     with pytest.raises(ObjectNotFoundError):
         table['qwerty']
     with pytest.raises(ObjectNotFoundError):
+        table.column('qwerty')
+    with pytest.raises(ObjectNotFoundError):
         table.to_column('qwerty')
+    with pytest.raises(ObjectNotFoundError):
+        table.selected_column('qwerty')
+    with pytest.raises(ObjectNotFoundError):
+        table.to_selected_column('qwerty')
+
     assert table.column_or_none('qwerty') is None
     assert table.to_column_or_none('qwerty') is None
     assert 'qwerty' not in table
@@ -95,27 +103,28 @@ def test_table_view_from_table(tablename, colnames):
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
-    columns = list(table.columns)
+    columns = list(table.selected_exprs)
 
     view = table.where(table[colnames[0]] == 1)
 
-    assert all(isinstance(c, ViewColumn) for c in view.columns)
-    assert all(c.base_view is table for c in view.columns)
-    assert all(isinstance(c.expr, TableColumn) and c.expr.table is table for c in view.columns)
-    assert all(str(c.name) == name for c, name in zip(view.columns, colnames))
+    assert all(isinstance(c, NamedViewColumnABC) for c in view.selected_exprs)
+    assert all(isinstance(c, TableColumn) and c.table is table for c in view.selected_exprs)
+    assert all(str(c.name) == name for c, name in zip(view.selected_exprs, colnames))
 
-    assert columns == list(view.columns)
+    assert columns == list(view.selected_exprs)
     assert columns == [view[name] for name in colnames]
     assert list(reversed(columns)) == [view[name] for name in reversed(colnames)]
     assert all(view.to_column(name) is column for column, name in zip(columns, colnames))
+    assert all(view.to_selected_column(name) is column for column, name in zip(columns, colnames))
     assert all(view.to_column(view[name]) is column for column, name in zip(columns, colnames))
+    assert all(view.to_selected_column(view[name]) is column for column, name in zip(columns, colnames))
 
     ordered_table = table.order_by(columns[0])
-    assert all(isinstance(c, ViewColumn) and c.base_view is table for c in ordered_table.columns)
+    assert all(isinstance(c, NamedViewColumnABC) and c.base_view is table for c in ordered_table.selected_exprs)
     assert columns == [ordered_table[name] for name in colnames]
 
     ordered_view = view.order_by(columns[0])
-    assert all(isinstance(c, ViewColumn) and c.base_view is table for c in ordered_view.columns)
+    assert all(isinstance(c, NamedViewColumnABC) and c.base_view is table for c in ordered_view.selected_exprs)
     assert columns == [ordered_view[name] for name in colnames]
 
 
@@ -135,9 +144,11 @@ def test_table_view_from_table_column(tablename: str, colname: str):
     assert view.result == table.where(**{colname: 1}).result
 
     otable_a = table.order_by(column)
-    assert all(isinstance(c, ViewColumn) and c.base_view is table for c in otable_a.columns)
+    assert all(isinstance(c, NamedViewColumnABC) and c.base_view is table for c in otable_a.selected_exprs)
     assert otable_a[colname] is column
+    assert otable_a.selected_column(colname) is column
     assert otable_a.to_column(column) is column
+    assert otable_a.to_selected_column(column) is column
 
     assert otable_a.select_query == table.order_by(+column).select_query
     assert otable_a.result       == table.order_by(+column).result
@@ -145,9 +156,11 @@ def test_table_view_from_table_column(tablename: str, colname: str):
     assert otable_a.result       == table.order_by(**{colname: True}).result
 
     otable_d = table.order_by(-column)
-    assert all(isinstance(c, ViewColumn) and c.base_view is table for c in otable_a.columns)
+    assert all(isinstance(c, NamedViewColumnABC) and c.base_view is table for c in otable_a.selected_exprs)
     assert otable_d[colname] is column
+    assert otable_d.selected_column(colname) is column
     assert otable_d.to_column(column) is column
+    assert otable_d.to_selected_column(column) is column
 
     assert otable_d.select_query == table.order_by(-column).select_query
     assert otable_d.result       == table.order_by(-column).result
@@ -155,7 +168,7 @@ def test_table_view_from_table_column(tablename: str, colname: str):
     assert otable_d.result       == table.order_by(**{colname: False}).result
 
     oview = view.order_by(column)
-    assert all(isinstance(c, ViewColumn) and c.base_view is table for c in oview.columns)
+    assert all(isinstance(c, NamedViewColumnABC) and c.base_view is table for c in oview.selected_exprs)
     assert oview[colname] is column
     assert oview.to_column(column) is column
 
@@ -168,11 +181,12 @@ def test_table_view_from_table_column_select(tablename: str, colnames: List[str]
     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
+    columns = [table[name] for name in colnames]
     coln0 = colnames[0]
     col0 = table[coln0]
 
     s_table = table.select_column(col0)
-    assert list(s_table.columns) == [col0]
+    assert list(s_table.selected_exprs) == [col0]
     assert s_table[coln0] is col0
     assert col0 in s_table
     assert coln0 in s_table
@@ -182,17 +196,33 @@ def test_table_view_from_table_column_select(tablename: str, colnames: List[str]
     assert s_table.to_column(col0) is col0
     assert s_table.to_column_or_none(coln0) is col0
     assert s_table.to_column_or_none(col0) is col0
+    
+    assert s_table.selected_column(coln0) is col0
+    assert s_table.selected_column_or_none(coln0) is col0
+    assert s_table.to_selected_column(coln0) is col0
+    assert s_table.to_selected_column(col0) is col0
+    assert s_table.to_selected_column_or_none(coln0) is col0
+    assert s_table.to_selected_column_or_none(col0) is col0
+    
+    assert coln0 in s_table
+    assert coln0 in s_table.selected_exprs
+    assert col0 in s_table
+    assert col0 in s_table.selected_exprs
+    assert columns == [table.column(name) for name in colnames]
+    assert columns == [table.column_or_none(name) for name in colnames]
+    assert columns == [table.to_column(name) for name in colnames]
+    assert columns == [table.to_column_or_none(name) for name in colnames]
 
-    assert all(name not in s_table for name in colnames[1:])
-    assert all(table[name] not in s_table for name in colnames[1:])
-    assert all(s_table.column_or_none(name) is None for name in colnames[1:])
-    assert all(s_table.to_column_or_none(name) is None for name in colnames[1:])
-    assert all(s_table.to_column_or_none(table[name]) is None for name in colnames[1:])
+    assert all(name not in s_table.selected_exprs for name in colnames[1:])
+    assert all(table[name] not in s_table.selected_exprs for name in colnames[1:])
+    assert all(s_table.selected_column_or_none(name) is None for name in colnames[1:])
+    assert all(s_table.to_selected_column_or_none(name) is None for name in colnames[1:])
+    assert all(s_table.to_selected_column_or_none(table[name]) is None for name in colnames[1:])
 
     for name in colnames[1:]:
         with pytest.raises(ObjectNotFoundError):
-            col = s_table[name]
+            col = s_table.selected_column(name)
         with pytest.raises(ObjectNotFoundError):
-            col = s_table.to_column(name)
+            col = s_table.to_selected_column(name)
 
     assert len(table.result) == len(s_table.result)

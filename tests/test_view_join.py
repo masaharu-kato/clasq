@@ -2,8 +2,9 @@
     Test View Joins
 """
 import libsql
-from libsql.schema.column import ViewColumn
+from libsql.schema.column import NamedViewColumnABC
 from libsql.schema.view import JoinedView
+from libsql.syntax.exprs import AliasedExpr
 from libsql.syntax.keywords import JoinType
 
 def test_view_join_1():
@@ -19,12 +20,9 @@ def test_view_join_1():
     assert view.join_type == JoinType.INNER
     assert view.view_to_join is categories
     
-    JOINED_COLNAMES = ['id', 'category_id', 'name', 'price', 'categories.id', 'categories.name']
+    JOINED_COLNAMES = ['id', 'category_id', 'name', 'price', 'categories_id', 'categories_name']
 
-    assert all(isinstance(c, ViewColumn) for c in view.columns)
-    assert all(c.base_view is view for c in view.columns)
-    assert [c.name for c in view.columns] == JOINED_COLNAMES
+    assert all(isinstance(c, (NamedViewColumnABC, AliasedExpr)) for c in view.selected_exprs)
+    assert [c.name for c in view.selected_exprs] == JOINED_COLNAMES
 
-    assert list(view.columns) == [view[name] for name in JOINED_COLNAMES]
-
-
+    assert list(view.selected_exprs) == [view[name] for name in JOINED_COLNAMES]
