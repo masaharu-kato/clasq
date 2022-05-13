@@ -2,33 +2,25 @@
     Column classes
 """
 from abc import abstractproperty
-from typing import TYPE_CHECKING, Generic, Iterator, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Optional, Union
 
-from ..syntax.object_abc import NameLike, Object, ObjectABC
-from ..syntax.exprs import AliasedExpr, ExprABC, ExprObjectABC
-from ..syntax.keywords import OrderType, OrderLike, ReferenceOption
+from ..syntax.object_abc import NameLike, Object, ObjectABC, ObjectName
+from ..syntax.exprs import ExprABC, ExprObjectABC, FrozenOrderedExprObjectSet
+from ..syntax.keywords import OrderType, ReferenceOption
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData, QueryLike
 from ..syntax.errors import ObjectNameAlreadyExistsError, ObjectNotSetError
 from ..syntax.sqltypes import SQLType, make_sql_type, get_type_sql
+from ..utils.keyset import FrozenKeySetABC, FrozenOrderedKeySetABC
 
 if TYPE_CHECKING:
-    from .view import BaseViewABC
+    from .view import BaseViewABC, NamedViewABC
     from .table import Table, ForeignKeyReference
     from .database import Database
 
 
 class ColumnABC(ExprObjectABC):
     """ Column ABC """
-        
-    @property
-    def query_for_select_column(self) -> 'QueryLike':
-        """ Get a query for SELECT """
-        return self  # Default Implementation
-
-    @abstractproperty
-    def base_view(self) -> 'BaseViewABC':
-        """ Get a base View object """
 
     @property
     def database(self):
@@ -40,54 +32,60 @@ class ColumnABC(ExprObjectABC):
         """ Get a database server connection """
         return self.base_view.cnx
 
+        
+class NamedViewColumnABC(ColumnABC, ObjectABC):
+    """ Column object which belonging to the BaseView object """
+
+    @abstractproperty
+    def named_view(self) -> 'NamedViewABC':
+        """ Get a belonging BaseView object 
+        """
+
+    @property
+    def name_with_view(self) -> ObjectName:
+        return self.named_view.name + self.name
+
     def append_to_query_data(self, qd: QueryData) -> None:
         """ Append this expression to the QueryData object
 
         Args:
             qd (QueryData): QueryData object to be appended
         """
-        # if self.base_view.name_or_none is None:
-        #     raise ObjectError('Cannot append column which view is unnamed.')
-        
-        if self.base_view.name_or_none is not None:
-            qd.append(self.base_view, b'.')
-        super().append_to_query_data(qd)
-
-    def __repr__(self):
-        return 'Cabc(%s.%s)' % (self._typename, repr(self.base_view), self.name)
+        qd.append(self.named_view, b'.', self.name)
 
 
-
-ET = TypeVar('ET', bound=ExprABC)
-class ViewColumn(AliasedExpr[ET], ColumnABC, Generic[ET]):
+class NamedViewColumn(NamedViewColumnABC, Object):
     """ View Column expression """
 
-    def __init__(self, base_view: 'BaseViewABC', name: NameLike, expr: ET) -> None:
-        super().__init__(expr, name)
-        self._base_view = base_view
+    def __init__(self, named_view: 'NamedViewABC', name: NameLike) -> None:
+        super().__init__(name)
+        self._named_view = named_view
 
     @property
-    def base_view(self) -> 'BaseViewABC':
-        return self._base_view
+    def named_view(self) -> 'NamedViewABC':
+        """ Get a belonging NamedView object 
+            (Overridef from `NamedViewColumnABC`
+        """
+        return self._named_view
 
     @property
     def select_column_query(self) -> 'QueryLike':
         """ Get a query for SELECT column """
-        # If the alias equals to the original expression name,
-        #   returns original expr without alias
-        if isinstance(self.expr, ObjectABC) and self.name == self.expr.name:
-            return self.expr
-
-        # Get a query with alias
-        return super().select_column_query
-
-    def renamed(self, name: NameLike) -> 'ViewColumn':
-        return ViewColumn(self._base_view, name, self.expr)
+        return self
 
     def __repr__(self):
-        return ('VC[%s.%s](%s)'
+        return ('NmViCol[%s.%s](%s)'
             % (repr(self.base_view), self.name, repr(self.expr)))
-        
+
+
+class FrozenOrderedNamedViewColumnSet(FrozenOrderedKeySetABC[ObjectName, NamedViewColumnABC]):
+
+    def _key(self, obj: NamedViewColumnABC) -> ObjectName:
+        return obj.name_with_view
+
+    def _key_or_none(self, obj) -> Optional[ObjectName]:
+        return self._key(obj) if isinstance(obj, NamedViewColumnABC) else None
+
 
 class TableColumnRef:
     def __init__(self,
@@ -131,15 +129,12 @@ class ColumnArgs:
         self.ref_index_name = ref_index_name
 
 
-class TableColumn(ColumnABC, Object):
+class TableColumn(NamedViewColumnABC, Object):
     """ Table Column expression """
 
     def __init__(self, table: 'Table', args: ColumnArgs):
-        ColumnABC.__init__(self)
-        Object.__init__(self, args.name)
-
-        if self.name in table._table_columns_by_name:
-            raise ObjectNameAlreadyExistsError('Column name already exists.', self.name)
+        self._table = table
+        super().__init__(args.name)
 
         self._sql_type = make_sql_type(args.sql_type) if args.sql_type is not None else None
         self._not_null = args.not_null or args.primary
@@ -158,6 +153,13 @@ class TableColumn(ColumnABC, Object):
                 on_delete=args.ref_on_delete,
                 name=args.ref_index_name,
             )
+
+    @property
+    def named_view(self) -> 'NamedViewABC':
+        """ Get a belonging BaseView object 
+            (Overridef from `NamedViewColumnABC`
+        """
+        return self._table
 
     @property
     def sql_type(self) -> Optional[SQLType]:

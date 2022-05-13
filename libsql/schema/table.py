@@ -1,7 +1,7 @@
 """
     Table classes
 """
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
 
 from ..syntax.keywords import ReferenceOption
 from ..syntax.object_abc import ObjectName
@@ -11,8 +11,9 @@ from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData
 from ..syntax.errors import ObjectNameAlreadyExistsError, ObjectNotFoundError
 from ..utils.tabledata import TableData
-from .column import TableColumn, ColumnArgs
-from .view import NamedViewWithColumnsABC, ViewABC, View
+from .column import FrozenOrderedNamedViewColumnSet, TableColumn, ColumnArgs
+from .view_abc import ViewABC, NamedViewABC
+from .view import CustomView, ViewFinal
 
 if TYPE_CHECKING:
     from .database import Database
@@ -37,25 +38,18 @@ class TableArgs:
 
 
 # class Table(NamedViewABC, ViewWithColumns, Object): # <-- super() is not working correctly on these base classes
-class Table(NamedViewWithColumnsABC):
+class Table(NamedViewABC, ViewFinal):
     """ Table Expr """
 
     def __init__(self, database: 'Database', args: TableArgs):
+        self._database = database
         self._name = ObjectName(args.name)
 
         if self.name in database:
             raise ObjectNameAlreadyExistsError('Table name already exists.', self.name)
 
-        self._database = database
-        self._table_columns: List[TableColumn] = []
-        self._table_columns_by_name: Dict[ObjectName, TableColumn] = {}
-
-        for colargs in args.column_args:
-            table_column = TableColumn(self, colargs)
-            self._table_columns.append(table_column)
-            self._table_columns_by_name[table_column.name] = table_column
-            
-        super().__init__(self._table_columns_by_name)
+        super().__init__(FrozenOrderedNamedViewColumnSet(
+            TableColumn(self, colargs) for colargs in args.column_args))
         
         self._primary_key: Optional[List[TableColumn]] = None
         self._unique: Optional[List[TableColumn]] = None
@@ -72,6 +66,11 @@ class Table(NamedViewWithColumnsABC):
         """ Get a view name 
             (Override from `ViewABC` """
         return self._name
+
+    def iter_table_columns(self) -> Iterator[TableColumn]:
+        for col in self.base_column_set:
+            assert isinstance(col, TableColumn)
+            yield col
     
     def table_column(self, val: Union[TableColumn, NameLike]) -> TableColumn:
         if isinstance(val, TableColumn):
@@ -79,9 +78,10 @@ class Table(NamedViewWithColumnsABC):
                 raise ObjectNotFoundError('Column of the different table.', val)
             return val
         key = ObjectName(val)
-        if key not in self._table_columns_by_name:
+        if key not in self.base_column_set:
             raise ObjectNotFoundError('Column not found.', key)
-        return self._table_columns_by_name[key]
+        assert isinstance(col := self.base_column_set[key], TableColumn)
+        return col
 
     def append_to_query_data(self, qd: 'QueryData') -> None:
         """ Append a query of this table 
@@ -211,7 +211,7 @@ class Table(NamedViewWithColumnsABC):
         self.db.execute(
             b'CREATE', b'TEMPORARY' if temporary else None, b'TABLE',
             b'IF NOT EXISTS' if if_not_exists else None,
-            self, b'(', [c.query_for_create_table for c in self._table_columns], b')'
+            self, b'(', [c.query_for_create_table for c in self.iter_table_columns()], b')'
         )
         # TODO: Fetch
 
@@ -219,7 +219,7 @@ class Table(NamedViewWithColumnsABC):
         return 'T(%s)' % self.name
  
     def _new_view(self, *args, **kwargs) -> 'ViewABC':
-        return View(*args, **kwargs)
+        return CustomView(*args, **kwargs)
         
     def _proc_colval_args(self, value_dict: Optional[Dict[Union[NameLike, TableColumn], ValueType]], **values: ValueType) -> Dict[TableColumn, ValueType]:
         return {self.table_column(c): v for c, v in [*(value_dict.items() if value_dict else []), *values.items()]}
