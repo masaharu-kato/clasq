@@ -29,7 +29,12 @@ class FuncABC(Object):
         self.check_args(args)
         return self._func_call(*args)
 
-    def _func_call(self, *nn_args: 'ExprLike') -> 'ExprABC':
+    def _func_call(self, *nn_args: 'ExprLike') -> 'FuncCall':
+        """ Internal function call
+
+        Returns:
+            ExprABC: Function Call object
+        """
         return FuncCall(self, *nn_args)
 
     def __call__(self, *args) -> 'ExprABC':
@@ -45,6 +50,9 @@ class FuncABC(Object):
     def check_args(self, args: Tuple['ExprLike', ...]) -> None:
         """ Check the arguments
             (Raise exception if there are errors)
+
+        Args:
+            args (Tuple[ExprLike, ...]): Argument values
         """
 
     @property
@@ -161,7 +169,7 @@ class OpABC(Func):
 
 
 class UnaryOp(OpABC):
-    """ Unary Op """
+    """ Unary Opertor """
     
     def __init__(self, name: bytes, plv: Optional[int] = None):
         super().__init__(name, [Any], Any, plv)
@@ -715,7 +723,7 @@ class AliasedExpr(ExprObject, Generic[ET]):
         self._expr = expr
 
     @property
-    def expr(self):
+    def expr(self) -> ET:
         return self._expr
 
     @property
