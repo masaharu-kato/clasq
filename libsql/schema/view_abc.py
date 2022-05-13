@@ -326,7 +326,8 @@ class ViewABC(ABC):
         # If a val is ExprObjectABC,
         #   get from self selected expression set using the object name
         if isinstance(val, ExprObjectABC):
-            if val in self.selected_exprs or val in self.base_column_set:
+            if (val in self.selected_exprs or 
+                (isinstance(val, NamedViewColumnABC) and val in self.base_column_set)):
                 return val
                 
         # If a val is not ExprObjectABC and is ExprABC,
