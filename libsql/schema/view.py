@@ -13,6 +13,7 @@ from ..syntax.errors import ObjectArgTypeError, ObjectArgValueError, ObjectError
 from ..utils.tabledata import RowData, TableData
 from .column import FrozenOrderedNamedViewColumnSet, NamedViewColumn
 from .view_abc import CustomViewABC, ViewABC, BaseViewABC, NamedViewABC, ViewWithColumnsABC, ColumnArgTypes, OrderedColumnArgTypes
+from .sqltypes import AnySQLType
 
 if TYPE_CHECKING:
     from .database import Database
@@ -259,7 +260,8 @@ class SubqueryView(NamedViewABC):
     def __init__(self, target_view: ViewABC) -> None:
         self._target_view = target_view
         super().__init__(FrozenOrderedNamedViewColumnSet(
-            NamedViewColumn(self, col.name) for col in target_view.selected_exprs))
+            NamedViewColumn(self, col.name, AnySQLType) # TODO: Fix type
+            for col in target_view.selected_exprs))
 
     @property
     def target_view(self) -> ViewABC:

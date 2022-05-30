@@ -11,7 +11,8 @@ from ..syntax.exprs import AliasedExpr, ExprABC, ExprLike, ExprObjectABC, ExprOb
 from ..syntax.keywords import JoinType, JoinLike, OrderTypeLike
 from ..syntax.errors import NotaSelfObjectError, ObjectArgTypeError, ObjectNotFoundError, ObjectNotSetError
 from ..utils.tabledata import RowData, TableData
-from .column import ColumnABC, FrozenOrderedNamedViewColumnSet, NamedViewColumn, NamedViewColumnABC
+from .column_abc import ColumnABC
+from .column import FrozenOrderedNamedViewColumnSet, NamedViewColumn, NamedViewColumnABC
 
 if TYPE_CHECKING:
     from .database import Database
@@ -117,7 +118,7 @@ class ViewABC(ABC):
             Raises:
                 ObjectNotSetError: The database is not set.
         """
-        return self.database.cnx
+        return self.database.con
 
     @property
     def exists_on_db(self) -> bool:
