@@ -121,6 +121,10 @@ dmypy.json
 # Configuration directory
 /conf
 
+# Different version environment directories
+/env38
+/env39
+
 # Other private files and folders
 /nohup.out
 /log.txt
