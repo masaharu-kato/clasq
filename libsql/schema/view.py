@@ -49,7 +49,7 @@ class ViewFinal(ViewABC):
         self.__select_query: Optional[QueryData] = None
         self.__result: Optional[TableData] = None
 
-    def _generate_select_query(self) -> None:
+    def _generate_select_query(self) -> QueryData:
         """ Generate QueryData for SELECT query """
         assert self._selected_exprs
         # print('self.base_view.select_from_query=', self.base_view.select_from_query)
