@@ -13,21 +13,22 @@ if TYPE_CHECKING:
 class RecordABC:
     """ Record ABC """
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__()
-        self._vals = {expr.name: Cell(self, expr, arg) for expr, arg in zip(self.view.selected_exprs, args)}
-        for name, arg in kwargs.items():
-            expr = self.view.column(name)
-            assert expr.name not in self._vals
-            self._vals[expr.name] = Cell(self, expr, arg)
+    # def __init__(self, *args, **kwargs) -> None:
+    #     super().__init__()
+    #     self._vals = {expr.name: Cell(self, expr, arg) for expr, arg in zip(self.view._selected_exprs, args)}
+    #     for name, arg in kwargs.items():
+    #         expr = self.view.get_column(name)
+    #         assert expr.name not in self._vals
+    #         self._vals[expr.name] = Cell(self, expr, arg)
 
     @abstractproperty
     def view(self) -> 'ViewABC':
         """ Get a parent view object """
 
+    @abstractmethod
     def asdict(self) -> Mapping['ObjectName', 'Cell']:
         """ Get a data dictionary """
-        return self._vals
+        # return self._vals
 
 
 T = TypeVar('T')
