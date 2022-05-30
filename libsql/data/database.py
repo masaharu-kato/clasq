@@ -2,7 +2,10 @@
     Database data class
 """
 
+from abc import abstractmethod
 from typing import Optional, TYPE_CHECKING
+
+from ..schema.database_abc import DatabaseReferenceABC
 from ..schema.database import Database
 from ..utils.name_conversion import camel_to_snake
 
@@ -11,29 +14,42 @@ if TYPE_CHECKING:
     from ..syntax.object_abc import NameLike
 
 
-class DatabaseClass:
+class _DatabaseClassMeta(type, DatabaseReferenceABC):
+    """ Database Metaclass """
+    
+
+class DatabaseClass(metaclass=_DatabaseClassMeta):
     """ Database class """
 
-    _db_obj : 'Database'
+    _db_name: Optional[str] = None
+    _db_charset: Optional[str] = None
+    _db_collate: Optional[str] = None
+    __db_obj: Database
     # _instance: Optional['DatabaseClass'] = None
 
     @classmethod
-    def _db_name(cls) -> 'NameLike':
+    def get_entity(cls) -> Database:
+        return cls.__db_obj
+
+    @classmethod
+    def _get_db_name(cls) -> 'NameLike':
         if cls is DatabaseClass:
             raise RuntimeError('DatabaseClass is not specialized.')
+        if cls._db_name:
+            return cls._db_name
         return camel_to_snake(cls.__name__)
 
     @classmethod
-    def _db_charset(cls) -> Optional['NameLike']:
-        return None
+    def _get_db_charset(cls) -> Optional['NameLike']:
+        return cls._db_charset
 
     @classmethod
-    def _db_collate(cls) -> Optional['NameLike']:
-        return None
+    def _get_db_collate(cls) -> Optional['NameLike']:
+        return cls._db_collate
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
-        cls._db_obj = Database(name=cls._db_name(), charset=cls._db_charset(), collate=cls._db_collate())
+        cls.__db_obj = Database(name=cls._get_db_name(), charset=cls._get_db_charset(), collate=cls._get_db_collate())
 
     # @classmethod
     # def get_schema_object(cls) -> 'Database':
