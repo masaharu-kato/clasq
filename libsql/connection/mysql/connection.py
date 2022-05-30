@@ -14,8 +14,8 @@ from ..prepared_stmt import ConnectionABC, PreparedStatementExecutorABC
 from .prepared_stmt import MySQLPreparedStatementExecutor
 
 
-def connect(*args, **kwargs):
-    cnx = MySQLConnection(*args, **kwargs)
+def connect(**cnx_options):
+    cnx = MySQLConnection(**cnx_options)
     return cnx.db
     
 
@@ -32,6 +32,10 @@ class MySQLConnectionABC(ConnectionABC):
     def commit(self):
         """ Commit the current transaction (Override) """
         return self.cnx.commit()
+
+    def _use_db(self, dbname: bytes) -> None:
+        print('set _use_db', dbname)
+        self.cnx.database = dbname
 
     ### =========================================================================================================== ###
     #    Execute and Query

@@ -2,7 +2,7 @@
     SQL Connection classes and functions
 """
 from abc import abstractmethod
-from typing import Collection, Iterable, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Collection, Iterable, Iterator, Optional, Type, Union
 
 from ..utils.tabledata import TableData
 from ..schema.database import Database
@@ -10,27 +10,55 @@ from ..syntax.sql_values import SQLValue
 from ..syntax.query_data import QueryData, QueryLike, ValueType, QueryArgVals
 from . import errors
 
+if TYPE_CHECKING:
+    from ..data.database import DatabaseClass
+
 
 class ConnectionABC:
     """ Database connection ABC """
 
-    def __init__(self, database: str, init_db=True, **other_cnx_options) -> None:
-        self._cnx_options = {'database': database, **other_cnx_options}
-        self._dbname = database.encode()
-        # self._last_qd: Optional[QueryData] = None
+    def __init__(self, database: Optional[Union[str, Database]] = None,
+                #  database_class: Optional[Type['DatabaseClass']] = None,
+                 init_db=True, **other_cnx_options) -> None:
+        """ Init """
+        self._cnx_options = {**other_cnx_options}
         self._db: Optional[Database] = None
-        if init_db:
-            self._db = Database(self._dbname, cnx=self)
+
+        if isinstance(database, Database):
+            self._cnx_options['database'] = database.raw_name
+            self._db = database
+
+        elif isinstance(database, str):
+            self._cnx_options['database'] = database
+            self._db = Database(database)
+            self._db.set_con(self)
+            self._db.fetch_from_db()
 
     @property
     def db(self) -> Database:
         if self._db is None:
             raise RuntimeError('Database is not initialized.')
         return self._db
+
+    def set_db(self, db: Optional['Database']) -> None:
+        if db is None:
+            if self._db is not None:
+                self._db = None
+        else:
+            if self._db is None:
+                self._db = db
+                self._use_db(db.raw_name)
+            else:
+                if self._db is not db:
+                    raise RuntimeError('Database is already set.')
     
     @property
     def cnx_options(self):
         return self._cnx_options
+
+    @abstractmethod
+    def _use_db(self, dbname: bytes) -> None:
+        """ Execute a USE database query """
 
     @abstractmethod
     def run_stmt_prms(self, stmt: bytes, prms: Collection[SQLValue] = ()) -> Optional[TableData]:
