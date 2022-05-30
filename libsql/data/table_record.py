@@ -116,7 +116,8 @@ class TableClass(TableClassABC, metaclass=_TableClassMeta):
             raise RuntimeError('Cannot instantiate a TableClass directly.')
         return super().__new__()
 
-    # TODO: add __init__
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__()
     
 
 T = TypeVar('T')

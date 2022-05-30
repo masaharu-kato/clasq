@@ -13,26 +13,58 @@ if TYPE_CHECKING:
 class RecordABC:
     """ Record ABC """
 
-    # def __init__(self, *args, **kwargs) -> None:
-    #     super().__init__()
-    #     self._vals = {expr.name: Cell(self, expr, arg) for expr, arg in zip(self.view._selected_exprs, args)}
-    #     for name, arg in kwargs.items():
-    #         expr = self.view.get_column(name)
-    #         assert expr.name not in self._vals
-    #         self._vals[expr.name] = Cell(self, expr, arg)
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__()
 
-    @abstractproperty
-    def view(self) -> 'ViewABC':
-        """ Get a parent view object """
+        _names = set()
+        _selected_exprs = self._view._selected_exprs
+
+        for i, expr in enumerate(_selected_exprs):
+            name = expr.get_name()
+
+            _has_kwd_arg = name in kwargs
+            _has_pos_arg = i < len(args)
+            if _has_kwd_arg and _has_pos_arg:
+                raise ValueError('Duplicate column value.', i, expr)
+
+            if _has_kwd_arg or _has_pos_arg:
+                value = kwargs[name] if _has_kwd_arg else args[i]
+                if hasattr(self, name):
+                    raise RuntimeError('Cannot overwrite attribute.', name)
+                setattr(self, name, value)
+                _names.add(name)
+
+        _unused_args = args[len(_selected_exprs):]
+        _unused_kwargs = [key for key in kwargs if key not in _names]
+        if _unused_args or _unused_kwargs:
+            raise ValueError('Unused arguments: ', _unused_args, _unused_kwargs)
+            
+        self._names = frozenset(_names)
+
 
     @abstractmethod
-    def asdict(self) -> Mapping['ObjectName', 'Cell']:
+    def get_view(self) -> 'ViewABC':
+        """ Get a parent view object """
+
+    @property
+    def _view(self):
+        return self.get_view()
+
+    @abstractmethod
+    def asdict(self) -> Mapping['ObjectName', 'ColumnValue']:
         """ Get a data dictionary """
-        # return self._vals
+        return {name: getattr(self, name) for name in self._names}
+
+    def __getitem__(self, name):
+        if name in self:
+            return getattr(self, name)
+
+    def __contains__(self, name):
+        return name in self._names
 
 
 T = TypeVar('T')
-class Cell(Generic[T]):
+class ColumnValue(Generic[T]):
     """ Cell (Value of column in record) """
     def __init__(self, record: RecordABC, expr: 'ExprObjectABC', v: T) -> None:
         super().__init__()
