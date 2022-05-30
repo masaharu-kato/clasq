@@ -2,7 +2,6 @@
     Basic classes definitions for built-in data types in SQL
 """
 from abc import ABC, ABCMeta, abstractmethod
-import types
 import typing
 
 class _SQLTypeABCMeta(ABCMeta):
