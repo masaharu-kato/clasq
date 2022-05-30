@@ -204,15 +204,22 @@ class Table(NamedViewABC, ViewFinal):
         self._exists_on_db = False
         self.db.remove_table(self)
 
-    def create(self, *, temporary=False, if_not_exists=False, drop_if_exists=False) -> None:
-        """ Create this Table on the database """
-        if drop_if_exists:
-            self.drop(temporary=temporary, if_exists=True)
-        self.db.execute(
+    def get_create_table_query(self, *, temporary=False, if_not_exists=False) -> QueryData:
+        return QueryData(
             b'CREATE', b'TEMPORARY' if temporary else None, b'TABLE',
             b'IF NOT EXISTS' if if_not_exists else None,
             self, b'(', [c.query_for_create_table for c in self.iter_table_columns()], b')'
         )
+    
+    @property
+    def create_table_query(self) -> QueryData:
+        return self.get_create_table_query()
+
+    def create(self, *, temporary=False, if_not_exists=False, drop_if_exists=False) -> None:
+        """ Create this Table on the database """
+        if drop_if_exists:
+            self.drop(temporary=temporary, if_exists=True)
+        self.db.execute(self.get_create_table_query(temporary=temporary, if_not_exists=if_not_exists))
         # TODO: Fetch
 
     def __repr__(self) -> str:
