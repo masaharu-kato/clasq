@@ -15,7 +15,7 @@ from .column_abc import ColumnABC
 from .column import FrozenOrderedNamedViewColumnSet, NamedViewColumn, NamedViewColumnABC
 
 if TYPE_CHECKING:
-    from .database import Database
+    from .database_abc import DatabaseABC
     from ..connection import ConnectionABC
     from .view import JoinedView, ViewWithArgs
 
@@ -25,83 +25,89 @@ OrderedColumnArgTypes = Union[NameLike, ExprObjectABC, Tuple[Union[NameLike, Exp
 class ViewABC(ABC):
     """ View Expr """
 
-    @property
-    def name_or_none(self) -> Optional[ObjectName]:
+    @abstractproperty
+    def _view_name_or_none(self) -> Optional[ObjectName]:
         """ Get a name of this view if set
+            (Abstract property)
 
         Returns:
             Optional[ExprLike]: Name of this view
                 If not set, returns `None`.
         """
-        return None  # Default Implementation
+        raise NotImplementedError()
 
     @property
-    def name(self) -> ObjectName:
-        if self.name_or_none is None:
+    def _view_name(self) -> ObjectName:
+        if (name := self._view_name_or_none) is None:
             raise ObjectNotSetError('This view does not have a name.')
-        return self.name_or_none
+        return name
 
     @abstractproperty
-    def base_view(self) -> 'BaseViewABC':
+    def _base_view(self) -> 'BaseViewABC':
         """ Get a base view object
             (If self is instance of BaseViewABC, returns self)
         """
+        raise NotImplementedError()
         
     @property
-    def base_named_view(self) -> 'NamedViewABC':
+    def _base_named_view(self) -> 'NamedViewABC':
         """ Get a view with name (if not exists, get from base view recursively) """
-        return self.base_view.base_named_view
+        return self._base_view._base_named_view
 
     @property
-    def base_name(self) -> ObjectName:
+    def _base_name(self) -> ObjectName:
         """ Get a view name (if not exists, get from base view recursively) """
-        return self.base_named_view.name
+        return self._base_named_view._view_name
 
     @property
-    def column_alias_format(self) -> ObjectName:
-        return self.base_name + '_%s'
+    def _column_alias_format(self) -> ObjectName:
+        return self._base_name + '_%s'
 
     @abstractproperty
-    def base_column_set(self) -> FrozenOrderedNamedViewColumnSet:
+    def _base_column_set(self) -> FrozenOrderedNamedViewColumnSet:
         """ Set of base column (column in named view) in the base view of this view
 
         Returns:
             FrozenNamedViewColumnSet: Frozen set of NamedViewColumnABC
         """
+        raise NotImplementedError()
         
     @abstractproperty
-    def selected_exprs(self) -> FrozenOrderedExprObjectSet:
+    def _selected_exprs(self) -> FrozenOrderedExprObjectSet:
         """ Set of selected column (or expression) in this view
 
         Returns:
             FrozenOrderedExprObjectSet: Frozen ordered set of selected column
         """
+        raise NotImplementedError()
 
     @abstractmethod
     def _new_view(self, *args, **kwargs) -> 'ViewABC':
         """ Create a new view """
+        raise NotImplementedError()
 
     @abstractproperty
-    def database_or_none(self) -> Optional['Database']:
+    def _database_or_none(self) -> Optional['DatabaseABC']:
         """ Get a parent Database object
             If not exists, returns None.
 
             [Abstract property]
         """
+        raise NotImplementedError()
 
     @property
-    def database(self) -> 'Database':
+    def _database(self) -> 'DatabaseABC':
         """ Get a parent Database object of this view
 
             Raises:
                 ObjectNotSetError: The database is not set.
         """
-        if self.database_or_none is None:
+        if self._database_or_none is None:
             raise ObjectNotSetError('Database is not set.')
-        return self.database_or_none
+        return self._database_or_none
 
     @property
-    def db(self) -> 'Database':
+    def db(self) -> 'DatabaseABC':
         """ Get a parent Database object of this view
             Synonym of `database` property.
 
@@ -109,23 +115,23 @@ class ViewABC(ABC):
                 ObjectNotSetError: The database is not set.
 
         """
-        return self.database
+        return self._database
 
     @property
-    def cnx(self) -> 'ConnectionABC':
+    def _con(self) -> 'ConnectionABC':
         """ Get a database connection from a parent Database object
 
             Raises:
                 ObjectNotSetError: The database is not set.
         """
-        return self.database.con
+        return self._database._con
 
     @property
     def exists_on_db(self) -> bool:
         return False # Default Implementation
 
     @abstractproperty
-    def where_expr(self) -> ExprABC:
+    def _where_expr(self) -> ExprABC:
         """ Get a WHERE expression of this view
 
         Returns:
@@ -133,7 +139,7 @@ class ViewABC(ABC):
         """
 
     @abstractproperty
-    def groups(self) -> FrozenOrderedExprObjectSet:
+    def _groups(self) -> FrozenOrderedExprObjectSet:
         """ Get GROUP BY grouping columns of this view
 
         Returns:
@@ -141,7 +147,7 @@ class ViewABC(ABC):
         """
 
     @abstractproperty
-    def orders(self) -> FrozenOrderedExprObjectSet:
+    def _orders(self) -> FrozenOrderedExprObjectSet:
         """ Get ORDER BY ordering columns of this view
 
         Returns:
@@ -149,7 +155,7 @@ class ViewABC(ABC):
         """
 
     @abstractproperty
-    def outer_orders(self) -> FrozenOrderedExprObjectSet:
+    def _outer_orders(self) -> FrozenOrderedExprObjectSet:
         """ Get ORDER BY ordering columns for outer views
 
         Returns:
@@ -157,7 +163,7 @@ class ViewABC(ABC):
         """
 
     @abstractproperty
-    def limit_value(self) -> Optional[ExprLike]:
+    def _limit_value(self) -> Optional[ExprLike]:
         """ Get a LIMIT value of this view
 
         Returns:
@@ -166,7 +172,7 @@ class ViewABC(ABC):
         """
 
     @abstractproperty
-    def offset_value(self) -> Optional[ExprLike]:
+    def _offset_value(self) -> Optional[ExprLike]:
         """ Get a OFFSET value of this view
 
         Returns:
@@ -174,7 +180,7 @@ class ViewABC(ABC):
                 If not set, returns `None`.
         """
 
-    def selected_column(self, val: NameLike) -> ExprObjectABC:
+    def get_selected_column(self, val: NameLike) -> ExprObjectABC:
         """ Get a column by its name from the selected columns
 
         Args:
@@ -187,20 +193,20 @@ class ViewABC(ABC):
             ViewColumn: Column object with the specified name
         """
         name = ObjectName(val)
-        if name not in self.selected_exprs:
+        if name not in self._selected_exprs:
             raise ObjectNotFoundError('Column not found.', name)
-        return self.selected_exprs[name]
+        return self._selected_exprs[name]
 
 
-    def selected_column_or_none(self, val: NameLike) -> Optional[ExprObjectABC]:
+    def get_selected_column_or_none(self, val: NameLike) -> Optional[ExprObjectABC]:
         try:
-            return self.selected_column(val)
+            return self.get_selected_column(val)
         except (ObjectNotFoundError, NotaSelfObjectError):
             pass
         return None
 
 
-    def column(self, val: NameLike) -> ExprObjectABC:
+    def get_column(self, val: NameLike) -> ExprObjectABC:
         """ Get a column by its name from the base columns
 
         Args:
@@ -213,19 +219,14 @@ class ViewABC(ABC):
             ViewColumn: Column object with the specified name
         """
         name = ObjectName(val)
-        if name in self.selected_exprs:
-            return self.selected_exprs[name]
-        if name in self.base_column_set:
-            return self.base_column_set[name]
+        if name in self._selected_exprs:
+            return self._selected_exprs[name]
+        if name in self._base_column_set:
+            return self._base_column_set[name]
         raise ObjectNotFoundError('Column not found.', name)
 
 
-    def col(self, val: NameLike) -> ExprObjectABC:
-        """ Synonym of `column` method """
-        return self.column(val)
-
-
-    def column_or_none(self, val: NameLike) -> Optional[ExprObjectABC]:
+    def get_column_or_none(self, val: NameLike) -> Optional[ExprObjectABC]:
         """ Get a Column object with the specified name
             
             Returns `None` if a column object with the specified name is not found.
@@ -238,18 +239,13 @@ class ViewABC(ABC):
                 otherwise, `None`.
         """
         try:
-            return self.column(val)
+            return self.get_column(val)
         except (ObjectNotFoundError, NotaSelfObjectError):
             pass
         return None
 
 
-    def get(self, val: NameLike) -> Optional[ExprObjectABC]:
-        """ Synonym of `column_or_none` method """
-        return self.column_or_none(val)
-
-
-    def to_selected_column(self, val: Union[NameLike, ExprABC]) -> ExprObjectABC:
+    def _to_selected_column(self, val: Union[NameLike, ExprABC]) -> ExprObjectABC:
         """ Get a Column of a specific name, or check the Column is valid
 
             Get a Column object with the specified name
@@ -272,18 +268,18 @@ class ViewABC(ABC):
         # If a val is NameLike (bytes | str | ObjectName),
         #   get from self selected expression set
         if not isinstance(val, ExprABC):
-            return self.selected_column(val)
+            return self.get_selected_column(val)
 
         # If a val is ExprObjectABC,
         #   get from self selected expression set using the object name
         if isinstance(val, ExprObjectABC):
-            if val in self.selected_exprs:
+            if val in self._selected_exprs:
                 return val
                 
         # If a val is not ExprObjectABC and is ExprABC,
         #   search from the exprs in self selected expression set
         else:
-            for sel_expr in self.selected_exprs:
+            for sel_expr in self._selected_exprs:
                 if isinstance(sel_expr, AliasedExpr) and val is sel_expr.expr:
                     return sel_expr
 
@@ -291,15 +287,15 @@ class ViewABC(ABC):
             'The specified column or Expression is not included in this view.', val)
 
 
-    def to_selected_column_or_none(self, val: Union[NameLike, ExprABC]) -> Optional[ExprObjectABC]:
+    def _to_selected_column_or_none(self, val: Union[NameLike, ExprABC]) -> Optional[ExprObjectABC]:
         try:
-            return self.to_selected_column(val)
+            return self._to_selected_column(val)
         except (ObjectNotFoundError, NotaSelfObjectError):
             pass
         return None
 
 
-    def to_column(self, val: Union[NameLike, ExprABC]) -> ExprObjectABC:
+    def _to_column(self, val: Union[NameLike, ExprABC]) -> ExprObjectABC:
         """ Get a Column of a specific name, or check the Column is valid
 
             Get a Column object with the specified name
@@ -322,26 +318,26 @@ class ViewABC(ABC):
         # If a val is NameLike (bytes | str | ObjectName),
         #   get from self selected expression set
         if not isinstance(val, ExprABC):
-            return self.column(val)
+            return self.get_column(val)
 
         # If a val is ExprObjectABC,
         #   get from self selected expression set using the object name
         if isinstance(val, ExprObjectABC):
-            if (val in self.selected_exprs or 
-                (isinstance(val, NamedViewColumnABC) and val in self.base_column_set)):
+            if (val in self._selected_exprs or 
+                (isinstance(val, NamedViewColumnABC) and val in self._base_column_set)):
                 return val
                 
         # If a val is not ExprObjectABC and is ExprABC,
         #   search from the exprs in self selected expression set
         else:
-            for sel_expr in self.selected_exprs:
+            for sel_expr in self._selected_exprs:
                 if isinstance(sel_expr, AliasedExpr) and val is sel_expr.expr:
                     return sel_expr
 
         raise ObjectNotFoundError(
             'The specified column or Expression is not included in this view.', val)
 
-    def to_column_or_none(self, val: Union[NameLike, ExprABC]) -> Optional[ExprObjectABC]:
+    def _to_column_or_none(self, val: Union[NameLike, ExprABC]) -> Optional[ExprObjectABC]:
         """ Get a Column of a specific name, or check the Column is valid
 
             Get a Column object with the specified name
@@ -362,13 +358,13 @@ class ViewABC(ABC):
                 Otherwise, `None`.
         """
         try:
-            return self.to_column(val)
+            return self._to_column(val)
         except (ObjectNotFoundError, NotaSelfObjectError):
             pass
         return None
 
     def __contains__(self, val: Union[NameLike, ExprABC]) -> bool:
-        return self.to_column_or_none(val) is not None
+        return self._to_column_or_none(val) is not None
 
     def clone(self,
         *,
@@ -380,15 +376,15 @@ class ViewABC(ABC):
         offset: Optional[ExprLike] = None,
     ) -> 'ViewABC':
         # print('Clone to a new view ...')
-        assert self.selected_exprs
+        assert self._selected_exprs
         return self._new_view(
-            self.base_view,  # TODO: ?
-            *(column_likes if column_likes is not None else [self.selected_exprs]),
-            where = self.where_expr & where,
-            groups = (*self.groups, *groups),  # TODO: Add overwrite mode
-            orders = (*self.orders, *orders),  # TODO: Add overwrite mode
-            limit = limit if limit is not None else self.limit_value,
-            offset = offset if offset is not None else self.offset_value,
+            self._base_view,  # TODO: ?
+            *(column_likes if column_likes is not None else [self._selected_exprs]),
+            where = self._where_expr & where,
+            groups = (*self._groups, *groups),  # TODO: Add overwrite mode
+            orders = (*self._orders, *orders),  # TODO: Add overwrite mode
+            limit = limit if limit is not None else self._limit_value,
+            offset = offset if offset is not None else self._offset_value,
         )
 
     def select_column(self, *cols: Union[NameLike, ColumnABC], **as_cols: Union[NameLike, ExprABC]) -> 'ViewABC':
@@ -428,7 +424,7 @@ class ViewABC(ABC):
             ViewABC: New View object with additional columns
         """
         return self.clone(column_likes=itertools.chain(
-            [self.selected_exprs],
+            [self._selected_exprs],
             self._proc_col_args(*cols, **as_cols)))
 
     def where(self, *exprs: ExprABC, **coleqs: ExprABC) -> 'ViewABC':
@@ -461,7 +457,7 @@ class ViewABC(ABC):
         """
         return self.clone(where=OP.AND(
             *exprs,
-            *(self.column(c) == v for c, v in coleqs.items()))
+            *(self.get_column(c) == v for c, v in coleqs.items()))
         )
 
     def group_by(self, *columns: Union[NameLike, ColumnABC], **cols: Optional[bool]) -> 'ViewABC':
@@ -571,6 +567,7 @@ class ViewABC(ABC):
         Returns:
             JoinedView: New Joined View object
         """
+        raise NotImplementedError()
 
     def inner_join(self, view: 'ViewABC', expr: ExprABC) -> 'JoinedView':
         """ Make a INNER Joined View
@@ -643,14 +640,14 @@ class ViewABC(ABC):
             return self
 
         if isinstance(val, (bytes, str, ObjectName)):
-            return self.column(val)
+            return self.get_column(val)
         
         if isinstance(val, ExprABC):
             return self.where(val)
 
         if isinstance(val, tuple):
             if all(isinstance(v, (bytes, str, ObjectName)) for v in val):
-                return (*(self.column(v) for v in val),)
+                return (*(self.get_column(v) for v in val),)
 
             if all(isinstance(v, ExprABC) for v in val):
                 return self.where(*val)
@@ -670,35 +667,38 @@ class ViewABC(ABC):
         return self.result_with_args(*argvals, **kwargvals)
     
     @abstractmethod
-    def refresh_select_query(self) -> None:
+    def _refresh_select_query(self) -> None:
         """ Refresh a SELECT query data """
 
     @abstractproperty
-    def select_query_or_none(self) -> Optional[QueryData]:
+    def _select_query_or_none(self) -> Optional[QueryData]:
         """ Get a SELECT query data if exists """
+        raise NotImplementedError()
 
     @property
-    def select_query(self) -> QueryData:
-        if self.select_query_or_none is None:
-            self.refresh_select_query()
-        assert self.select_query_or_none is not None
-        return self.select_query_or_none
+    def _select_query(self) -> QueryData:
+        if self._select_query_or_none is None:
+            self._refresh_select_query()
+        assert self._select_query_or_none is not None
+        return self._select_query_or_none
     
     @abstractmethod
     def refresh_result(self) -> None:
         """ Refresh a result """
+        raise NotImplementedError()
 
     @abstractproperty
-    def result_or_none(self) -> Optional[TableData]:
+    def _result_or_none(self) -> Optional[TableData]:
         """ Get a result if exists """
+        raise NotImplementedError()
 
     def prepare_result(self) -> None:
-        if self.result_or_none is None:
+        if self._result_or_none is None:
             return self.refresh_result()
 
     @property
     def is_result_ready(self) -> bool:
-        return self.result_or_none is not None
+        return self._result_or_none is not None
 
     @property
     def result(self) -> TableData:
@@ -709,8 +709,8 @@ class ViewABC(ABC):
             TableData: Result table data
         """
         self.prepare_result()
-        assert self.result_or_none is not None
-        return self.result_or_none
+        assert self._result_or_none is not None
+        return self._result_or_none
 
     def __iter__(self):
         return iter(self.result)
@@ -726,14 +726,14 @@ class ViewABC(ABC):
             return self.result == value
         return super().__eq__(value)
 
-    def check_eq(self, view: 'ViewABC') -> bool:
-        return (self.base_view == view.base_view
-            and self.selected_exprs == view.selected_exprs
-            and self.where_expr  == view.where_expr
-            and self.groups == view.groups
-            and self.orders == view.orders
-            and self.limit_value  == view.limit_value
-            and self.offset_value == view.offset_value)
+    def _check_eq(self, view: 'ViewABC') -> bool:
+        return (self._base_view == view._base_view
+            and self._selected_exprs == view._selected_exprs
+            and self._where_expr  == view._where_expr
+            and self._groups == view._groups
+            and self._orders == view._orders
+            and self._limit_value  == view._limit_value
+            and self._offset_value == view._offset_value)
 
     def drop(self, *, if_exists=False):
         """ Run DROP VIEW query """
@@ -757,7 +757,7 @@ class ViewABC(ABC):
     def _proc_view(self, viewlike: Union['ViewABC', NameLike]) -> 'ViewABC':
         if isinstance(viewlike, ViewABC):
             return viewlike
-        return self.database[viewlike]
+        return self._database[viewlike]
 
     def _proc_col_args(self, *collikes: ColumnArgTypes, **as_exprs: Union[NameLike, ExprABC]) -> Iterable[ColumnArgTypes]:
         return itertools.chain(
@@ -767,123 +767,208 @@ class ViewABC(ABC):
         )
 
     def __repr__(self) -> str:
-        if self.name_or_none is not None:
-            return 'Vabc[%s](%s)' % (self.name, repr(self.base_view))
-        return 'Vabc(%s)' % repr(self.base_view)
+        if self._view_name_or_none is not None:
+            return 'Vabc[%s](%s)' % (self._view_name, repr(self._base_view))
+        return 'Vabc(%s)' % repr(self._base_view)
 
 
 class BaseViewABC(ViewABC):
     """ Base View ABC """
 
     @property
-    def base_view(self) -> 'BaseViewABC':
+    def _base_view(self) -> 'BaseViewABC':
         return self
 
     @abstractmethod
-    def refresh_select_from_query(self) -> None:
+    def _refresh_select_from_query(self) -> None:
         """ Refresh a SELECT query data """
 
     @abstractproperty
-    def select_from_query_or_none(self) -> Optional[QueryData]:
+    def _select_from_query_or_none(self) -> Optional[QueryData]:
         """ Get a SELECT query data if exists """
         raise NotImplementedError()
 
     @property
-    def select_from_query(self) -> QueryData:
-        if self.select_from_query_or_none is None:
-            self.refresh_select_from_query()
-        assert self.select_from_query_or_none is not None
-        return self.select_from_query_or_none
+    def _select_from_query(self) -> QueryData:
+        if self._select_from_query_or_none is None:
+            self._refresh_select_from_query()
+        assert self._select_from_query_or_none is not None
+        return self._select_from_query_or_none
 
     @property
-    def selected_exprs(self) -> FrozenOrderedExprObjectSet:
+    def _selected_exprs(self) -> FrozenOrderedExprObjectSet:
         """ Set of selected column (or expression) in this view
 
         Returns:
             FrozenOrderedExprObjectSet: Frozen ordered set of selected column
         """
-        return FrozenOrderedExprObjectSet(self.base_column_set)
+        return FrozenOrderedExprObjectSet(self._base_column_set)
         
     @property
-    def where_expr(self) -> ExprABC:
+    def _where_expr(self) -> ExprABC:
         return NoneExpr
 
     @property
-    def orders(self) -> FrozenOrderedExprObjectSet:
+    def _orders(self) -> FrozenOrderedExprObjectSet:
         return FrozenOrderedExprObjectSet()
 
     @property
-    def outer_orders(self) -> FrozenOrderedExprObjectSet:
+    def _outer_orders(self) -> FrozenOrderedExprObjectSet:
         return FrozenOrderedExprObjectSet()
 
     @property
-    def groups(self) -> FrozenOrderedExprObjectSet:
+    def _groups(self) -> FrozenOrderedExprObjectSet:
         return FrozenOrderedExprObjectSet()
 
     @property
-    def limit_value(self) -> Optional[ExprLike]:
+    def _limit_value(self) -> Optional[ExprLike]:
         return None
     
     @property
-    def offset_value(self) -> Optional[ExprLike]:
+    def _offset_value(self) -> Optional[ExprLike]:
         return None
 
     def __repr__(self) -> str:
-        return 'BV(%s)' % repr(self.base_view)
+        return 'BV(%s)' % repr(self._base_view)
 
 
 class CustomViewABC(ViewABC):
     """ Derived view (View with base view object) """
     def __init__(self, base_view: BaseViewABC):
         super().__init__()
-        self._base_view = base_view
+        self.__base_view = base_view
             
     @property
-    def base_view(self) -> 'BaseViewABC':
+    def _base_view(self) -> 'BaseViewABC':
         """ Get a base View object
             (Override from `ViewABC`)
         """
-        return self._base_view
+        return self.__base_view
         
     @property
-    def base_column_set(self) -> FrozenOrderedNamedViewColumnSet:
+    def _base_column_set(self) -> FrozenOrderedNamedViewColumnSet:
         """ Returns a dictionary from name to View Column object
 
         Returns:
             FrozenNamedViewColumnSet: Frozen set of NamedViewColumn
         """
-        return self.base_view.base_column_set
+        return self._base_view._base_column_set
 
     @property
-    def database_or_none(self) -> Optional['Database']:
-        return self.base_view.database_or_none
+    def _database_or_none(self) -> Optional['DatabaseABC']:
+        return self._base_view._database_or_none
 
 
 class ViewWithColumnsABC(BaseViewABC):
     """ Unnamed table-like View ABC """
     
-    def __init__(self, column_set: FrozenOrderedNamedViewColumnSet):
-        super().__init__()
-        assert isinstance(column_set, FrozenOrderedNamedViewColumnSet)
-        assert all(isinstance(col, NamedViewColumnABC) for col in column_set)
-        self._named_view_columns = column_set
-
-    @property
-    def base_column_set(self) -> FrozenOrderedNamedViewColumnSet:
+    @abstractproperty
+    def _base_column_set(self) -> FrozenOrderedNamedViewColumnSet:
         """ Returns a dictionary from name to View Column object
 
         Returns:
             FrozenNamedViewColumnSet: Frozen set of NamedViewColumn
         """
-        return self._named_view_columns
+        raise NotImplementedError()
 
 
 class NamedViewABC(ViewWithColumnsABC, ObjectABC):
     """ Named View abstract class """
         
     @property
-    def base_named_view(self) -> 'NamedViewABC':
+    def _base_named_view(self) -> 'NamedViewABC':
         """ Get a view with name
             (Override from `ViewABC`)
         """
         return self
+
+
+class ViewWithTargetABC(ViewABC):
+    """ View with the other view object as a target
+        (Abstract class)
+    """
+
+    @abstractproperty
+    def _target_view(self) -> ViewABC:
+        """ Get a target view """
+        raise NotImplementedError()
+
+    @property
+    def _base_view(self) -> 'BaseViewABC':
+        return self._target_view._base_view
+
+    @property
+    def _database_or_none(self) -> Optional['DatabaseABC']:
+        """ Get a parent Database object
+            If not exists, returns None.
+        """
+        return self._target_view._database_or_none
+
+    @property
+    def _selected_exprs(self) -> FrozenOrderedExprObjectSet:
+        """ Set of selected column (or expression) in this view
+
+        Returns:
+            FrozenOrderedExprObjectSet: Frozen ordered set of selected column
+        """
+        return self._target_view._selected_exprs
+
+    @property
+    def _base_column_set(self) -> FrozenOrderedNamedViewColumnSet:
+        """ Set of base column (column in named view) in the base view of this view
+
+        Returns:
+            FrozenNamedViewColumnSet: Frozen set of NamedViewColumnABC
+        """
+        return self._target_view._base_column_set
+
+    @property
+    def _where_expr(self) -> ExprABC:
+        return self._target_view._where_expr
+
+    @property
+    def _orders(self) -> FrozenOrderedExprObjectSet:
+        return self._target_view._orders
+
+    @property
+    def _outer_orders(self) -> FrozenOrderedExprObjectSet:
+        return self._target_view._outer_orders
+
+    @property
+    def _groups(self) -> FrozenOrderedExprObjectSet:
+        return self._target_view._groups
+
+    @property
+    def _limit_value(self) -> Optional[ExprLike]:
+        return self._target_view._limit_value
+    
+    @property
+    def _offset_value(self) -> Optional[ExprLike]:
+        return self._target_view._offset_value
+
+
+class ViewReferenceABC(ViewWithTargetABC):
+
+    @property
+    def _view_name_or_none(self) -> Optional[ObjectName]:
+        return self._target_view._view_name_or_none
+        
+    def join(self, join_type: JoinLike, view: 'ViewABC', expr: ExprABC) -> 'JoinedView':
+        return self._target_view.join(join_type, view, expr)
+
+    def _new_view(self, *args, **kwargs) -> 'ViewABC':
+        return self._target_view._new_view(*args, **kwargs)
+
+    def _refresh_select_query(self) -> None:
+        return self._target_view._refresh_select_query()
+
+    @property
+    def _select_query_or_none(self) -> Optional[QueryData]:
+        return self._target_view._select_query_or_none
+
+    def refresh_result(self) -> None:
+        return self._target_view.refresh_result()
+
+    @property
+    def _result_or_none(self) -> Optional[TableData]:
+        return self._target_view._result_or_none

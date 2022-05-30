@@ -1,9 +1,11 @@
 """
     Table Record classes
 """
-from abc import ABC, abstractmethod, abstractproperty
+from abc import abstractmethod
 from typing import TYPE_CHECKING, Dict, Generic, List, Mapping, Optional, Type, TypeVar, get_args, get_origin, get_type_hints
 
+
+from ..schema.table_abc import TableABC, TableReferenceABC
 from ..schema.table import Table, TableArgs
 from ..schema.column_abc import TableColumnABC
 from ..schema.column import ColumnArgs
@@ -17,32 +19,51 @@ from .record_abc import RecordABC
 from .database import DatabaseClass
 
 if TYPE_CHECKING:
-    from ..syntax.exprs import ExprObjectABC
     from ..syntax.object_abc import ObjectName
     from ..syntax.object_abc import NameLike
+    from ..schema.database_abc import DatabaseABC
 
 
+class _TableClassMeta(type, TableReferenceABC):
+    """ Table Metaclass """
 
-class TableClass(RecordABC, DatabaseClass):
+
+class TableClassABC(RecordABC):
+    """ Table Class ABC """
+
+
+class TableClass(TableClassABC, metaclass=_TableClassMeta):
     """ Table class """
-    _table_obj: Table
+
+    _table_name: Optional[str] = None
+    __table_obj: Table
+
+    id: 'ColumnDef'
 
     @classmethod
-    def _table_name(cls) -> 'NameLike':
+    def get_entity(cls) -> Table:
+        return cls.__table_obj
+
+    @classmethod
+    def _get_table_name(cls) -> 'NameLike':
         if cls is TableClass:
             raise RuntimeError('TableClass is not specialized.')
+        if cls._table_name:
+            return cls._table_name
         return camel_to_snake(cls.__name__)
 
-    def __init_subclass__(cls) -> None:
+    def __init_subclass__(cls, *, db: Type['DatabaseClass'], name: Optional[str] = None) -> None:
         super().__init_subclass__()
+        db_obj = db.get_entity()
+        if name is not None:
+            cls._table_name = name
 
         col_args = [ColumnArgs('id', Int, primary=True, auto_increment=True)]
 
         for hint_name, type_hint in get_type_hints(cls).items():
-            if hint_name[0:1] == '_':
+            if hint_name[0:1] == '_' or hint_name == 'id': # TODO: fix ColumnDef for `id`
                 continue
-
-            print('hint_name, type_hint =', hint_name, type_hint)
+            # print('hint_name, type_hint =', hint_name, type_hint)
 
             nullable = False
             fkey_dest_table = None
@@ -55,17 +76,16 @@ class TableClass(RecordABC, DatabaseClass):
                 actual_type_like = type_args[0]
             else:
                 actual_type_like = type_hint
+            # print('actual_type_like=', actual_type_like)
 
-            print('actual_type_like=', actual_type_like)
-
-            if isinstance(actual_type_like, type) and issubclass(actual_type_like, TableClass):
+            if isinstance(actual_type_like, type) and issubclass(actual_type_like, TableClassABC):
                 col_name = '%s_id' % hint_name
                 col_type = Int
                 fkey_dest_table = actual_type_like
 
             else:
                 actual_type = make_sql_type(actual_type_like)
-                print('actual type=', actual_type)
+                # print('actual type=', actual_type)
                 actual_type_origin = get_origin(actual_type) or actual_type
                 # Calc a name and type for column object
                 if not issubclass(actual_type_origin, SQLTypeABC):
@@ -84,17 +104,19 @@ class TableClass(RecordABC, DatabaseClass):
 
             col_args.append(ColumnArgs(name=col_name, sql_type=col_type, default=default_value, nullable=nullable))
 
-        cls._table_obj = Table(cls._db_obj, TableArgs(cls._table_name(), *col_args))
-            
-    @property
-    def table(self) -> 'Table':
-        """ Get a parent table object """
-        return self._table_obj
+        cls.__table_obj = Table(db_obj, TableArgs(cls._get_table_name(), *col_args))
+        
+        db_obj.append_table(cls.__table_obj)
+
+        for column in cls.__table_obj.iter_table_columns():
+            setattr(cls, str(column.name), column)
 
     def __new__(cls, *args, **kwargs):
         if cls is TableClass:
             raise RuntimeError('Cannot instantiate a TableClass directly.')
         return super().__new__()
+
+    # TODO: add __init__
     
 
 T = TypeVar('T')
