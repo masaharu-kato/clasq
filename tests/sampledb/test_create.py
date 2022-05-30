@@ -1,14 +1,14 @@
 """
     Test View object
 """
-import libsql.connection.mysql
+import libsql.connection
 from libsql.schema.column import ColumnArgs
 from libsql.schema.sqltypes import VarChar
 
 def test_create_table():
-    db = libsql.connection.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = libsql.connection.MySQLConnection(user='testuser', password='testpass', database='testdb').db
     
-    if (_ext_table := db.table_or_none('students')) is not None:
+    if (_ext_table := db.get_table_or_none('students')) is not None:
         _ext_table.drop(if_exists=True)
 
     students = db.append_table('students',
@@ -20,3 +20,11 @@ def test_create_table():
     assert 'name' in db['students']
     
     students.create(drop_if_exists=True)
+
+
+def main():
+    test_create_table()
+
+if __name__ == '__main__':
+    main()
+

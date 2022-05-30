@@ -2,7 +2,7 @@
     Test View object
 """
 import pytest
-from libsql.connection.mysql import connect
+from libsql.connection import MySQLConnection
 from libsql.schema.column import NamedViewColumnABC, TableColumn, NamedViewColumn
 from libsql.syntax.exprs import Arg
 from libsql.syntax.errors import QueryArgumentError
@@ -10,10 +10,10 @@ from libsql.utils.tabledata import TableData
 from libsql.syntax.keywords import OrderType
 
 def test_view_1():
-    db = connect(user='testuser', password='testpass', database='testdb')
+    db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
 
     categories = db['categories']
-    assert [str(c.name) for c in categories.selected_exprs] == ['id', 'name']
+    assert [str(c.name) for c in categories._selected_exprs] == ['id', 'name']
 
     cate_name_col = categories['name']
     assert isinstance(cate_name_col, NamedViewColumnABC) 
@@ -106,7 +106,7 @@ def test_view_1():
 
 
 def test_view_2():
-    db = connect(user='testuser', password='testpass', database='testdb')
+    db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
     cates, prods, sales = db['categories', 'products', 'user_sale_products']
 
     comp_cates = cates.where((cates['id'] == 1) | (cates['id'] == 2))
@@ -116,7 +116,7 @@ def test_view_2():
 
 
 def test_view_3():
-    db = connect(user='testuser', password='testpass', database='testdb')
+    db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
     cates, prods, sales = db['categories', 'products', 'user_sale_products']
 
     sales_count = sales['count'].sum().as_('sales_count')
@@ -140,7 +140,7 @@ def test_view_3():
 
 
 def test_view_with_args():
-    db = connect(user='testuser', password='testpass', database='testdb')
+    db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
     cates, prods, sales = db['categories', 'products', 'user_sale_products']
 
     view = (prods

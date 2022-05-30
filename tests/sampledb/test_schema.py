@@ -47,11 +47,11 @@ def test_table_columns():
     )
 
     assert db.name == b'mydb'
-    assert db['mytable'].name == b'mytable'
+    assert db['mytable'].get_name() == b'mytable'
     assert db['mytable']['mycol2'].name == b'mycol2'
-    assert db.table(b'mytable')['mycol2'].name == b'mycol2'
-    assert db.table(b'mytable').column(b'mycol2').name == b'mycol2'
-    assert db.table(b'mytable2').col(b'mycol5').name == b'mycol5'
+    assert db.get_table(b'mytable')['mycol2'].name == b'mycol2'
+    assert db.get_table(b'mytable').get_column(b'mycol2').name == b'mycol2'
+    assert db.get_table(b'mytable2').get_column(b'mycol5').name == b'mycol5'
 
-    assert db['mytable'].name == b'mytable'
+    assert db['mytable'].get_name() == b'mytable'
     assert QueryData(db['mytable']['mycol2']) == QueryData(stmt=b'`mytable`.`mycol2`')

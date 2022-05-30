@@ -2,53 +2,24 @@
     Test create from class
 """
 
-from datetime import datetime
-from typing import Dict, List, Tuple, Type, Literal as Lt
+from typing import Dict, List, Type
 
 import pytest
-from libsql.data.database import DatabaseClass
-from libsql.data.table_record import TableClass, ColumnDef
-from libsql.schema.sqltype_abc import SQLTypeABC
-from libsql.schema.sqltypes import VarChar
 
-
-class MainDB(DatabaseClass):
-    """ Main DB """
-
-
-class Category(TableClass, MainDB):
-    name: ColumnDef[VarChar[Lt[64]]]
-
-class Product(TableClass, MainDB):
-    category: Category
-    name: ColumnDef[VarChar[Lt[128]]]
-    price: ColumnDef[int]
-
-class User(TableClass, MainDB):
-    name: ColumnDef[VarChar[Lt[64]]]
-    registered_at: ColumnDef[datetime] = None
-
-class UserSale(TableClass, MainDB):
-    user: User
-    sale_at: ColumnDef[datetime] = None
-
-class UserSaleProduct(TableClass, MainDB):
-    user_sale: UserSale
-    product: Product
-    price: ColumnDef[int]
-    count: ColumnDef[int]
+from libsql.data.table_record import TableClass
+from sample_db import Category, Product, User, UserSale, UserSaleProduct
 
 
 @pytest.mark.parametrize(('cls', 'query', 'columns', 'fkeys'), [
     (Category, 
-        b'CREATE TABLE `category` ('
+        b'CREATE TABLE `categories` ('
         b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
         b'`name` VARCHAR(64) NOT NULL)',
         ['id', 'name'],
         {},
     ),
     (Product, 
-        b'CREATE TABLE `product` ('
+        b'CREATE TABLE `products` ('
         b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
         b'`category_id` INT NOT NULL, '
         b'`name` VARCHAR(128) NOT NULL, '
@@ -57,7 +28,7 @@ class UserSaleProduct(TableClass, MainDB):
         {'category_id': 'category'},
     ),
     (User,
-        b'CREATE TABLE `user` ('
+        b'CREATE TABLE `users` ('
         b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
         b'`name` VARCHAR(64) NOT NULL, '
         b'`registered_at` DATETIME DEFAULT NULL)',
@@ -65,7 +36,7 @@ class UserSaleProduct(TableClass, MainDB):
         {},
     ),
     (UserSale, 
-        b'CREATE TABLE `user_sale` ('
+        b'CREATE TABLE `user_sales` ('
         b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
         b'`user_id` INT NOT NULL, '
         b'`sale_at` DATETIME DEFAULT NULL)',
@@ -73,7 +44,7 @@ class UserSaleProduct(TableClass, MainDB):
         {},
     ),
     (UserSaleProduct, 
-        b'CREATE TABLE `user_sale_product` ('
+        b'CREATE TABLE `user_sale_products` ('
         b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
         b'`user_sale_id` INT NOT NULL, '
         b'`product_id` INT NOT NULL, '
@@ -85,16 +56,16 @@ class UserSaleProduct(TableClass, MainDB):
 ])
 
 def test_create_table_from_class(cls: Type[TableClass], query, columns: List[str], fkeys: Dict[str, str]):
-    assert list(str(c.name) for c in cls._table_obj.iter_table_columns()) == columns
-    assert cls._table_obj.create_table_query.stmt == query
+    assert list(str(c.name) for c in cls._entity.iter_table_columns()) == columns
+    assert cls._entity.create_table_query.stmt == query
 
 
-def main():
-    category = Category._table_obj
-    print(list(c.name for c in category.iter_table_columns()))
-    print(category.create_table_query.stmt)
+# def main():
+#     category = Category._table_obj
+#     print(list(c.name for c in category.iter_table_columns()))
+#     print(category.create_table_query.stmt)
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
 
 
