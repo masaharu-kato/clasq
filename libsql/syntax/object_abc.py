@@ -111,6 +111,10 @@ class Object(ObjectABC):
     @property
     def name(self) -> ObjectName:
         return self._name
+        
+    @property
+    def raw_name(self):
+        return self.name.raw_name
 
     def append_to_query_data(self, qd: 'QueryData') -> None:
         qd.append(self.name) # Default Implementation
