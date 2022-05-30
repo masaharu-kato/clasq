@@ -8,7 +8,6 @@ from ..syntax.exprs import ExprABC
 from ..syntax.keywords import OrderType, ReferenceOption
 from ..syntax.query_abc import iter_objects
 from ..syntax.query_data import QueryData, QueryLike
-from ..syntax.errors import ObjectNotSetError
 from ..utils.keyset import FrozenOrderedKeySetABC
 from .column_abc import NamedViewColumnABC, TableColumnABC
 from .sqltype_abc import SQLTypeABC
@@ -17,7 +16,8 @@ from .sqltypes import make_sql_type
 
 if TYPE_CHECKING:
     from .view import BaseViewABC, NamedViewABC
-    from .table import Table, ForeignKeyReference
+    from .table import Table
+    from .fkey_ref import ForeignKeyReference
     from .database import Database
 
 
@@ -26,19 +26,19 @@ class NamedViewColumn(NamedViewColumnABC, Object):
 
     def __init__(self, named_view: 'NamedViewABC', name: NameLike, sql_type: Type) -> None:
         super().__init__(name)
-        self._named_view = named_view
-        self._sql_type = make_sql_type(sql_type)
+        self.__named_view = named_view
+        self.__sql_type = make_sql_type(sql_type)
 
     @property
-    def named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> 'NamedViewABC':
         """ Get a belonging NamedView object 
             (Overridef from `NamedViewColumnABC`
         """
-        return self._named_view
+        return self.__named_view
 
     @property
-    def sql_type(self) -> Type[SQLTypeABC]:
-        return self._sql_type
+    def _sql_type(self) -> Type[SQLTypeABC]:
+        return self.__sql_type
 
     @property
     def select_column_query(self) -> 'QueryLike':
@@ -53,7 +53,7 @@ class NamedViewColumn(NamedViewColumnABC, Object):
 class FrozenOrderedNamedViewColumnSet(FrozenOrderedKeySetABC[ObjectName, NamedViewColumnABC]):
 
     def _key(self, obj: NamedViewColumnABC) -> ObjectName:
-        return obj.name_with_view
+        return obj._name_with_view
 
     def _key_or_none(self, obj) -> Optional[ObjectName]:
         return self._key(obj) if isinstance(obj, NamedViewColumnABC) else None
@@ -70,7 +70,7 @@ class TableColumnRef:
         self.column_name = column_name
 
     def resolve(self) -> 'TableColumn':
-        return self.database.to_table(self.table_like).table_column(self.column_name)
+        return self.database._to_table(self.table_like).get_table_column(self.column_name)
 
 
 class ColumnArgs:
@@ -108,14 +108,14 @@ class TableColumn(TableColumnABC, Object):
         self._table = table
         super().__init__(args.name)
 
-        self._sql_type = make_sql_type(args.sql_type)
-        self._nullable = args.nullable and not args.primary
-        self._table = table
-        self._default_value = args.default
-        self._is_unique = args.unique
-        self._is_primary = args.primary
-        self._is_auto_increment = args.auto_increment
-        self._reference: Optional['ForeignKeyReference'] =  None
+        self.__sql_type = make_sql_type(args.sql_type)
+        self.__nullable = args.nullable and not args.primary
+        self.__table = table
+        self.__default_value = args.default
+        self.__is_unique = args.unique
+        self.__is_primary = args.primary
+        self.__is_auto_increment = args.auto_increment
+        self.__reference: Optional['ForeignKeyReference'] =  None
 
         if args.ref_column is not None:
             self._reference = ForeignKeyReference(
@@ -127,19 +127,19 @@ class TableColumn(TableColumnABC, Object):
             )
 
     @property
-    def named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> 'NamedViewABC':
         """ Get a belonging BaseView object 
             (Overridef from `NamedViewColumnABC`
         """
-        return self._table
+        return self.__table
 
     @property
-    def sql_type(self) -> Type[SQLTypeABC]:
-        return self._sql_type
+    def _sql_type(self) -> Type[SQLTypeABC]:
+        return self.__sql_type
 
     @property
     def is_nullable(self) -> bool:
-        return self._nullable
+        return self.__nullable
 
     @property
     def order_type(self) -> OrderType:
@@ -151,15 +151,15 @@ class TableColumn(TableColumnABC, Object):
 
     @property
     def base_view(self) -> 'BaseViewABC':
-        return self._table
+        return self.__table
 
     @property
     def table_or_none(self):
-        return self._table
+        return self.__table
 
     @property
     def default_value(self):
-        return self._default_value
+        return self.__default_value
 
     # @property
     # def comment(self):
@@ -167,27 +167,27 @@ class TableColumn(TableColumnABC, Object):
 
     @property
     def is_unique(self):
-        return self._is_unique
+        return self.__is_unique
 
     @property
     def is_primary(self):
-        return self._is_primary
+        return self.__is_primary
 
     @property
     def is_auto_increment(self):
-        return self._is_auto_increment
+        return self.__is_auto_increment
 
     @property
     def query_for_create_table(self) -> QueryData:
         return QueryData(
             self.name, b' ',
-            self.sql_type.sql_type_name,
+            self._sql_type.sql_type_name,
             (b'NOT', b'NULL') if not self.is_nullable else None,
             (b'DEFAULT', self.default_value) if self.default_value else None,
             b'UNIQUE' if self.is_unique else None,
             (b'PRIMARY', b'KEY') if self.is_primary else None,
             b'AUTO_INCREMENT' if self.is_auto_increment else None,
-            self._reference,
+            # self._reference,
         )
 
     def __repr__(self):

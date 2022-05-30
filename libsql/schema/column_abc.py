@@ -5,7 +5,7 @@ from abc import abstractproperty
 from typing import TYPE_CHECKING, Optional, Type
 
 from ..syntax.exprs import ObjectABC, ExprObjectABC
-from ..syntax.object_abc import ObjectName
+from ..syntax.object_abc import ObjectName, ObjectWithNamePropABC
 from ..syntax.query_data import QueryData
 from ..syntax.keywords import OrderType
 from ..syntax.errors import ObjectNotSetError
@@ -20,36 +20,36 @@ class ColumnABC(ExprObjectABC):
     """ Column ABC """
 
     @abstractproperty
-    def named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> 'NamedViewABC':
         """ Get a belonging BaseView object 
         """
 
     @abstractproperty
-    def sql_type(self) -> Type['SQLTypeABC']:
+    def _sql_type(self) -> Type['SQLTypeABC']:
         """ Get a type for SQL """
 
     @property
-    def sql_type_name(self) -> bytes:
+    def _sql_type_name(self) -> bytes:
         """ Get a type name for SQL """
-        return self.sql_type.sql_type_name
+        return self._sql_type.sql_type_name
 
     @property
-    def database(self):
+    def _database(self):
         """ Get a parent Database object """
-        return self.named_view.database
+        return self._named_view._database
 
     @property
-    def cnx(self):
+    def _con(self):
         """ Get a database server connection """
-        return self.named_view.cnx
+        return self._named_view._con
 
 
-class NamedViewColumnABC(ColumnABC, ObjectABC):
+class NamedViewColumnABC(ColumnABC, ObjectWithNamePropABC):
     """ Column object which belonging to the BaseView object """
 
     @property
-    def name_with_view(self) -> ObjectName:
-        return self.named_view.name + self.name
+    def _name_with_view(self) -> ObjectName:
+        return self._named_view._view_name + self.name
 
     def append_to_query_data(self, qd: QueryData) -> None:
         """ Append this expression to the QueryData object
@@ -57,7 +57,7 @@ class NamedViewColumnABC(ColumnABC, ObjectABC):
         Args:
             qd (QueryData): QueryData object to be appended
         """
-        qd.append(self.named_view, b'.', self.name)
+        qd.append(self._named_view, b'.', self.name)
 
 
 class TableColumnABC(NamedViewColumnABC):
@@ -110,7 +110,7 @@ class TableColumnABC(NamedViewColumnABC):
         return self.table
 
     @property
-    def named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> 'NamedViewABC':
         """ Get a belonging BaseView object 
             (Override from `NamedViewColumnABC`)
         """
