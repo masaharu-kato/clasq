@@ -56,9 +56,9 @@ class FuncABC(Object):
             args (Tuple[ExprLike, ...]): Argument values
         """
 
-    @property
-    def name(self) -> ObjectName:
+    def get_name(self) -> ObjectName:
         """ Returns a function name
+            (Override from `ObjectABC`)
 
         Returns:
             bytes: Function name
@@ -702,9 +702,9 @@ class OrderedExprObject(ExprObjectABC, Generic[EO]):
     def non_ordered(self) -> EO:
         return self._expr_obj
 
-    @property
-    def name(self) -> ObjectName:
-        return self.non_ordered.name
+    def get_name(self) -> ObjectName:
+        """ Get a object name (Override from `ObjectABC`) """
+        return self.non_ordered.get_name()
 
     @property
     def order_type(self) -> OrderType:
@@ -736,20 +736,20 @@ class ExprObjectSet(KeySetABC[ObjectName, ExprObjectABC]):
     """ Set of ExprObjectABC objects """
 
     def _key(self, obj: ExprObjectABC) -> ObjectName:
-        return obj.name
+        return obj.get_name()
 
     def _key_or_none(self, obj) -> Optional[ObjectName]:
-        return obj.name if isinstance(obj, ExprObjectABC) else None
+        return obj.get_name() if isinstance(obj, ExprObjectABC) else None
 
 
 class FrozenExprObjectSet(FrozenKeySetABC[ObjectName, ExprObjectABC]):
     """ Frozen set of ExprObjectABC objects """
 
     def _key(self, obj: ExprObjectABC) -> ObjectName:
-        return obj.name
+        return obj.get_name()
 
     def _key_or_none(self, obj) -> Optional[ObjectName]:
-        return obj.name if isinstance(obj, ExprObjectABC) else None
+        return obj.get_name() if isinstance(obj, ExprObjectABC) else None
 
 
 class OrderedExprObjectSet(ExprObjectSet, OrderedKeySetABC[ObjectName, ExprObjectABC]):

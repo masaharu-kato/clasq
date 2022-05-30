@@ -1,8 +1,8 @@
 """
     Definition Object class and subclasses
 """
-from abc import abstractproperty
-from typing import Iterator, TYPE_CHECKING, Union
+from abc import abstractmethod
+from typing import Hashable, Iterator, TYPE_CHECKING, Union
 
 from .query_abc import QueryABC
 
@@ -79,11 +79,17 @@ class ObjectName(QueryABC):
 NameLike = Union[bytes, str, ObjectName]
 
 
-class ObjectABC(QueryABC):
 
-    @abstractproperty
-    def name(self) -> ObjectName:
-        """ Get a name """
+class ObjectABC(QueryABC, Hashable):
+    """ Object abstract class """
+
+    @abstractmethod
+    def get_name(self) -> ObjectName:
+        """ Get a object name """
+        raise NotImplementedError()
+        
+    def get_raw_name(self):
+        return self.get_name().raw_name
 
     def __bytes__(self):
         return bytes(self.name)
@@ -95,26 +101,43 @@ class ObjectABC(QueryABC):
         yield self # Default implementation
 
     def __eq__(self, val) -> bool:
-        if isinstance(val, ObjectABC):
-            return type(self) == type(val) and self.name == val.name # Default Implementation
-        raise TypeError('Invalid type value', val)
+        try:
+            if isinstance(val, ObjectABC):
+                return type(self) == type(val) and self.get_name() == val.get_name() # Default Implementation
+            # raise TypeError('Invalid type value', self, val)
+        except TypeError:
+            pass
+        return super().__eq__(val)
 
     def __ne__(self, val) -> bool:
         return not self.__eq__(val)
 
+    def __hash__(self):
+        return hash(self.__class__, self.get_raw_name())
 
-class Object(ObjectABC):
+
+class ObjectWithNamePropABC(ObjectABC):
+    """ Object abstract class """
+
+    @property
+    def name(self) -> ObjectName:
+        """ Get a object name """
+        return self.get_name()
+
+    @property
+    def raw_name(self) -> ObjectName:
+        """ Get a object name """
+        return self.get_raw_name()
+
+
+class Object(ObjectWithNamePropABC):
     """ Column expression """
     def __init__(self, name: NameLike):
         self._name = ObjectName(name)
 
-    @property
-    def name(self) -> ObjectName:
+    def get_name(self) -> ObjectName:
+        """ Get a object name (Override from `ObjectABC`) """
         return self._name
-        
-    @property
-    def raw_name(self):
-        return self.name.raw_name
 
     def append_to_query_data(self, qd: 'QueryData') -> None:
         qd.append(self.name) # Default Implementation
