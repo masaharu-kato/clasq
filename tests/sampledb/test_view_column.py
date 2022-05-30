@@ -5,7 +5,7 @@ import itertools
 from typing import List
 import pytest
 
-import libsql
+from libsql.connection.mysql import connect
 from libsql.schema.column import NamedViewColumnABC, TableColumn, NamedViewColumn
 from libsql.syntax.errors import ObjectNotFoundError
 from libsql.syntax.object_abc import ObjectName
@@ -24,7 +24,7 @@ ALL_TABLE_COLUMN_NAMES = list(itertools.chain.from_iterable(
 
 @pytest.mark.parametrize('tablename', TABLE_NAMES)
 def test_table_get(tablename: str):
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
 
@@ -49,7 +49,7 @@ def test_table_get(tablename: str):
 
 @pytest.mark.parametrize(('tablename', 'colnames'), TABLE_COLUMN_NAMES)
 def test_table_column_get(tablename: str, colnames: List[str]):
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
     assert all(isinstance(c, NamedViewColumnABC) for c in table.selected_exprs)
@@ -100,7 +100,7 @@ def test_table_column_get(tablename: str, colnames: List[str]):
 
 @pytest.mark.parametrize('tablename, colnames', TABLE_COLUMN_NAMES)
 def test_table_view_from_table(tablename, colnames):
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
     columns = list(table.selected_exprs)
@@ -130,7 +130,7 @@ def test_table_view_from_table(tablename, colnames):
 
 @pytest.mark.parametrize('tablename, colname', ALL_TABLE_COLUMN_NAMES)
 def test_table_view_from_table_column(tablename: str, colname: str):
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
 
@@ -178,7 +178,7 @@ def test_table_view_from_table_column(tablename: str, colname: str):
 
 @pytest.mark.parametrize('tablename, colnames', TABLE_COLUMN_NAMES)
 def test_table_view_from_table_column_select(tablename: str, colnames: List[str]):
-    db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+    db = connect(user='testuser', password='testpass', database='testdb')
 
     table = db[tablename]
     columns = [table[name] for name in colnames]

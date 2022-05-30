@@ -5,7 +5,7 @@ import pytest
 from libsql.schema.database import Database
 from libsql.schema.table import TableArgs
 from libsql.schema.column import ColumnArgs
-from libsql.syntax.sqltypes import Int, VarChar
+from libsql.schema.sqltypes import Int, VarChar
 from libsql.syntax.exprs import Object
 from libsql.syntax.query_data import QueryData
 
