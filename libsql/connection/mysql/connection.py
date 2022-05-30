@@ -2,22 +2,18 @@
     Mysql Connection class implementation
 """
 from abc import abstractmethod, abstractproperty
-from typing import Collection, Dict, Iterable, Iterator, Optional
+from typing import TYPE_CHECKING, Collection, Dict, Iterable, Iterator, Optional
 
 import mysql.connector # type: ignore
 from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
+
 # from mysql.connector.pooling import MySQLConnectionPool # type: ignore
 
+from ...syntax.object_abc import ObjectName, NameLike
 from ...syntax.sql_values import SQLValue
 from ...utils.tabledata import TableData
 from ..prepared_stmt import ConnectionABC, PreparedStatementExecutorABC
 from .prepared_stmt import MySQLPreparedStatementExecutor
-
-
-def connect(**cnx_options):
-    cnx = MySQLConnection(**cnx_options)
-    return cnx.db
-    
 
 class MySQLConnectionABC(ConnectionABC):
 
@@ -33,9 +29,12 @@ class MySQLConnectionABC(ConnectionABC):
         """ Commit the current transaction (Override) """
         return self.cnx.commit()
 
-    def _use_db(self, dbname: bytes) -> None:
-        print('set _use_db', dbname)
-        self.cnx.database = dbname
+    def _use_db(self, dbname: NameLike) -> None:
+        self.cnx.database = str(ObjectName(dbname))
+
+    def last_row_id(self) -> int:
+        # TODO: Implement
+        raise NotImplementedError()
 
     ### =========================================================================================================== ###
     #    Execute and Query

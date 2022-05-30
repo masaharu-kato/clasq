@@ -4,14 +4,13 @@
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Collection, Iterable, Iterator, Optional, Type, Union
 
+
+from ..syntax.object_abc import NameLike
+from ..syntax.sql_values import SQLValue
 from ..utils.tabledata import TableData
 from ..schema.database import Database
-from ..syntax.sql_values import SQLValue
 from ..syntax.query_data import QueryData, QueryLike, ValueType, QueryArgVals
 from . import errors
-
-if TYPE_CHECKING:
-    from ..data.database import DatabaseClass
 
 
 class ConnectionABC:
@@ -31,7 +30,7 @@ class ConnectionABC:
         elif isinstance(database, str):
             self._cnx_options['database'] = database
             self._db = Database(database)
-            self._db.set_con(self)
+            self._db.connect(self)
             self._db.fetch_from_db()
 
     @property
@@ -47,7 +46,7 @@ class ConnectionABC:
         else:
             if self._db is None:
                 self._db = db
-                self._use_db(db.raw_name)
+                self._use_db(db.get_name())
             else:
                 if self._db is not db:
                     raise RuntimeError('Database is already set.')
@@ -57,7 +56,7 @@ class ConnectionABC:
         return self._cnx_options
 
     @abstractmethod
-    def _use_db(self, dbname: bytes) -> None:
+    def _use_db(self, dbname: NameLike) -> None:
         """ Execute a USE database query """
 
     @abstractmethod
