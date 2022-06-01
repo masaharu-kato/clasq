@@ -39,8 +39,8 @@ from libsql.syntax.values import NULL
     # [+Obj(b'expr'), (b'`expr`', [])],
     # [-Obj(b'expr'), (b'- `expr`', [])],
     [abs  (Obj(b'expr')), (b'ABS(`expr`)', [])],
-    [ceil (Obj(b'expr')), (b'CEIL(`expr`)', [])],
-    [floor(Obj(b'expr')), (b'FLOOR(`expr`)', [])],
+    [ceil (Obj(b'expr')), (b'CEIL(`expr`)', [])],  # type: ignore
+    [floor(Obj(b'expr')), (b'FLOOR(`expr`)', [])], # type: ignore
     [trunc(Obj(b'expr')), (b'TRUNCATE(`expr`, 0)', [])],
 ])
 def test_expr_op(term, result):

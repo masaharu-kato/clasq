@@ -386,13 +386,13 @@ def test_ixor_n(arg1, arg2, result):
     assert list(oset) == result
 
 @pytest.mark.parametrize('arg1, arg2, result', ARGS_XOR)
-def test_ixor_f(arg1, arg2, result):
+def test_symmetric_difference_f(arg1, arg2, result):
     oset = OrderedSet(arg1)
     oset.symmetric_difference_update(FrozenOrderedSet(arg2))
     assert list(oset) == result
 
 @pytest.mark.parametrize('arg1, arg2, result', ARGS_XOR)
-def test_ixor_n(arg1, arg2, result):
+def test_symmetric_difference_n(arg1, arg2, result):
     oset = OrderedSet(arg1)
     oset.symmetric_difference_update(OrderedSet(arg2))
     assert list(oset) == result

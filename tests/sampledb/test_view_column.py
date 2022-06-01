@@ -54,7 +54,7 @@ def test_table_column_get(tablename: str, colnames: List[str]):
     table = db[tablename]
     assert all(isinstance(c, NamedViewColumnABC) for c in table._selected_exprs)
     assert all(isinstance(c, TableColumn) and c.table is table for c in table._selected_exprs)
-    assert [str(c.name) for c in table._selected_exprs] == colnames
+    assert [str(c.get_name()) for c in table._selected_exprs] == colnames
 
     columns = list(table._selected_exprs)
     assert columns == [db[tablename][name] for name in colnames]
@@ -139,8 +139,8 @@ def test_table_view_from_table_column(tablename: str, colname: str):
 
     view = table.where(column == 1)
 
-    assert view._select_query == table.where(**{colname: 1})._select_query
-    assert view.result == table.where(**{colname: 1}).result
+    assert view._select_query == table.where(**{colname: 1})._select_query # type: ignore
+    assert view.result == table.where(**{colname: 1}).result # type: ignore
 
     otable_a = table.order_by(column)
     assert all(isinstance(c, NamedViewColumnABC) and c._named_view is table for c in otable_a._selected_exprs)
