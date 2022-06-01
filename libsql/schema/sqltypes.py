@@ -3,8 +3,14 @@
 """
 import typing
 import datetime
+import decimal
 from . import sqltype_abc as sqtabc
 from ..utils.generic_cls import bind_generic_args
+
+if typing.TYPE_CHECKING:
+    from ..syntax.sql_values import SQLValue
+
+L = typing.TypeVar('L', bound=int)
 
 class TinyInt(sqtabc.IntegerABC):
     """ TINY INT type """
@@ -113,19 +119,30 @@ SCALE = typing.TypeVar('SCALE', bound=int)
 class Decimal(sqtabc.DecimalABC[PREC, SCALE], typing.Generic[PREC, SCALE]):
     """ Fixed Decimal types """
     @classmethod
+    def get_python_type(cls):
+        return decimal.Decimal
+
+    @classmethod
     def get_base_sql_type_name(cls) -> bytes:
         return b'DECIMAL'
 
 
-class Bit(sqtabc.NumericABC):
+class Bit(sqtabc.BitABC[L], typing.Generic[L]):
     """ Bit type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
-        return b'BIT'
+    def get_python_type(cls):
+        return int
 
+    @classmethod
+    def get_base_sql_type_name(cls) -> bytes:
+        return b'BIT'
 
 class DateTime(sqtabc.DateTimeABC):
     """ DateTime type """
+    @classmethod
+    def get_python_type(cls) -> typing.Type:
+        return datetime.datetime
+
     @classmethod
     def get_sql_type_name(cls) -> bytes:
         return b'DATETIME'
@@ -133,16 +150,23 @@ class DateTime(sqtabc.DateTimeABC):
 class Date(sqtabc.DateTimeABC):
     """ Date type """
     @classmethod
+    def get_python_type(cls) -> typing.Type:
+        return datetime.date
+
+    @classmethod
     def get_sql_type_name(cls) -> bytes:
         return b'DATE'
 
 class Time(sqtabc.DateTimeABC):
     """ Time type """
     @classmethod
+    def get_python_type(cls) -> typing.Type:
+        return datetime.time
+
+    @classmethod
     def get_sql_type_name(cls) -> bytes:
         return b'TIME'
 
-L = typing.TypeVar('L', bound=int)
 class Char(sqtabc.CharABC[L], typing.Generic[L]):
     """ CHAR string type """
     @classmethod
@@ -155,13 +179,13 @@ class VarChar(sqtabc.CharABC[L], typing.Generic[L]):
     def get_base_sql_type_name(cls) -> bytes:
         return b'VARCHAR'
 
-class Binary(sqtabc.CharABC[L], typing.Generic[L]):
+class Binary(sqtabc.BinaryABC[L], typing.Generic[L]):
     """ CHAR string type """
     @classmethod
     def get_base_sql_type_name(cls) -> bytes:
         return b'BINARY'
 
-class VarBinary(sqtabc.CharABC[L], typing.Generic[L]):
+class VarBinary(sqtabc.BinaryABC[L], typing.Generic[L]):
     """ VARCHAR string type """
     @classmethod
     def get_base_sql_type_name(cls) -> bytes:
@@ -387,7 +411,9 @@ def make_sql_type(typelike: typing.Type) -> typing.Type[sqtabc.SQLTypeABC]:
     _origin = typing.get_origin(typelike) or typelike
 
     if isinstance(_origin, type) and issubclass(_origin, sqtabc.SQLTypeABC):
-        return bind_generic_args(typelike)
+        _ret = bind_generic_args(typelike)
+        assert issubclass(_ret, sqtabc.SQLTypeABC)
+        return _ret
 
     # if isinstance(typelike, str):
     #     if not typelike:
