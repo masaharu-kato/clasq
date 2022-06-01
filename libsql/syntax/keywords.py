@@ -5,7 +5,7 @@
 from enum import Enum
 from typing import TYPE_CHECKING, Union
 
-from .query_abc import QueryABC
+from .abc.query import QueryABC
 
 if TYPE_CHECKING:
     from .query_data import QueryData

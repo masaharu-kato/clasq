@@ -5,19 +5,19 @@ from abc import ABC, abstractmethod, abstractproperty
 import itertools
 from typing import TYPE_CHECKING, Iterable, Optional, Tuple, Union, overload
 
-from ..syntax.object_abc import NameLike, ObjectABC, ObjectName
-from ..syntax.query_data import QueryData
-from ..syntax.exprs import AliasedExpr, ExprABC, ExprLike, ExprObjectABC, ExprObjectSet, FrozenExprObjectSet, FrozenOrderedExprObjectSet, NoneExpr, OP
-from ..syntax.keywords import JoinType, JoinLike, OrderTypeLike
-from ..syntax.errors import NotaSelfObjectError, ObjectArgTypeError, ObjectNotFoundError, ObjectNotSetError
-from ..utils.tabledata import RowData, TableData
-from .column_abc import ColumnABC
-from .column import FrozenOrderedNamedViewColumnSet, NamedViewColumn, NamedViewColumnABC
+from ...syntax.abc.object import NameLike, ObjectABC, ObjectName
+from ...syntax.query_data import QueryData
+from ...syntax.exprs import AliasedExpr, ExprABC, ExprLike, ExprObjectABC, ExprObjectSet, FrozenExprObjectSet, FrozenOrderedExprObjectSet, NoneExpr, OP
+from ...syntax.keywords import JoinType, JoinLike, OrderTypeLike
+from ...syntax.errors import NotaSelfObjectError, ObjectArgTypeError, ObjectNotFoundError, ObjectNotSetError
+from ...utils.tabledata import RowData, TableData
+from ..column import FrozenOrderedNamedViewColumnSet, NamedViewColumn, NamedViewColumnABC
+from .column import ColumnABC
 
 if TYPE_CHECKING:
-    from .database_abc import DatabaseABC
-    from ..connection import ConnectionABC
-    from .view import JoinedView, ViewWithArgs
+    from .database import DatabaseABC
+    from ...connection import ConnectionABC
+    from ..view import JoinedView, ViewWithArgs
 
 ColumnArgTypes = Union[ExprObjectSet, FrozenExprObjectSet, ExprObjectABC, NameLike, Tuple[Union[ColumnABC, NameLike], NameLike]]
 OrderedColumnArgTypes = Union[NameLike, ExprObjectABC, Tuple[Union[NameLike, ExprObjectABC], OrderTypeLike]]

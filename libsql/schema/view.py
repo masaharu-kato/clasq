@@ -4,17 +4,17 @@
 from abc import abstractproperty
 from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Union
 
-from ..schema.database_abc import DatabaseABC
-from ..schema.column_abc import NamedViewColumnABC
-from ..syntax.object_abc import NameLike, ObjectName
+from ..schema.abc.database import DatabaseABC
+from ..schema.abc.column import NamedViewColumnABC
+from ..syntax.abc.object import NameLike, ObjectName
 from ..syntax.query_data import QueryData
 from ..syntax.exprs import AliasedExpr, ExprABC, ExprLike, ExprObjectABC, ExprObjectSet, FrozenExprObjectSet, FrozenOrderedExprObjectSet, NoneExpr, OrderedExprObject, OrderedExprObjectSet
 from ..syntax.keywords import JoinType, JoinLike, OrderType
 from ..syntax.values import ValueType
 from ..syntax.errors import ObjectArgTypeError, ObjectArgValueError, ObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError, ObjectNotSetError
 from ..utils.tabledata import RowData, TableData
+from .abc.view import CustomViewABC, NamedViewABC, ViewABC, BaseViewABC, ViewWithColumnsABC, ColumnArgTypes, OrderedColumnArgTypes, ViewWithTargetABC
 from .column import FrozenOrderedNamedViewColumnSet, NamedViewColumn
-from .view_abc import CustomViewABC, NamedViewABC, ViewABC, BaseViewABC, ViewWithColumnsABC, ColumnArgTypes, OrderedColumnArgTypes, ViewWithTargetABC
 from .sqltypes import AnySQLType
  
 
@@ -296,7 +296,7 @@ class CustomView(CustomViewABC, ViewFinal):
         self.__limit_value  = limit
         self.__offset_value = offset
 
-        self.__outer_orders = self._orders if outer_orders is None else FrozenOrderedExprObjectSet(outer_orders)
+        self.__outer_orders = self.__orders if outer_orders is None else FrozenOrderedExprObjectSet(outer_orders)
         self.__options = options
 
     def _process_select_column_args(self, *column_likes: ColumnArgTypes) -> FrozenOrderedExprObjectSet:

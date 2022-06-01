@@ -4,7 +4,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod, abstractproperty
 import html
-from typing import Any, Callable, Collection, Dict, Generic, ItemsView, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, TypeVar, Union, overload
+from typing import Any, Callable, Collection, Dict, Generic, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, TypeVar, Union, overload
 
 T = TypeVar('T')
 
@@ -133,7 +133,7 @@ class RowDataABC(Generic[T], Mapping[str, T]):
         return self._row[self._col_meta.column_to_i(val)]
 
     def __iter__(self) -> Iterator[str]:
-        return self.columns
+        return iter(self.columns)
 
     def __len__(self) -> int:
         return len(self.columns)
@@ -145,7 +145,7 @@ class RowDataABC(Generic[T], Mapping[str, T]):
     @overload
     def get(self, key: str, default: _T) -> Union[T, _T]: ...
 
-    def get(self, key: str, default: Optional[Union[T, _T]] = None): # type: ignore
+    def get(self, key: str, default: Optional[_T] = None):
         """ Get a value of specific column with a default value
 
         Args:
@@ -167,21 +167,6 @@ class RowDataABC(Generic[T], Mapping[str, T]):
     @property
     def raw_values(self):
         return self._row
-
-    def keys(self):
-        return self.columns
-
-    def values(self):
-        return self._row
-
-    def items(self) -> ItemsView[str, T]: # type: ignore
-        """ Iterate columns with its name and value
-
-        Yields:
-            Iterator[Tuple[str, Any]]: Column name and its value
-        """
-        for k, v in zip(self._col_meta.iter_columns(), self._row):
-            yield k, v
 
     def asdict(self) -> Dict[str, T]:
         """ Make a dictionary from column names to cell values of this row

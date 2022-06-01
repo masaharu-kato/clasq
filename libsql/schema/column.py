@@ -3,14 +3,14 @@
 """
 from typing import TYPE_CHECKING, Optional, Type, Union
 
-from ..syntax.object_abc import NameLike, Object, ObjectABC, ObjectName
+from ..syntax.abc.object import NameLike, Object, ObjectABC, ObjectName
 from ..syntax.exprs import ExprABC
 from ..syntax.keywords import OrderType, ReferenceOption
-from ..syntax.query_abc import iter_objects
+from ..syntax.abc.query import iter_objects
 from ..syntax.query_data import QueryData, QueryLike
 from ..utils.keyset import FrozenOrderedKeySetABC
-from .column_abc import NamedViewColumnABC, TableColumnABC
-from .sqltype_abc import SQLTypeABC
+from .abc.column import NamedViewColumnABC, TableColumnABC
+from .abc.sqltype import SQLTypeABC
 from .sqltypes import make_sql_type
 
 

@@ -4,10 +4,10 @@
 from abc import abstractmethod
 from typing import Hashable, Iterator, TYPE_CHECKING, Union
 
-from .query_abc import QueryABC
+from .query import QueryABC
 
 if TYPE_CHECKING:
-    from .query_data import QueryData
+    from ..query_data import QueryData
 
 
 class ObjectName(QueryABC):

@@ -2,10 +2,10 @@
     SQL Connection classes and functions
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Collection, Iterable, Iterator, Optional, Type, Union
+from typing import Collection, Iterable, Iterator, Optional, Union
 
 
-from ..syntax.object_abc import NameLike
+from ..syntax.abc.object import NameLike
 from ..syntax.sql_values import SQLValue
 from ..utils.tabledata import TableData
 from ..schema.database import Database

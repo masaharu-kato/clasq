@@ -4,11 +4,11 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, Iterator, List, Optional, Tuple, TypeVar, Union, Type
 
-from .query_abc import QueryABC
-from .values import NULL, ValueType, is_value_type
-from .object_abc import NameLike, ObjectABC, Object, ObjectName
-from .keywords import OrderType, OrderTypeLike
 from ..utils.keyset import FrozenKeySetABC, FrozenOrderedKeySetABC, KeySetABC, OrderedKeySetABC
+from .values import NULL, ValueType, is_value_type
+from .keywords import OrderType, OrderTypeLike
+from .abc.object import NameLike, ObjectABC, Object, ObjectName
+from .abc.query import QueryABC
 from . import errors
 
 if TYPE_CHECKING:
@@ -732,17 +732,17 @@ class ExprObject(ExprObjectABC, Object):
     """ Object with expressions """
 
 
-class ExprObjectSet(KeySetABC[ObjectName, ExprObjectABC]):
+class ExprObjectSet(KeySetABC[NameLike, ExprObjectABC]):
     """ Set of ExprObjectABC objects """
 
     def _key(self, obj: ExprObjectABC) -> ObjectName:
         return obj.get_name()
 
-    def _key_or_none(self, obj) -> Optional[ObjectName]:
+    def _key_or_none(self, obj) -> Optional[NameLike]:
         return obj.get_name() if isinstance(obj, ExprObjectABC) else None
 
 
-class FrozenExprObjectSet(FrozenKeySetABC[ObjectName, ExprObjectABC]):
+class FrozenExprObjectSet(FrozenKeySetABC[NameLike, ExprObjectABC]):
     """ Frozen set of ExprObjectABC objects """
 
     def _key(self, obj: ExprObjectABC) -> ObjectName:
@@ -752,11 +752,11 @@ class FrozenExprObjectSet(FrozenKeySetABC[ObjectName, ExprObjectABC]):
         return obj.get_name() if isinstance(obj, ExprObjectABC) else None
 
 
-class OrderedExprObjectSet(ExprObjectSet, OrderedKeySetABC[ObjectName, ExprObjectABC]):
+class OrderedExprObjectSet(ExprObjectSet, OrderedKeySetABC[NameLike, ExprObjectABC]):
     """ Ordered set of ExprObjectABC objects """
 
 
-class FrozenOrderedExprObjectSet(FrozenExprObjectSet, FrozenOrderedKeySetABC[ObjectName, ExprObjectABC]):
+class FrozenOrderedExprObjectSet(FrozenExprObjectSet, FrozenOrderedKeySetABC[NameLike, ExprObjectABC]):
     """ Frozen ordered set of ExprObjectABC objects """
 
 

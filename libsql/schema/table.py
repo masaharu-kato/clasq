@@ -3,15 +3,14 @@
 """
 from typing import TYPE_CHECKING, Optional
 
-from ..syntax.query_abc import iter_objects
-from ..syntax.object_abc import ObjectABC, ObjectName
+from ..syntax.abc.query import iter_objects
+from ..syntax.abc.object import ObjectABC, ObjectName
+from .abc.table import TableArgs, TableABC
 from .column import FrozenOrderedNamedViewColumnSet, TableColumn
 from .view import NamedView, ViewFinal
-from .table_abc import TableArgs, TableABC
 
 if TYPE_CHECKING:
-    from .database_abc import DatabaseABC
-    from .database import Database
+    from .abc.database import DatabaseABC
 
 # class Table(NamedViewABC, ViewWithColumns, Object): # <-- super() is not working correctly on these base classes
 class Table(TableABC, NamedView, ViewFinal):

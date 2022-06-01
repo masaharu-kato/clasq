@@ -4,15 +4,15 @@
 from abc import abstractmethod, abstractproperty
 from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
 
-from ..syntax.object_abc import ObjectName
-from ..syntax.exprs import OP, Arg, ExprABC, NameLike
-from ..syntax.values import ValueType
-from ..syntax.query_data import QueryData
-from ..syntax.errors import ObjectNotFoundError
-from ..utils.tabledata import TableData
-from .column import TableColumn, ColumnArgs
-from .view_abc import NamedViewABC, ViewReferenceABC
-from .fkey_ref import ForeignKeyReference
+from ...syntax.abc.object import ObjectName
+from ...syntax.exprs import OP, Arg, ExprABC, NameLike
+from ...syntax.values import ValueType
+from ...syntax.query_data import QueryData
+from ...syntax.errors import ObjectNotFoundError
+from ...utils.tabledata import TableData
+from ..column import TableColumn, ColumnArgs
+from ..fkey_ref import ForeignKeyReference
+from .view import NamedViewABC, ViewReferenceABC
 
 
 class TableArgs:

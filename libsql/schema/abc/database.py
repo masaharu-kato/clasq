@@ -5,18 +5,18 @@ from abc import abstractmethod, abstractproperty
 from typing import TYPE_CHECKING, Collection, Dict, Iterable, Iterator, Optional, Tuple, Union, cast, overload
 
 
-from ..syntax.object_abc import NameLike, ObjectABC, ObjectName
-from ..syntax.exprs import Object
-from ..syntax.query_data import QueryLike, QueryArgVals
-from ..syntax.values import ValueType
-from ..syntax.errors import NotaSelfObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError
-from ..utils.tabledata import TableData
-from .column import ColumnArgs
-from .table_abc import TableABC, TableArgs
-from .sqltypes import AnySQLType
+from ...syntax.abc.object import NameLike, ObjectABC, ObjectName
+from ...syntax.exprs import Object
+from ...syntax.query_data import QueryLike, QueryArgVals
+from ...syntax.values import ValueType
+from ...syntax.errors import NotaSelfObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError
+from ...utils.tabledata import TableData
+from ..column import ColumnArgs
+from ..sqltypes import AnySQLType
+from .table import TableABC, TableArgs
 
 if TYPE_CHECKING:
-    from ..connection import ConnectionABC
+    from ...connection import ConnectionABC
     
 
 class DatabaseABC(ObjectABC):

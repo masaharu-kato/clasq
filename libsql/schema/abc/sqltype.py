@@ -4,10 +4,10 @@
 from abc import ABC, ABCMeta, abstractmethod
 import typing
 
-from ..utils.generic_cls import bind_generic_args
+from ...utils.generic_cls import bind_generic_args
 
 if typing.TYPE_CHECKING:
-    from ..syntax.sql_values import SQLValue
+    from ...syntax.sql_values import SQLValue
 
 class _SQLTypeABCMeta(ABCMeta):
     """ SQL Type ABC Metaclass """

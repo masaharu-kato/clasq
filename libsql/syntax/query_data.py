@@ -4,7 +4,7 @@
 import re
 from typing import Collection, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union, cast
 
-from .query_abc import QueryABC
+from .abc.query import QueryABC
 from .values import NullType, ValueType, is_value_type
 from .sql_values import SQLValue
 from .exprs import ExprABC, Arg, ArgName, ValueOrArg

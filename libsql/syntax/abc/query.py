@@ -2,11 +2,11 @@
     Query abstract class
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Set
+from typing import TYPE_CHECKING, Iterable, Iterator, Optional
 
 if TYPE_CHECKING:
-    from .query_data import QueryData
-    from .object_abc import ObjectABC
+    from ..query_data import QueryData
+    from .object import ObjectABC
 
 
 class QueryABC:

@@ -5,13 +5,13 @@
 from abc import abstractmethod
 from typing import Optional, TYPE_CHECKING
 
-from ..schema.database_abc import DatabaseReferenceABC
+from ..schema.abc.database import DatabaseReferenceABC
 from ..schema.database import Database
 from ..utils.name_conversion import camel_to_snake
 
 if TYPE_CHECKING:
     from ..connection.connection import ConnectionABC
-    from ..syntax.object_abc import NameLike
+    from ..syntax.abc.object import NameLike
 
 
 class _DatabaseClassMeta(type, DatabaseReferenceABC):

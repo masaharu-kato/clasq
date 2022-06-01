@@ -4,7 +4,7 @@
 from __future__ import annotations
 from typing import Dict, Generic, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, overload
 
-from .tabledata_abc import ColumnMetadataABC, FrozenTableDataABC, TableDataABC, RowDataABC
+from .abc.tabledata import ColumnMetadataABC, FrozenTableDataABC, TableDataABC, RowDataABC
 
 T = TypeVar('T')
 

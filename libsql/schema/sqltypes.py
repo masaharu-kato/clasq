@@ -4,7 +4,7 @@
 import typing
 import datetime
 import decimal
-from . import sqltype_abc as sqtabc
+from .abc import sqltype as sqtabc
 from ..utils.generic_cls import bind_generic_args
 
 if typing.TYPE_CHECKING:

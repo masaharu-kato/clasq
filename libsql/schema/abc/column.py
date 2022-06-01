@@ -4,17 +4,17 @@
 from abc import abstractproperty
 from typing import TYPE_CHECKING, Optional, Type
 
-from ..syntax.exprs import ObjectABC, ExprObjectABC
-from ..syntax.object_abc import ObjectName, ObjectWithNamePropABC
-from ..syntax.query_data import QueryData
-from ..syntax.keywords import OrderType
-from ..syntax.errors import ObjectNotSetError
+from ...syntax.exprs import ExprABC, ExprObjectABC
+from ...syntax.abc.object import ObjectName, ObjectWithNamePropABC
+from ...syntax.query_data import QueryData
+from ...syntax.keywords import OrderType
+from ...syntax.errors import ObjectNotSetError
 
 if TYPE_CHECKING:
-    from ..syntax.exprs import ExprABC
+    from ...syntax.exprs import ExprObjectABC
+    from ..table import Table
     from .view import NamedViewABC, BaseViewABC
-    from .table import Table
-    from .sqltype_abc import SQLTypeABC
+    from .sqltype import SQLTypeABC
 
 class ColumnABC(ExprObjectABC):
     """ Column ABC """

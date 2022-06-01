@@ -2,7 +2,6 @@
 """
 from typing import TYPE_CHECKING, Collection, List, Optional, Tuple
 
-from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
 from mysql.connector.constants import ServerFlag # type: ignore
 
 from ...syntax.sql_values import SQLValue

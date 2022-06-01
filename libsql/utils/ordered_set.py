@@ -4,7 +4,7 @@
 
 from typing import Generic, Iterable, TypeVar
 
-from .set_abc import FrozenSetABC, SetABC, SetLike
+from .abc.set import FrozenSetABC, SetABC, SetLike
 
 T = TypeVar('T')
 

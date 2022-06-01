@@ -2,26 +2,24 @@
     Table Record classes
 """
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Dict, Generic, List, Mapping, Optional, Type, TypeVar, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Generic, Optional, Type, TypeVar, get_args, get_origin, get_type_hints
 
 
-from ..schema.table_abc import TableABC, TableReferenceABC
+from ..schema.abc.table import TableReferenceABC
+from ..schema.abc.column import TableColumnABC
+from ..schema.abc.sqltype import SQLTypeABC
 from ..schema.table import Table, TableArgs
-from ..schema.column_abc import TableColumnABC
 from ..schema.column import ColumnArgs
 from ..schema.sqltypes import Int, make_sql_type
-from ..schema.sqltype_abc import SQLTypeABC
 from ..syntax.exprs import ExprLike
 from ..syntax.values import NULL
 from ..utils.name_conversion import camel_to_snake
 
-from .record_abc import RecordABC
+from .abc.record import RecordABC
 from .database import DatabaseClass
 
 if TYPE_CHECKING:
-    from ..syntax.object_abc import ObjectName
-    from ..syntax.object_abc import NameLike
-    from ..schema.database_abc import DatabaseABC
+    from ..syntax.abc.object import NameLike
 
 
 class _TableClassMeta(type, TableReferenceABC):

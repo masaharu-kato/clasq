@@ -9,7 +9,7 @@ from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
 
 # from mysql.connector.pooling import MySQLConnectionPool # type: ignore
 
-from ...syntax.object_abc import ObjectName, NameLike
+from ...syntax.abc.object import ObjectName, NameLike
 from ...syntax.sql_values import SQLValue
 from ...utils.tabledata import TableData
 from ..prepared_stmt import ConnectionABC, PreparedStatementExecutorABC

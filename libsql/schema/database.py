@@ -4,12 +4,12 @@
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, overload
 
 
-from ..syntax.object_abc import NameLike, ObjectName
+from ..syntax.abc.object import NameLike, ObjectName
 from ..syntax.exprs import Object
 from ..syntax.errors import ObjectArgsError, ObjectNotSetError
-from .table_abc import TableABC, TableArgs
+from .abc.database import DatabaseABC
+from .abc.table import TableABC, TableArgs
 from .table import Table
-from .database_abc import DatabaseABC
 
 if TYPE_CHECKING:
     from ..connection import ConnectionABC

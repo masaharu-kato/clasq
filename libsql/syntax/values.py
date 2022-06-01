@@ -3,7 +3,7 @@
 """
 from typing import TYPE_CHECKING, Union, get_args
 
-from .query_abc import QueryABC
+from .abc.query import QueryABC
 from . import sql_values
 
 if TYPE_CHECKING:

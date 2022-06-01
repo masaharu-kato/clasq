@@ -1,13 +1,13 @@
 """
     Table Record classes
 """
-from abc import ABC, abstractmethod, abstractproperty
-from typing import TYPE_CHECKING, Dict, Generic, Mapping, Optional, TypeVar, get_type_hints
+from abc import abstractmethod
+from typing import TYPE_CHECKING, Generic, Mapping, TypeVar
 
 if TYPE_CHECKING:
-    from ..syntax.exprs import ExprObjectABC
-    from ..syntax.object_abc import ObjectName
-    from ..schema.view_abc import ViewABC
+    from ...schema.abc.view import ViewABC
+    from ...syntax.abc.object import ObjectName
+    from ...syntax.exprs import ExprObjectABC
 
 
 class RecordABC:

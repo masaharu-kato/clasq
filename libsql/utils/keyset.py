@@ -2,11 +2,11 @@
     KeySet class
 """
 
-from abc import ABC, abstractproperty, abstractmethod
+from abc import abstractproperty, abstractmethod
 import itertools
-from typing import Dict, Generic, Hashable, Iterable, Iterator, List, Optional, Tuple, TypeVar, Union
+from typing import Dict, Generic, Hashable, Iterable, Iterator, Optional, TypeVar, Union
 
-from .set_abc import FrozenSetABC, FrozenSetLike, NonFrozenSetLike, SetABC, SetLike
+from .abc.set import FrozenSetABC, FrozenSetLike, NonFrozenSetLike, SetABC, SetLike
 from .ordered_set import FrozenOrderedSet, OrderedSet
 
 K = TypeVar('K', bound=Hashable)
