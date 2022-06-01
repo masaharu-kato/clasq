@@ -1,9 +1,9 @@
 """
     SQL Connection classes and functions
 """
+from __future__ import annotations
 from abc import abstractmethod
-from typing import Collection, Iterable, Iterator, Optional, Union
-
+from typing import Collection, Iterable, Iterator
 
 from ..syntax.abc.object import NameLike
 from ..syntax.sql_values import SQLValue
@@ -16,12 +16,12 @@ from . import errors
 class ConnectionABC:
     """ Database connection ABC """
 
-    def __init__(self, database: Optional[Union[str, Database]] = None,
-                #  database_class: Optional[Type['DatabaseClass']] = None,
+    def __init__(self, database: str | Database | None = None,
+                #  database_class: Optional[Type[DatabaseClass]] = None,
                  init_db=True, **other_cnx_options) -> None:
         """ Init """
         self._cnx_options = {**other_cnx_options}
-        self._db: Optional[Database] = None
+        self._db: Database | None = None
 
         if isinstance(database, Database):
             self._cnx_options['database'] = database.raw_name
@@ -39,7 +39,7 @@ class ConnectionABC:
             raise RuntimeError('Database is not initialized.')
         return self._db
 
-    def set_db(self, db: Optional['Database']) -> None:
+    def set_db(self, db: Database | None) -> None:
         if db is None:
             if self._db is not None:
                 self._db = None
@@ -60,41 +60,41 @@ class ConnectionABC:
         """ Execute a USE database query """
 
     @abstractmethod
-    def run_stmt_prms(self, stmt: bytes, prms: Collection[SQLValue] = ()) -> Optional[TableData]:
+    def run_stmt_prms(self, stmt: bytes, prms: Collection[SQLValue] = ()) -> TableData | None:
         """ Execute a query with single list of params and get result if exists """
 
     @abstractmethod
-    def run_stmt_many_prms(self, stmt: bytes, prms_list: Iterable[Collection[SQLValue]]) -> Iterator[Optional[TableData]]:
+    def run_stmt_many_prms(self, stmt: bytes, prms_list: Iterable[Collection[SQLValue]]) -> Iterator[TableData | None]:
         """ Execute a query with multiple lists of params and get result if exists """
 
-    def query(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> TableData:
+    def query(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> TableData:
         if (result := self.run(*exprs, prms)) is None:
             raise errors.NoResultsError('No results.')
         return result
 
-    def query_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> Iterator[TableData]:
+    def query_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> Iterator[TableData]:
         for result in self.run_many(*exprs, data=data):
             if result is None:
                 raise errors.NoResultsError('No results.')
             yield result
 
-    def execute(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> None:
+    def execute(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> None:
         if self.run(*exprs, prms=prms) is not None:
             raise errors.ResultExistsError('Result exists.')
 
-    def execute_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> None:
+    def execute_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> None:
         for _result in self.run_many(*exprs, data=data):
             if _result is not None:
                 raise errors.ResultExistsError('Result exists.')
 
-    def run(self, *exprs: Optional[QueryLike], prms: Optional[Collection[ValueType]]=None) -> Optional[TableData]:
+    def run(self, *exprs: QueryLike | None, prms: Collection[ValueType] | None = None) -> TableData | None:
         """ Run with optional single parameters """
         # Make QueryData
         qd = exprs[0] if len(exprs) == 1 and isinstance(exprs[0], QueryData) and not prms else QueryData(*exprs, prms=prms)
         # Run and handle result
         return self.run_stmt_prms(qd.stmt, qd.prms)
 
-    def run_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> Iterator[Optional[TableData]]:
+    def run_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> Iterator[TableData | None]:
         """ Run with multiple list of parameters """
         # Make QueryData
         qd = exprs[0] if len(exprs) == 1 and isinstance(exprs[0], QueryData) and not data else QueryData(*exprs)
@@ -113,7 +113,7 @@ class ConnectionABC:
         """ Get a last inserted row id """
 
     # @property
-    # def last_qd(self) -> Optional[QueryData]:
+    # def last_qd(self) -> QueryData | None:
     #     return self._last_qd
 
     # def _handle_result(self, result, has_result: bool):

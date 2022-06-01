@@ -1,7 +1,8 @@
 """
     Column classes
 """
-from typing import TYPE_CHECKING, Optional, Type, Union
+from __future__ import annotations
+from typing import TYPE_CHECKING, Type
 
 from ..syntax.abc.object import NameLike, Object, ObjectABC, ObjectName
 from ..syntax.exprs import ExprABC
@@ -24,13 +25,13 @@ if TYPE_CHECKING:
 class NamedViewColumn(NamedViewColumnABC, Object):
     """ View Column expression """
 
-    def __init__(self, named_view: 'NamedViewABC', name: NameLike, sql_type: Type) -> None:
+    def __init__(self, named_view: NamedViewABC, name: NameLike, sql_type: Type) -> None:
         super().__init__(name)
         self.__named_view = named_view
         self.__sql_type = make_sql_type(sql_type)
 
     @property
-    def _named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> NamedViewABC:
         """ Get a belonging NamedView object 
             (Overridef from `NamedViewColumnABC`
         """
@@ -41,7 +42,7 @@ class NamedViewColumn(NamedViewColumnABC, Object):
         return self.__sql_type
 
     @property
-    def select_column_query(self) -> 'QueryLike':
+    def select_column_query(self) -> QueryLike:
         """ Get a query for SELECT column """
         return self
 
@@ -55,21 +56,21 @@ class FrozenOrderedNamedViewColumnSet(FrozenOrderedKeySetABC[ObjectName, NamedVi
     def _key(self, obj: NamedViewColumnABC) -> ObjectName:
         return obj._name_with_view
 
-    def _key_or_none(self, obj) -> Optional[ObjectName]:
+    def _key_or_none(self, obj) -> ObjectName | None:
         return self._key(obj) if isinstance(obj, NamedViewColumnABC) else None
 
 
 class TableColumnRef:
     def __init__(self,
-        database: 'Database',
-        table_like: Union[NameLike, 'Table'],
+        database: Database,
+        table_like: NameLike | Table,
         column_name: NameLike
     ) -> None:
         self.database = database
         self.table_like = table_like
         self.column_name = column_name
 
-    def resolve(self) -> 'TableColumn':
+    def resolve(self) -> TableColumn:
         return self.database._to_table(self.table_like).get_table_column(self.column_name)
 
 
@@ -83,10 +84,10 @@ class ColumnArgs:
         unique: bool = False,
         primary: bool = False,
         auto_increment: bool = False,
-        ref_column: Optional[Union[TableColumnRef, 'TableColumn']] = None,
-        ref_on_delete: Optional[ReferenceOption] = None,
-        ref_on_update: Optional[ReferenceOption] = None,
-        ref_index_name: Optional[NameLike] = None
+        ref_column: TableColumnRef | TableColumn | None = None,
+        ref_on_delete: ReferenceOption | None = None,
+        ref_on_update: ReferenceOption | None = None,
+        ref_index_name: NameLike | None = None
     ):
         self.name = name
         self.sql_type = sql_type
@@ -104,7 +105,7 @@ class ColumnArgs:
 class TableColumn(TableColumnABC, Object):
     """ Table Column expression """
 
-    def __init__(self, table: 'Table', args: ColumnArgs):
+    def __init__(self, table: Table, args: ColumnArgs):
         self._table = table
         super().__init__(args.name)
 
@@ -115,7 +116,7 @@ class TableColumn(TableColumnABC, Object):
         self.__is_unique = args.unique
         self.__is_primary = args.primary
         self.__is_auto_increment = args.auto_increment
-        self.__reference: Optional['ForeignKeyReference'] =  None
+        self.__reference: ForeignKeyReference | None =  None
 
         if args.ref_column is not None:
             self._reference = ForeignKeyReference(
@@ -127,7 +128,7 @@ class TableColumn(TableColumnABC, Object):
             )
 
     @property
-    def _named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> NamedViewABC:
         """ Get a belonging BaseView object 
             (Overridef from `NamedViewColumnABC`
         """
@@ -150,7 +151,7 @@ class TableColumn(TableColumnABC, Object):
         return self
 
     @property
-    def base_view(self) -> 'BaseViewABC':
+    def base_view(self) -> BaseViewABC:
         return self.__table
 
     @property
@@ -194,7 +195,7 @@ class TableColumn(TableColumnABC, Object):
         return 'TC(%s->%s)' % (repr(self.base_view), self.name)
 
 
-def iter_columns(*exprs: Optional[ObjectABC]):
+def iter_columns(*exprs: ObjectABC | None):
     for e in iter_objects(*exprs):
         if isinstance(e, TableColumn):
             yield e

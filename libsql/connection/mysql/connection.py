@@ -1,8 +1,9 @@
 """
     Mysql Connection class implementation
 """
-from abc import abstractmethod, abstractproperty
-from typing import TYPE_CHECKING, Collection, Dict, Iterable, Iterator, Optional
+from __future__ import annotations
+from abc import abstractproperty
+from typing import Collection, Iterable, Iterator
 
 import mysql.connector # type: ignore
 from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
@@ -18,7 +19,7 @@ from .prepared_stmt import MySQLPreparedStatementExecutor
 class MySQLConnectionABC(ConnectionABC):
 
     def __init__(self, **cnx_options) -> None:
-        self._prepared_stmts: Dict[bytes, PreparedStatementExecutorABC] = {}
+        self._prepared_stmts: dict[bytes, PreparedStatementExecutorABC] = {}
         super().__init__(**cnx_options)
 
     @abstractproperty
@@ -40,7 +41,7 @@ class MySQLConnectionABC(ConnectionABC):
     #    Execute and Query
     ### =========================================================================================================== ###
     
-    def run_stmt_prms(self, stmt: bytes, prms: Collection[SQLValue] = ()) -> Optional[TableData]:
+    def run_stmt_prms(self, stmt: bytes, prms: Collection[SQLValue] = ()) -> TableData | None:
         """ Execute a query with single list of params and get result if exists
             (Override from `ConnectionABC`)
         """
@@ -48,7 +49,7 @@ class MySQLConnectionABC(ConnectionABC):
             return self.run_stmt(stmt)
         return self._get_or_make_pstmt(stmt).run_with_params(prms)
 
-    def run_stmt_many_prms(self, stmt: bytes, prms_list: Iterable[Collection[SQLValue]]) -> Iterator[Optional[TableData]]:
+    def run_stmt_many_prms(self, stmt: bytes, prms_list: Iterable[Collection[SQLValue]]) -> Iterator[TableData | None]:
         """ Execute a query with multiple lists of params and get result if exists
             (Override from `ConnectionABC`)
         """ 
@@ -56,7 +57,7 @@ class MySQLConnectionABC(ConnectionABC):
         for prms in prms_list:
             yield pstmt.run_with_params(prms)
 
-    def run_stmt(self, stmt: bytes) -> Optional[TableData]:
+    def run_stmt(self, stmt: bytes) -> TableData | None:
         """ Execute a query using prepared statement, and get result """
         qres = self.cnx.cmd_query(stmt)
         if isinstance(qres, dict) and 'columns' in qres:
@@ -91,7 +92,7 @@ class MySQLConnection(MySQLConnectionABC):
     """ MySQL Connection Class """
 
     def __init__(self, **cnx_options) -> None:
-        self._cnx: Optional[MySQLConnectionAbstract] = None
+        self._cnx: MySQLConnectionAbstract | None = None
         super().__init__(**cnx_options)
 
     @property

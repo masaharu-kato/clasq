@@ -1,10 +1,9 @@
 """
     View classes
 """
-from abc import abstractproperty
-from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Union
+from __future__ import annotations
+from typing import Iterable, Iterator
 
-from ..schema.abc.database import DatabaseABC
 from ..schema.abc.column import NamedViewColumnABC
 from ..syntax.abc.object import NameLike, ObjectName
 from ..syntax.query_data import QueryData
@@ -12,7 +11,7 @@ from ..syntax.exprs import AliasedExpr, ExprABC, ExprLike, ExprObjectABC, ExprOb
 from ..syntax.keywords import JoinType, JoinLike, OrderType
 from ..syntax.values import ValueType
 from ..syntax.errors import ObjectArgTypeError, ObjectArgValueError, ObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError, ObjectNotSetError
-from ..utils.tabledata import RowData, TableData
+from ..utils.tabledata import TableData
 from .abc.view import CustomViewABC, NamedViewABC, ViewABC, BaseViewABC, ViewWithColumnsABC, ColumnArgTypes, OrderedColumnArgTypes, ViewWithTargetABC
 from .column import FrozenOrderedNamedViewColumnSet, NamedViewColumn
 from .sqltypes import AnySQLType
@@ -46,8 +45,8 @@ class ViewFinal(ViewABC):
 
     def __init__(self) -> None:
         super().__init__()
-        self.__select_query: Optional[QueryData] = None
-        self.__result: Optional[TableData] = None
+        self.__select_query: QueryData | None = None
+        self.__result: TableData | None = None
 
     def _generate_select_query(self) -> QueryData:
         """ Generate QueryData for SELECT query """
@@ -71,27 +70,27 @@ class ViewFinal(ViewABC):
         self.__select_query = self._generate_select_query()
 
     @property
-    def _view_name_or_none(self) -> Optional[ObjectName]:
+    def _view_name_or_none(self) -> ObjectName | None:
         return None  # This view has no name.
 
     @property
-    def _select_query_or_none(self) -> Optional[QueryData]:
+    def _select_query_or_none(self) -> QueryData | None:
         return self.__select_query
 
     def refresh_result(self) -> None:
         self.__result = self.db.query(self._select_query)
 
     @property
-    def _result_or_none(self) -> Optional[TableData]:
+    def _result_or_none(self) -> TableData | None:
         return self.__result
 
-    def join(self, join_type: JoinLike, view: 'ViewABC', expr: ExprABC) -> 'JoinedView':
+    def join(self, join_type: JoinLike, view: ViewABC, expr: ExprABC) -> JoinedView:
         return JoinedView(self, JoinType.make(join_type), view, expr)
         
-    def with_args(self, *argvals, **kwargvals) -> 'ViewWithArgs':
+    def with_args(self, *argvals, **kwargvals) -> ViewWithArgs:
         return ViewWithArgs(self, *argvals, **kwargvals)
 
-    def _new_view(self, *args, **kwargs) -> 'ViewABC':
+    def _new_view(self, *args, **kwargs) -> ViewABC:
         return CustomView(*args, **kwargs)
         
 
@@ -130,7 +129,7 @@ class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
             dest_view._selected_exprs, join_view._selected_exprs,
             alias_format=join_view._column_alias_format)
 
-        self.__select_from_query: Optional[QueryData] = None
+        self.__select_from_query: QueryData | None = None
 
 
     def _merge_selected_exprs(self,
@@ -151,7 +150,7 @@ class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
 
     
     @property
-    def _target_view(self) -> 'ViewABC':
+    def _target_view(self) -> ViewABC:
         """ Get a destination View """
         return self.__target_view
 
@@ -164,13 +163,13 @@ class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
         return self.__join_type
 
     @property
-    def _view_to_join(self) -> 'ViewABC':
+    def _view_to_join(self) -> ViewABC:
         if self.__view_to_join is None:
             raise ObjectNotSetError('View to join is not set.')
         return self.__view_to_join
 
     @property
-    def _expr_for_join(self) -> 'ExprABC':
+    def _expr_for_join(self) -> ExprABC:
         if self.__expr_for_join is None:
             raise ObjectNotSetError('Expr for join is not set.')
         return self.__expr_for_join
@@ -199,7 +198,7 @@ class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
         )
 
     @property
-    def _select_from_query_or_none(self) -> Optional[QueryData]:
+    def _select_from_query_or_none(self) -> QueryData | None:
         return self.__select_from_query
 
     def __repr__(self) -> str:
@@ -219,14 +218,14 @@ class SubqueryView(NamedView):
     def _target_view(self) -> ViewABC:
         return self.__target_view
 
-    def append_to_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         qd += self._view_name
 
     def _refresh_select_from_query(self) -> None:
         return self._target_view._refresh_select_query()
 
     @property
-    def _select_from_query_or_none(self) -> Optional[QueryData]:
+    def _select_from_query_or_none(self) -> QueryData | None:
         return QueryData(
             b'(', self._target_view._select_query, b')',
             b'AS', self._target_view)
@@ -269,11 +268,11 @@ class CustomView(CustomViewABC, ViewFinal):
         base_view: BaseViewABC,
         *column_likes: ColumnArgTypes,
         where    : ExprABC = NoneExpr,
-        groups   : Iterable[Union[NameLike, ExprObjectABC]] = (),
+        groups   : Iterable[NameLike | ExprObjectABC] = (),
         orders   : Iterable[OrderedColumnArgTypes] = (),
-        limit    : Optional[ExprLike] = None,
-        offset   : Optional[ExprLike] = None,
-        outer_orders   : Optional[Iterable[OrderedExprObject]] = None,
+        limit    : ExprLike | None = None,
+        offset   : ExprLike | None = None,
+        outer_orders   : Iterable[OrderedExprObject] | None = None,
         **options,
     ):
         super().__init__(base_view)
@@ -410,21 +409,21 @@ class CustomView(CustomViewABC, ViewFinal):
         return self.__outer_orders
 
     @property
-    def _limit_value(self) -> Optional[ExprLike]:
+    def _limit_value(self) -> ExprLike | None:
         """ Get a LIMIT value of this view
 
         Returns:
-            Optional[ExprLike]: LIMIT value
+            ExprLike | None: LIMIT value
                 If not set, returns `None`.
         """
         return self.__limit_value
 
     @property
-    def _offset_value(self) -> Optional[ExprLike]:
+    def _offset_value(self) -> ExprLike | None:
         """ Get a OFFSET value of this view
 
         Returns:
-            Optional[ExprLike]: OFFSET value
+            ExprLike | None: OFFSET value
                 If not set, returns `None`.
         """
         return self.__offset_value
@@ -457,7 +456,7 @@ class CustomSingleView(CustomView):
     def __call__(self, *argvals, **kwargvals): # -> RowData:
         return self.result_with_args(*argvals, **kwargvals)
 
-    def _new_view(self, *args, **kwargs): # -> 'View':
+    def _new_view(self, *args, **kwargs): # -> View:
         return CustomSingleView(*args, **kwargs)
 
     def __repr__(self) -> str:

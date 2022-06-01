@@ -1,7 +1,8 @@
 """
     Database class definition
 """
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, overload
+from __future__ import annotations
+from typing import TYPE_CHECKING
 
 
 from ..syntax.abc.object import NameLike, ObjectName
@@ -21,15 +22,15 @@ class Database(DatabaseABC, Object):
     def __init__(self,
         name: NameLike,
         *table_args: TableArgs,
-        con: Optional['ConnectionABC'] = None,
-        charset: Optional[NameLike] = None,
-        collate: Optional[NameLike] = None,
-        fetch_from_db: Optional[bool] = None,
+        con: ConnectionABC | None = None,
+        charset: NameLike | None = None,
+        collate: NameLike | None = None,
+        fetch_from_db: bool | None = None,
         # **options
     ):
         super().__init__(name)
-        self.__table_dict: Dict[ObjectName, TableABC] = {}
-        self.__con: Optional['ConnectionABC'] = None
+        self.__table_dict: dict[ObjectName, TableABC] = {}
+        self.__con: ConnectionABC | None = None
         self.__charset = ObjectName(charset) if charset is not None else None
         self.__collate = ObjectName(collate) if collate is not None else None
         # self._options = options
@@ -56,7 +57,7 @@ class Database(DatabaseABC, Object):
         """ Override for `DatabaseABC` """
         return self.__con is not None and self._con
 
-    def connect(self, con: Optional['ConnectionABC']) -> None:
+    def connect(self, con: ConnectionABC | None) -> None:
         """ Override for `DatabaseABC` """
         if con is None:
             if self.__con is not None:
@@ -79,7 +80,7 @@ class Database(DatabaseABC, Object):
         return self.__collate
 
     @property
-    def _table_dict(self) -> Dict[ObjectName, TableABC]:
+    def _table_dict(self) -> dict[ObjectName, TableABC]:
         return self.__table_dict
 
     def _new_table(self, table_arg: TableArgs) -> TableABC:

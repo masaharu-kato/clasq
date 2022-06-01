@@ -1,8 +1,9 @@
 """
     Database class definition
 """
+from __future__ import annotations
 from abc import abstractmethod, abstractproperty
-from typing import TYPE_CHECKING, Collection, Dict, Iterable, Iterator, Optional, Tuple, Union, cast, overload
+from typing import TYPE_CHECKING, Collection, Iterable, Iterator, cast, overload
 
 
 from ...syntax.abc.object import NameLike, ObjectABC, ObjectName
@@ -23,15 +24,15 @@ class DatabaseABC(ObjectABC):
     """ Database Expr """
 
     @abstractproperty
-    def _con(self) -> 'ConnectionABC':
+    def _con(self) -> ConnectionABC:
         """ Get a connection """
         raise NotImplementedError()
 
     @property
-    def _connection(self) -> 'ConnectionABC':
+    def _connection(self) -> ConnectionABC:
         return self._con
 
-    def get_connection(self) -> 'ConnectionABC':
+    def get_connection(self) -> ConnectionABC:
         return self._con
 
     @abstractproperty
@@ -40,7 +41,7 @@ class DatabaseABC(ObjectABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def connect(self, con: Optional['ConnectionABC']) -> None:
+    def connect(self, con: ConnectionABC | None) -> None:
         """ Set a new connection to this database """
         raise NotImplementedError()
         
@@ -58,11 +59,11 @@ class DatabaseABC(ObjectABC):
         raise NotImplementedError()
 
     @property
-    def _database(self) -> 'DatabaseABC':
+    def _database(self) -> DatabaseABC:
         return self
 
     @abstractproperty
-    def _table_dict(self) -> Dict[ObjectName, TableABC]:
+    def _table_dict(self) -> dict[ObjectName, TableABC]:
         """ Get a table dict """
         raise NotImplementedError()
 
@@ -94,14 +95,14 @@ class DatabaseABC(ObjectABC):
     def __getitem__(self, val: NameLike) -> TableABC: ...
     
     @overload
-    def __getitem__(self, val: Tuple[NameLike, ...]) -> Tuple[TableABC, ...]: ...
+    def __getitem__(self, val: tuple[NameLike, ...]) -> tuple[TableABC, ...]: ...
 
     def __getitem__(self, val):
         if isinstance(val, tuple):
             return (*(self.get_table(v) for v in val),)
         return self.get_table(val)
 
-    def get_table_or_none(self, val: NameLike) -> Optional[TableABC]:
+    def get_table_or_none(self, val: NameLike) -> TableABC | None:
         """ Get a Table object with the specified name if exists """
         try:
             return self.get_table(val)
@@ -109,7 +110,7 @@ class DatabaseABC(ObjectABC):
             pass
         return None
 
-    def _to_table(self, val: Union[NameLike, TableABC]) -> TableABC:
+    def _to_table(self, val: NameLike | TableABC) -> TableABC:
 
         try:
             is_table_abc = isinstance(val, TableABC)
@@ -124,14 +125,14 @@ class DatabaseABC(ObjectABC):
         
         return self.get_table(cast(NameLike, val))
 
-    def _to_table_or_none(self, val: Union[NameLike, TableABC]) -> Optional[TableABC]:
+    def _to_table_or_none(self, val: NameLike | TableABC) -> TableABC | None:
         try:
             return self._to_table(val)
         except (ObjectNotFoundError, NotaSelfObjectError):
             pass
         return None
 
-    def __contains__(self, val: Union[NameLike, TableABC])-> bool:
+    def __contains__(self, val: NameLike | TableABC)-> bool:
         return self._to_table_or_none(val) is not None
 
     @abstractmethod
@@ -218,16 +219,16 @@ class DatabaseABC(ObjectABC):
         self.execute(*self._create_database_query(if_not_exists=if_not_exists))
         # self._exists = True
 
-    def query(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> TableData:
+    def query(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> TableData:
         return self._con.query(*exprs, prms=prms)
 
-    def query_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> Iterator[TableData]:
+    def query_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> Iterator[TableData]:
         return self._con.query_many(*exprs, data=data)
 
-    def execute(self, *exprs: Optional[QueryLike], prms: Collection[ValueType] = ()) -> None:
+    def execute(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> None:
         return self._con.execute(*exprs, prms=prms)
 
-    def execute_many(self, *exprs: Optional[QueryLike], data: Union[TableData, Iterable[QueryArgVals]]) -> None:
+    def execute_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> None:
         return self._con.execute_many(*exprs, data=data)
 
     def commit(self) -> None:
@@ -258,7 +259,7 @@ class DatabaseReferenceABC(DatabaseABC):
     def _connection_available(self) -> bool:
         return self._entity._connection_available
 
-    def connect(self, con: Optional['ConnectionABC']) -> None:
+    def connect(self, con: ConnectionABC | None) -> None:
         return self._entity.connect(con)
 
     @property

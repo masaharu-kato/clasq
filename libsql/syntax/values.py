@@ -1,7 +1,8 @@
 """
     Values
 """
-from typing import TYPE_CHECKING, Union, get_args
+from __future__ import annotations
+from typing import TYPE_CHECKING, get_args
 
 from .abc.query import QueryABC
 from . import sql_values
@@ -12,13 +13,13 @@ if TYPE_CHECKING:
 class NullType(QueryABC):
     """ SQL NULL Type """
 
-    def append_to_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         qd.append(b'NULL')
 
 
 NULL = NullType()
 
-ValueType = Union[sql_values.SQLNotNullValue, NullType]
+ValueType = sql_values.SQLNotNullValue | NullType
 
 
 def is_value_type(value) -> bool:

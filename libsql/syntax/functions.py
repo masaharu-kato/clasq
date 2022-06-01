@@ -1,7 +1,7 @@
 """
     MySQL Functions
 """
-from typing import Optional
+from __future__ import annotations
 import datetime
 from .exprs import ExprABC as Ext, Func, NoArgsFunc, OP, BasicFunc
 from .sql_values import DateLike, TimeLike
@@ -107,7 +107,7 @@ class DateTime(FunctionsABC):
     UTC_DATE        = Func(b'UTC_DATE')
     UTC_TIME        = Func(b'UTC_TIME')
     UTC_TIMESTAMP   = Func(b'UTC_TIMESTAMP')
-    WEEK            = Func(b'WEEK', [DateLike, Optional[int]], int)
+    WEEK            = Func(b'WEEK', [DateLike, int | None], int)
     WEEKDAY         = Func(b'WEEKDAY', [DateLike], int)
     WEEKOFYEAR      = Func(b'WEEKOFYEAR', [DateLike], int)
     YEAR            = Func(b'YEAR', [DateLike], int)

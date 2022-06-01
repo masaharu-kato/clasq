@@ -1,6 +1,7 @@
 """
     Basic classes definitions for built-in data types in SQL
 """
+from __future__ import annotations
 from abc import ABC, ABCMeta, abstractmethod
 import typing
 
@@ -30,7 +31,7 @@ class _SQLTypeABCMeta(ABCMeta):
     def python_type(cls) -> typing.Type:
         return cls.get_python_type()
 
-    def convert_value_for_sql(cls, v: typing.Any) -> 'SQLValue':
+    def convert_value_for_sql(cls, v: typing.Any) -> SQLValue:
         """ Convert a value for SQL """
         return v  # Default Implementation
 
@@ -60,7 +61,7 @@ class SQLTypeABC(ABC, metaclass=_SQLTypeABCMeta):
         self._orig_v = v
 
     @property
-    def orig_value(self) -> 'SQLValue':
+    def orig_value(self) -> SQLValue:
         return self._orig_v
 
     @property
@@ -68,7 +69,7 @@ class SQLTypeABC(ABC, metaclass=_SQLTypeABCMeta):
         return bind_generic_args(getattr(self, '__orig_class__', type(self)))
 
     @property
-    def sql_value(self) -> 'SQLValue':
+    def sql_value(self) -> SQLValue:
         return self.cls.convert_value_for_sql(self._orig_v)
 
 
@@ -212,12 +213,12 @@ class _StringABCMeta(_SQLTypeABCMeta):
     """ String type ABC Metaclass """
 
     @abstractmethod
-    def get_max_length(cls) -> typing.Optional[int]:
+    def get_max_length(cls) -> int | None:
         """ Get a max length """
         raise NotImplementedError()
 
     @property
-    def max_length(cls) -> typing.Optional[int]:
+    def max_length(cls) -> int | None:
         return cls.get_max_length()
         
     def convert_value_for_sql(cls, v):
@@ -244,11 +245,11 @@ class TextABC(StringABC):
 class _WithLengthABCMeta(_WithParamsABCMeta):
     """ SQL type with required length ABC Metaclass """
 
-    def get_specified_length(cls) -> typing.Optional[int]:
+    def get_specified_length(cls) -> int | None:
         return int(v) if (v := cls.get_generic_arg(0)) is not None else None
 
     @property
-    def specified_length(cls) -> typing.Optional[int]:
+    def specified_length(cls) -> int | None:
         return cls.get_specified_length()
 
     def get_length(cls) -> int:
@@ -292,7 +293,7 @@ L = typing.TypeVar('L', bound=int)
 class _BitABCMeta(_NumericABCMeta, _WithLengthABCMeta):
     """ Bit type """
 
-    def convert_value_for_sql(cls, v: typing.Any) -> 'SQLValue':
+    def convert_value_for_sql(cls, v: typing.Any) -> SQLValue:
         v = super().convert_value_for_sql(v)
         if v is None or v is True or v is False:
             return v
@@ -308,13 +309,13 @@ class BitABC(NumericABC, typing.Generic[L], metaclass=_BitABCMeta):
 class _StringWithLengthABCMeta(_StringABCMeta, _WithLengthABCMeta):
     """ SQL type with length ABC Metaclass for String """
     
-    def get_max_length(cls) -> typing.Optional[int]:
+    def get_max_length(cls) -> int | None:
         return cls.get_length()
 
 class _StringWithOptionalLengthABCMeta(_StringABCMeta, _WithOptionalLengthABCMeta):
     """ SQL type with optional length ABC Metaclass for String """
 
-    def get_max_length(cls) -> typing.Optional[int]:
+    def get_max_length(cls) -> int | None:
         return cls.get_length()
 
 class StringWithOptionalLengthABC(StringABC, typing.Generic[L], metaclass=_StringWithOptionalLengthABCMeta):

@@ -1,8 +1,9 @@
 """
     Column abstract classes
 """
+from __future__ import annotations
 from abc import abstractproperty
-from typing import TYPE_CHECKING, Optional, Type
+from typing import TYPE_CHECKING, Type
 
 from ...syntax.exprs import ExprABC, ExprObjectABC
 from ...syntax.abc.object import ObjectName, ObjectWithNamePropABC
@@ -20,7 +21,7 @@ class ColumnABC(ExprObjectABC):
     """ Column ABC """
 
     @abstractproperty
-    def _named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> NamedViewABC:
         """ Get a belonging BaseView object 
         """
 
@@ -64,7 +65,7 @@ class TableColumnABC(NamedViewColumnABC):
     """ Table Column expression """
 
     @abstractproperty
-    def table_or_none(self) -> Optional['Table']:
+    def table_or_none(self) -> Table | None:
         """ Get a parent Table object if exists """
 
     @abstractproperty
@@ -96,21 +97,21 @@ class TableColumnABC(NamedViewColumnABC):
         return OrderType.ASC
 
     @property
-    def original_column(self) -> 'ExprABC':
+    def original_column(self) -> ExprABC:
         return self
 
     @property
-    def table(self) -> 'Table':
+    def table(self) -> Table:
         if self.table_or_none is None:
             raise ObjectNotSetError('Table is not set.')
         return self.table_or_none
 
     @property
-    def base_view(self) -> 'BaseViewABC':
+    def base_view(self) -> BaseViewABC:
         return self.table
 
     @property
-    def _named_view(self) -> 'NamedViewABC':
+    def _named_view(self) -> NamedViewABC:
         """ Get a belonging BaseView object 
             (Override from `NamedViewColumnABC`)
         """

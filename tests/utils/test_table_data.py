@@ -1,7 +1,7 @@
 """
     Test TableData
 """
-from typing import Any, Dict, List, Tuple
+from typing import Any
 import pytest
 
 from libsql.utils.tabledata import FrozenTableData, TableData, ColumnMetadata, RowData
@@ -13,7 +13,7 @@ from libsql.utils.tabledata import FrozenTableData, TableData, ColumnMetadata, R
     ['hoge', 'fugafuga', 'piyoo'],
     ['id', 'name', 'age', 'grade'],
 ])
-def test_column_metadata(cols: List[str]):
+def test_column_metadata(cols: list[str]):
     colmeta = ColumnMetadata([*cols])
     assert len(colmeta) == len(cols)
     assert colmeta.columns == tuple(cols)
@@ -41,7 +41,7 @@ def test_column_metadata(cols: List[str]):
     {'hoge': '', 'fugafuga': 0, 'flag': False},
     {'id': 25, 'name': 'John', 'age': 21, 'grade': 3},
 ])
-def test_row_data(row_dict: Dict[str, Any]):
+def test_row_data(row_dict: dict[str, Any]):
     row_from_dict = RowData(row_dict)
     row_from_cols = RowData(row_dict.keys(), row_dict.values())
     row_from_meta = RowData(ColumnMetadata(row_dict.keys()), row_dict.values())
@@ -69,7 +69,7 @@ def test_row_data(row_dict: Dict[str, Any]):
     (['words', 'len'], [('There', 5), ('are', 3), ('many', 4), ('rows', 4)]),
     (['words', 'len', 'weight'], [('There', 5, 3.55), ('are', 3, 2.932), ('many', 4, 10.24), ('rows', 4, 8.5)]),
 ])
-def test_table_data(cols: List[str], data: List[Tuple[Any, ...]]):
+def test_table_data(cols: list[str], data: list[tuple[Any, ...]]):
     f_table = FrozenTableData(cols, [*data])
     w_table = TableData(cols, [*data])
 

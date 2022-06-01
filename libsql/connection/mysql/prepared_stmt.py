@@ -1,6 +1,8 @@
 """
+    MySQL Prepared statement implementation
 """
-from typing import TYPE_CHECKING, Collection, List, Optional, Tuple
+from __future__ import annotations
+from typing import TYPE_CHECKING, Collection
 
 from mysql.connector.constants import ServerFlag # type: ignore
 
@@ -15,7 +17,7 @@ MAX_RESULTS = 4294967295
 
 class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
 
-    def __init__(self, con: 'MySQLConnectionABC', stmt: bytes):
+    def __init__(self, con: MySQLConnectionABC, stmt: bytes):
         self._con = con # Prepare before super init
         super().__init__(stmt)
 
@@ -23,7 +25,7 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
     def cnx(self):
         return self._con.cnx
     
-    def _new(self) -> Tuple[int, int]:
+    def _new(self) -> tuple[int, int]:
         """ Create a new prepared statement (Override)
             Return: stmt_id, number of params
         """
@@ -39,7 +41,7 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
         if hasattr(self, '_stmt_id') and self.cnx.is_connected():
             self.cnx.cmd_stmt_close(self._stmt_id)
 
-    def _send_params(self, params: Collection[SQLValue]) -> Optional[TableData]:
+    def _send_params(self, params: Collection[SQLValue]) -> TableData | None:
         """ Execute a specific prepared statement
             (Override from `PreparedStatementExecutorABC`)
         """
@@ -52,7 +54,7 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
         if not isinstance(res[1], list):
             return None # No results
         
-        column_desc: List[tuple] = res[1]
+        column_desc: list[tuple] = res[1]
         self.cnx.unread_result = True
         flags = res[2]['status_flag']
         _cursor_exists = flags & ServerFlag.STATUS_CURSOR_EXISTS != 0
@@ -63,6 +65,6 @@ class MySQLPreparedStatementExecutor(PreparedStatementExecutorABC):
 
         rows, eof = self.cnx.get_rows(binary=True, columns=column_desc)
         
-        column_names :List[str] = [str(c[0]) for c in column_desc]
+        column_names :list[str] = [str(c[0]) for c in column_desc]
         return TableData(column_names, rows)
 

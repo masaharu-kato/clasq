@@ -1,7 +1,7 @@
 """
     SQL Values
 """
-from typing import Union
+from __future__ import annotations
 
 import datetime
 
@@ -9,8 +9,8 @@ Date = datetime.date
 Time = datetime.time
 DateTime = datetime.datetime
 
-DateLike = Union[Date, DateTime]
-TimeLike = Union[DateTime, Time]
+DateLike = Date | DateTime
+TimeLike = DateTime | Time
 
-SQLNotNullValue = Union[bool, int, float, bytes, str, Date, Time, DateTime]
-SQLValue = Union[SQLNotNullValue, None]
+SQLNotNullValue = bool | int | float | bytes | str | Date | Time | DateTime
+SQLValue = SQLNotNullValue | None  # type: ignore

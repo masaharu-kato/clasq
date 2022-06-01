@@ -1,7 +1,7 @@
 """
     Foreign Key Reference
 """
-from typing import Optional, Tuple, Union
+from __future__ import annotations
 
 from ..syntax.keywords import ReferenceOption
 from ..syntax.exprs import Object, NameLike
@@ -12,12 +12,12 @@ class ForeignKeyReference(Object):
     """ Foreign Key Reference """
 
     def __init__(self,
-        orig_column: Union[TableColumn, Tuple[TableColumn, ...]],
-        ref_column : Union[TableColumn, Tuple[TableColumn, ...]],
+        orig_column: TableColumn | tuple[TableColumn, ...],
+        ref_column : TableColumn | tuple[TableColumn, ...],
         *,
-        on_delete: Optional[ReferenceOption] = None,
-        on_update: Optional[ReferenceOption] = None,
-        name: Optional[NameLike] = None
+        on_delete: ReferenceOption | None = None,
+        on_update: ReferenceOption | None = None,
+        name: NameLike | None = None
     ):
         super().__init__(name or b'')
         

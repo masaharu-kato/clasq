@@ -1,8 +1,7 @@
 """
     Test create from class
 """
-
-from typing import Dict, List, Type
+from typing import Type
 
 import pytest
 
@@ -55,7 +54,7 @@ from sample_db import Category, Product, User, UserSale, UserSaleProduct
     ),
 ])
 
-def test_create_table_from_class(cls: Type[TableClass], query, columns: List[str], fkeys: Dict[str, str]):
+def test_create_table_from_class(cls: Type[TableClass], query, columns: list[str], fkeys: dict[str, str]):
     assert list(str(c.name) for c in cls._entity.iter_table_columns()) == columns
     assert cls._entity.create_table_query.stmt == query
 

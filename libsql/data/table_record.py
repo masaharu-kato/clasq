@@ -1,8 +1,8 @@
 """
     Table Record classes
 """
-from abc import abstractmethod
-from typing import TYPE_CHECKING, Generic, Optional, Type, TypeVar, get_args, get_origin, get_type_hints
+from __future__ import annotations
+from typing import TYPE_CHECKING, Generic, Type, TypeVar, get_args, get_origin, get_type_hints
 
 
 from ..schema.abc.table import TableReferenceABC
@@ -33,24 +33,24 @@ class TableClassABC(RecordABC):
 class TableClass(TableClassABC, metaclass=_TableClassMeta):
     """ Table class """
 
-    _table_name: Optional[str] = None
+    _table_name: str | None = None
     __table_obj: Table
 
-    id: 'ColumnDef'
+    id: ColumnDef
 
     @classmethod
     def get_entity(cls) -> Table:
         return cls.__table_obj
 
     @classmethod
-    def _get_table_name(cls) -> 'NameLike':
+    def _get_table_name(cls) -> NameLike:
         if cls is TableClass:
             raise RuntimeError('TableClass is not specialized.')
         if cls._table_name:
             return cls._table_name
         return camel_to_snake(cls.__name__)
 
-    def __init_subclass__(cls, *, db: Type['DatabaseClass'], name: Optional[str] = None) -> None:
+    def __init_subclass__(cls, *, db: Type['DatabaseClass'], name: str | None = None) -> None:
         super().__init_subclass__()
         db_obj = db.get_entity()
         if name is not None:
@@ -93,7 +93,7 @@ class TableClass(TableClassABC, metaclass=_TableClassMeta):
                 col_type = actual_type
 
             # Get a default value
-            default_value: Optional[ExprLike] = None
+            default_value: ExprLike | None = None
             if hasattr(cls, hint_name):
                 _v = getattr(cls, hint_name)
                 default_value = NULL if _v is None else _v

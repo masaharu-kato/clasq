@@ -3,7 +3,7 @@
 """
 import pytest
 from libsql.connection import MySQLConnection
-from libsql.schema.column import NamedViewColumnABC, TableColumn, NamedViewColumn
+from libsql.schema.column import NamedViewColumnABC, TableColumn
 from libsql.syntax.exprs import Arg
 from libsql.syntax.errors import QueryArgumentError
 from libsql.utils.tabledata import TableData

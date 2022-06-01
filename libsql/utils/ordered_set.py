@@ -1,7 +1,7 @@
 """
     Ordered Set
 """
-
+from __future__ import annotations
 from typing import Generic, Iterable, TypeVar
 
 from .abc.set import FrozenSetABC, SetABC, SetLike

@@ -1,6 +1,7 @@
 """
     Table Record classes
 """
+from __future__ import annotations
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Generic, Mapping, TypeVar
 
@@ -43,7 +44,7 @@ class RecordABC:
 
 
     @abstractmethod
-    def get_view(self) -> 'ViewABC':
+    def get_view(self) -> ViewABC:
         """ Get a parent view object """
 
     @property
@@ -66,14 +67,14 @@ class RecordABC:
 T = TypeVar('T')
 class ColumnValue(Generic[T]):
     """ Cell (Value of column in record) """
-    def __init__(self, record: RecordABC, expr: 'ExprObjectABC', v: T) -> None:
+    def __init__(self, record: RecordABC, expr: ExprObjectABC, v: T) -> None:
         super().__init__()
         self._record = record
         self._expr = expr
         self._v = v
 
     @property
-    def expr(self) -> 'ExprObjectABC':
+    def expr(self) -> ExprObjectABC:
         """ Get a parent column object """
         return self._expr
 

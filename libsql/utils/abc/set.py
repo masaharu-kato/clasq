@@ -1,9 +1,9 @@
 """
     Set ABC Definition
 """
-
+from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import FrozenSet, Generic, Iterable, TypeVar, Union, Set
+from typing import FrozenSet, Generic, Iterable, TypeVar
 
 T = TypeVar('T')
 
@@ -27,77 +27,77 @@ class _FrozenSetABC(ABC, Generic[T]):
         """ Contains """
 
     @abstractmethod
-    def __le__(self, oset: 'SetLike[T]') -> bool:
+    def __le__(self, oset: SetLike[T]) -> bool:
         """ Returns if oset contains all values of self """
 
     @abstractmethod
-    def __lt__(self, oset: 'SetLike[T]') -> bool:
+    def __lt__(self, oset: SetLike[T]) -> bool:
         """ Returns if oset contains all values of self and self != oset """
 
     @abstractmethod
-    def __ge__(self, oset: 'SetLike[T]') -> bool:
+    def __ge__(self, oset: SetLike[T]) -> bool:
         """ Returns if self contains all values of oset """
 
     @abstractmethod
-    def __gt__(self, oset: 'SetLike[T]') -> bool:
+    def __gt__(self, oset: SetLike[T]) -> bool:
         """ Returns if self contains all values of oset and self != oset """
 
     @abstractmethod
-    def __and__(self, oset: 'SetLike[T]'):
+    def __and__(self, oset: SetLike[T]):
         """ Return AND """
 
     @abstractmethod
-    def __or__(self, oset: 'SetLike[T]'):
+    def __or__(self, oset: SetLike[T]):
         """ Return OR """
 
     @abstractmethod
-    def __sub__(self, oset: 'SetLike[T]'):
+    def __sub__(self, oset: SetLike[T]):
         """ Return Sub """
 
     @abstractmethod
-    def __xor__(self, oset: 'SetLike[T]'):
+    def __xor__(self, oset: SetLike[T]):
         """ Return XOR """
 
     @abstractmethod
-    def __rand__(self, oset: 'SetLike[T]'):
+    def __rand__(self, oset: SetLike[T]):
         """ Return reversed AND """
 
     @abstractmethod
-    def __ror__(self, oset: 'SetLike[T]'):
+    def __ror__(self, oset: SetLike[T]):
         """ Return reversed OR """
 
     @abstractmethod
-    def __rsub__(self, oset: 'SetLike[T]'):
+    def __rsub__(self, oset: SetLike[T]):
         """ Return reversed Sub """
 
     @abstractmethod
-    def __rxor__(self, oset: 'SetLike[T]'):
+    def __rxor__(self, oset: SetLike[T]):
         """ Return reversed XOR """
 
-    def isdisjoint(self, oset: 'SetLike[T]') -> bool:
+    def isdisjoint(self, oset: SetLike[T]) -> bool:
         return bool(self.__and__(oset))
 
-    def issubset(self, oset: 'SetLike[T]') -> bool:
+    def issubset(self, oset: SetLike[T]) -> bool:
         """ Returns if oset contains all values of self """
         return self.__le__(oset)
 
-    def issuperset(self, oset: 'SetLike[T]') -> bool:
+    def issuperset(self, oset: SetLike[T]) -> bool:
         """ Returns if self contains all values of oset """
         return self.__ge__(oset)
 
-    def intersection(self, oset: 'SetLike[T]'):
+    def intersection(self, oset: SetLike[T]):
         """ Return intersection (equivalent to `__and__`) """
         return self.__and__(oset)
 
-    def union(self, oset: 'SetLike[T]'):
+    def union(self, oset: SetLike[T]):
         """ Return union (equivalent to `__or__`) """
         return self.__or__(oset)
 
-    def difference(self, oset: 'SetLike[T]'):
+    def difference(self, oset: SetLike[T]):
         """ Return difference (equivalent to `__sub__`) """
         return self.__sub__(oset)
 
-    def symmetric_difference(self, oset: 'SetLike[T]'):
+    def symmetric_difference(self, oset: SetLike[T]):
         """ Return symmetric difference (equivalent to `__xor__`) """
         return self.__xor__(oset)
         
@@ -110,11 +110,11 @@ class SetABC(_FrozenSetABC[T], Generic[T]):
     """ Set ABC """
 
     @abstractmethod
-    def __iand__(self, oset: 'SetLike[T]'):
+    def __iand__(self, oset: SetLike[T]):
         """ AND """
 
     @abstractmethod
-    def __ior__(self, oset: 'SetLike[T]'):
+    def __ior__(self, oset: SetLike[T]):
         """ OR """
 
     @abstractmethod
@@ -169,7 +169,7 @@ class SetABC(_FrozenSetABC[T], Generic[T]):
         for objs in vals_list:
             self.__ixor__(type(self)(objs))
 
-FrozenSetLike = Union[FrozenSetABC[T], FrozenSet[T]]
+FrozenSetLike = FrozenSetABC[T] | frozenset[T]
 
-NonFrozenSetLike = Union[SetABC[T], Set[T]]
-SetLike = Union[FrozenSetLike[T], NonFrozenSetLike[T]]
+NonFrozenSetLike = SetABC[T] | set[T]
+SetLike = FrozenSetABC[T] | frozenset[T] | SetABC[T] | set[T]

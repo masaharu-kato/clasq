@@ -1,10 +1,10 @@
 """
     KeySet class
 """
-
+from __future__ import annotations
 from abc import abstractproperty, abstractmethod
 import itertools
-from typing import Dict, Generic, Hashable, Iterable, Iterator, Optional, TypeVar, Union
+from typing import Generic, Hashable, Iterable, Iterator, TypeVar
 
 from .abc.set import FrozenSetABC, FrozenSetLike, NonFrozenSetLike, SetABC, SetLike
 from .ordered_set import FrozenOrderedSet, OrderedSet
@@ -16,7 +16,7 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[K, T]):
     """ Frozen Set for object ABC (Method definitions) """
 
     @abstractproperty
-    def _key_to_obj(self) -> Dict[K, T]:
+    def _key_to_obj(self) -> dict[K, T]:
         pass
 
     @abstractproperty
@@ -28,7 +28,7 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[K, T]):
         """ Get a key from object """
 
     @abstractmethod
-    def _key_or_none(self, obj: Union[K, T]) -> Optional[K]:
+    def _key_or_none(self, obj: K | T) -> K | None:
         """ Get a key from object if obj is a valid type """
 
     def _make_fset(self, keys) -> FrozenSetLike[K]:
@@ -41,7 +41,7 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[K, T]):
     def _to_objs(self, keys) -> Iterator[T]:
         return (self._key_to_obj[key] for key in keys)
 
-    def __contains__(self, obj: Union[K, T]) -> bool:
+    def __contains__(self, obj: K | T) -> bool:
         if key := self._key_or_none(obj):
             return key in self._key_set and obj is self._key_to_obj[key]
         return obj in self._key_set
@@ -49,7 +49,7 @@ class _FrozenKeySetABC(FrozenSetABC[T], Generic[K, T]):
     def __getitem__(self, key: K) -> T:
         return self._key_to_obj[key]
 
-    def get(self, key: K) -> Optional[T]:
+    def get(self, key: K) -> T | None:
         return self._key_to_obj.get(key)
         
     def __len__(self) -> int:
@@ -111,7 +111,7 @@ class FrozenKeySetABC(_FrozenKeySetABC[K, T], Generic[K, T]):
         self.__key_fset = self._make_fset(self._key_to_obj.keys())
 
     @property
-    def _key_to_obj(self) -> Dict[K, T]:
+    def _key_to_obj(self) -> dict[K, T]:
         return self.__key_to_obj
 
     @property
@@ -127,7 +127,7 @@ class KeySetABC(SetABC[T], _FrozenKeySetABC[K, T], Generic[K, T]):
         self.__key_fset = self._make_set(self._key_to_obj.keys())
 
     @property
-    def _key_to_obj(self) -> Dict[K, T]:
+    def _key_to_obj(self) -> dict[K, T]:
         return self.__key_to_obj
 
     @property

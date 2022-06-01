@@ -1,8 +1,9 @@
 """
     Prepared statement executor abstract class
 """
+from __future__ import annotations
 from abc import abstractmethod
-from typing import Collection, Optional, Tuple
+from typing import Collection
 
 from ..syntax.sql_values import SQLValue
 from ..utils.tabledata import TableData
@@ -17,13 +18,13 @@ class PreparedStatementExecutorABC:
         self._stmt_id, self.n_params = self._new()
 
     @abstractmethod
-    def _new(self) -> Tuple[int, int]:
+    def _new(self) -> tuple[int, int]:
         """ Create a new prepared statement
             Return: stmt_id, number of params
         """
 
     @abstractmethod
-    def _send_params(self, params: Collection[SQLValue]) -> Optional[TableData]:
+    def _send_params(self, params: Collection[SQLValue]) -> TableData | None:
         """ Execute a specific prepared statement """
 
     @abstractmethod
@@ -41,7 +42,7 @@ class PreparedStatementExecutorABC:
         except errors.ProgrammingError: # TODO: Check
             self._stmt_id = self._new()
 
-    def run_with_params(self, params: Collection[SQLValue]) -> Optional[TableData]:
+    def run_with_params(self, params: Collection[SQLValue]) -> TableData | None:
         self.reset_or_new()
         if not len(params) == self.n_params:
             raise errors.PreparedStatementPrametersError('Incorrect number of arguments for prepared statements.', self._stmt, len(params), self.n_params)

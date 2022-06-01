@@ -1,8 +1,9 @@
 """
     Query data class
 """
+from __future__ import annotations
 import re
-from typing import Collection, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union, cast
+from typing import Collection, Iterable, Iterator, cast
 
 from .abc.query import QueryABC
 from .values import NullType, ValueType, is_value_type
@@ -20,22 +21,22 @@ class QueryData(QueryABC):
     RE_KEYWORD = re.compile(rb'[\s\w()+\-*/%<>=!&|^~,.]*')
 
     def __init__(self,
-        *vals: Optional['QueryLike'],
-        stmt: Optional[bytes] = None,
+        *vals: QueryLike | None,
+        stmt: bytes | None = None,
         # args: Optional[Collection[Arg]] = None,
-        prms: Optional[Collection[Union[ValueType, Arg]]] = None,
+        prms: Collection[ValueType | Arg] = None,
     ):
         """ Create a QueryData instance
 
         Args:
             vals: Keywords, expressions or values for append to the SQL statement.
-            stmt (Optional[bytes], optional): Initial SQL statement bytes. Defaults to None.
-            args (Optional[List[Arg]], optional): Initial list of query arguments (placeholders). Defaults to None.
-            prms (Optional[List[ValueOrArg]], optional): Initial list of parameter values. Defaults to None.
+            stmt (bytes | None, optional): Initial SQL statement bytes. Defaults to None.
+            args (Optional[list[Arg]], optional): Initial list of query arguments (placeholders). Defaults to None.
+            prms (Optional[list[ValueOrArg]], optional): Initial list of parameter values. Defaults to None.
         """
         self._stmt = stmt if stmt is not None else b''
         # self._argdict = {arg.name: arg for arg in args} if args is not None else {} 
-        self._argdict: Dict[ArgName, Arg] = {} 
+        self._argdict: dict[ArgName, Arg] = {} 
         self._prms = [*prms] if prms else []
         if vals:
             self.append(*vals)
@@ -46,23 +47,23 @@ class QueryData(QueryABC):
         return self._stmt
 
     @property
-    def args(self) -> Tuple[Arg, ...]:
+    def args(self) -> tuple[Arg, ...]:
         """ Get a tuple of current query argument objects (placeholders) """
         return tuple(self._argdict.values())
 
     @property
-    def prms_with_args(self) -> Tuple[ValueOrArg, ...]:
+    def prms_with_args(self) -> tuple[ValueOrArg, ...]:
         """ Get a tuple of current parameter values
             (may includes query argument objects)
         """
         return tuple(self._prms)
     
     @property
-    def prms(self) -> Tuple[SQLValue, ...]:
+    def prms(self) -> tuple[SQLValue, ...]:
         """ Get a tuple of current parameters """
         return self._calc_pure_params()
 
-    def call(self, *argvals: ValueType, **kwargvals: ValueType) -> 'QueryData':
+    def call(self, *argvals: ValueType, **kwargvals: ValueType) -> QueryData:
         """ Create a new QueryData instance with query argument values
 
         Args:
@@ -77,17 +78,17 @@ class QueryData(QueryABC):
         """
         return self._call(argvals, kwargvals)
 
-    def call_ignore_unused(self, *argvals: ValueType, **kwargvals: ValueType) -> 'QueryData':
+    def call_ignore_unused(self, *argvals: ValueType, **kwargvals: ValueType) -> QueryData:
         """ Create a new QueryData instance with query argument values
             (Ignore unused arguments)
         """
         return self._call(argvals, kwargvals, ignore_unused=True)
 
-    def calc_prms_many(self, iter_argvals: Iterable[Union[Collection[ValueType], Dict[ArgName, ValueType]]], *, ignore_unused=False) -> Iterator[Tuple[SQLValue, ...]]:
+    def calc_prms_many(self, iter_argvals: Iterable[Collection[ValueType] | dict[ArgName, ValueType]], *, ignore_unused=False) -> Iterator[tuple[SQLValue, ...]]:
         for argvals in iter_argvals:
             yield self.calc_prms(argvals, ignore_unused=ignore_unused)
 
-    def calc_prms(self, argvals: Union[Collection[ValueType], Dict[ArgName, ValueType]], *, ignore_unused=False) -> Tuple[SQLValue, ...]:
+    def calc_prms(self, argvals: Collection[ValueType] | dict[ArgName, ValueType], *, ignore_unused=False) -> tuple[SQLValue, ...]:
         argvaldict = argvals if isinstance(argvals, dict) else dict(enumerate(argvals))
         return self._calc_pure_params(argvaldict, ignore_unused=ignore_unused)
 
@@ -97,7 +98,7 @@ class QueryData(QueryABC):
         """
         return self.call(*argvals, **kwargvals)
 
-    def _append(self, stmt: bytes, prms: Iterable[ValueOrArg] = None) -> 'QueryData':
+    def _append(self, stmt: bytes, prms: Iterable[ValueOrArg] = None) -> QueryData:
         """ Append a statement and/or parameters
             (Internal private method)
 
@@ -124,7 +125,7 @@ class QueryData(QueryABC):
                 self._prms.append(prm)
         return self
 
-    def append_to_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         """ Append to the existing QueryData
             (Overrided from `QueryABC`)
 
@@ -133,11 +134,11 @@ class QueryData(QueryABC):
         """
         qd.append_query_data(self)
 
-    def append_one(self, val: Optional['QueryLike']) -> 'QueryData':
+    def append_one(self, val: QueryLike | None) -> QueryData:
         """ Append a single value
 
         Args:
-            val (Optional[QueryLike]): A value or object to append.
+            val (QueryLike | None): A value or object to append.
                 `None` will be ignored (do nothing).
 
         Raises:
@@ -172,11 +173,11 @@ class QueryData(QueryABC):
 
         raise errors.QueryTypeError('Invalid value type %s (%s)' % (type(val), repr(val)))
 
-    def append(self, *vals: Optional['QueryLike']) -> 'QueryData':
+    def append(self, *vals: QueryLike | None) -> QueryData:
         """ Append values
 
         Args:
-            *vals (Optional[QueryLike]): Value(s) or object(s) to append.
+            *vals (QueryLike | None): Value(s) or object(s) to append.
                 `None` will be ignored (do nothing).
 
         Raises:
@@ -189,7 +190,7 @@ class QueryData(QueryABC):
             self.append_one(val)
         return self
 
-    def append_keyword(self, keyword: bytes) -> 'QueryData':
+    def append_keyword(self, keyword: bytes) -> QueryData:
         """ Append SQL keyword or raw statements
             (Quotes and multiple statements are not allowed.)
 
@@ -206,7 +207,7 @@ class QueryData(QueryABC):
             raise errors.QueryValueError('Keyword has invalid characters.', keyword)
         return self._append(keyword)
 
-    def append_query_data(self, qd: 'QueryData') -> 'QueryData':
+    def append_query_data(self, qd: QueryData) -> QueryData:
         """ Append the other QueryData object 
 
         Args:
@@ -217,7 +218,7 @@ class QueryData(QueryABC):
         """
         return self._append(qd._stmt, qd._prms)
 
-    def append_value(self, val: ValueOrArg) -> 'QueryData':
+    def append_value(self, val: ValueOrArg) -> QueryData:
         """ Append as value
 
         Args:
@@ -237,7 +238,7 @@ class QueryData(QueryABC):
                 self._argdict[val.name] = val
         return self._append(self.PLACEHOLDER, [val])
 
-    def append_values(self, *vals: ValueOrArg) -> 'QueryData':
+    def append_values(self, *vals: ValueOrArg) -> QueryData:
         """ Append multiple args as values
 
         Args:
@@ -250,7 +251,7 @@ class QueryData(QueryABC):
             self.append_value(val)
         return self
 
-    def append_object_name(self, val: bytes) -> 'QueryData':
+    def append_object_name(self, val: bytes) -> QueryData:
         """ Append as object name
 
         Args:
@@ -262,7 +263,7 @@ class QueryData(QueryABC):
         assert isinstance(val, bytes) and not self.OBJECT_QUOTE in val
         return self._append(self.OBJECT_QUOTE + val + self.OBJECT_QUOTE)
         
-    def append_joined_object(self, *vals: Optional['QueryLike']) -> 'QueryData':
+    def append_joined_object(self, *vals: QueryLike | None) -> QueryData:
         """ Join values with a default separator (, ) and append
 
         Returns:
@@ -270,13 +271,13 @@ class QueryData(QueryABC):
         """
         return self.append_joined(vals, sep=self.OBJECT_SEP)
 
-    def __iadd__(self, value) -> 'QueryData':
+    def __iadd__(self, value) -> QueryData:
         """ Append a single value
             (Synonym of `append_one` method)
         """
         return self.append_one(value)
 
-    def append_joined(self, vals: Iterable, *, sep:bytes = DEFAULT_SEP) -> 'QueryData':
+    def append_joined(self, vals: Iterable, *, sep:bytes = DEFAULT_SEP) -> QueryData:
         """ Join a iterable with a specific separator
 
         Args:
@@ -301,8 +302,8 @@ class QueryData(QueryABC):
         return 'QueryData(%s, [%s])' % (self._stmt.decode(), ', '.join(map(repr, self._prms)))
     
 
-    def _call(self, argvals: Tuple[ValueType, ...], kwargvals: Dict[str, ValueType], *, ignore_unused=False) -> 'QueryData':
-        argvaldict: Dict[ArgName, ValueType] = {}
+    def _call(self, argvals: tuple[ValueType, ...], kwargvals: dict[str, ValueType], *, ignore_unused=False) -> QueryData:
+        argvaldict: dict[ArgName, ValueType] = {}
         for i, argval in enumerate(argvals):
             if i not in self._argdict:
                 raise errors.QueryArgumentError('Positional argument %s not found.' % i)
@@ -315,18 +316,18 @@ class QueryData(QueryABC):
 
         return QueryData(stmt=self._stmt, prms=self._calc_params_with_args(argvaldict, ignore_unused=ignore_unused))
 
-    def _calc_params_with_args(self, argvaldict: Optional[Dict[ArgName, ValueType]], *, ignore_unused=False):
+    def _calc_params_with_args(self, argvaldict: dict[ArgName, ValueType] | None, *, ignore_unused=False):
         # nondefault_args = [arg for arg in self._argdict.values() if not arg.has_default]
         # if nondefault_args:
         #     raise errors.QueryArgumentError('Argument value(s) are not set: %s' % ', '.join(str(arg) for arg in nondefault_args))
 
-        unused_argnames: Set[ArgName] = {arg for arg in argvaldict} if argvaldict is not None else set()
-        new_prms: List[Union[ValueType, Arg]] = []
+        unused_argnames: set[ArgName] = {arg for arg in argvaldict} if argvaldict is not None else set()
+        new_prms: list[ValueType | Arg] = []
 
         for prm in self._prms:
 
             if argvaldict is not None and isinstance(prm, Arg) and prm.name in argvaldict:
-                prmval: Union[ValueType, Arg] = argvaldict[prm.name]
+                prmval: ValueType | Arg = argvaldict[prm.name]
                 unused_argnames.remove(prm.name)
             else:
                 prmval = prm
@@ -339,19 +340,19 @@ class QueryData(QueryABC):
         return new_prms
 
 
-    def _calc_pure_params(self, argvaldict: Optional[Dict[ArgName, ValueType]] = None, *, ignore_unused=False):
+    def _calc_pure_params(self, argvaldict: dict[ArgName, ValueType] | None = None, *, ignore_unused=False):
         # nondefault_args = [arg for arg in self._argdict.values() if not arg.has_default]
         # if nondefault_args:
         #     raise errors.QueryArgumentError('Argument value(s) are not set: %s' % ', '.join(str(arg) for arg in nondefault_args))
 
-        unused_argnames: Set[ArgName] = {arg for arg in argvaldict} if argvaldict is not None else set()
-        unset_args: List[Arg] = []
-        new_prms: List[SQLValue] = []
+        unused_argnames: set[ArgName] = {arg for arg in argvaldict} if argvaldict is not None else set()
+        unset_args: list[Arg] = []
+        new_prms: list[SQLValue] = []
 
         for prm in self._prms:
 
             if argvaldict is not None and isinstance(prm, Arg) and prm.name in argvaldict:
-                prmval: Union[ValueType, Arg] = argvaldict[prm.name]
+                prmval: ValueType | Arg = argvaldict[prm.name]
                 unused_argnames.remove(prm.name)
             elif isinstance(prm, Arg) and prm.has_default:
                 prmval = prm.default
@@ -372,9 +373,9 @@ class QueryData(QueryABC):
         return tuple(new_prms)
 
 
-QueryLike = Union[ValueOrArg, ExprABC, QueryABC, tuple, Iterable]
+QueryLike = ValueOrArg | ExprABC | QueryABC | tuple | Iterable
 
-QueryArgVals = Union[Collection[ValueType], Dict[ArgName, ValueType]]
+QueryArgVals = Collection[ValueType] | dict[ArgName, ValueType]
 
 
 _R_NOSP_SYMS = {b' ', b')', b',', b'.'}

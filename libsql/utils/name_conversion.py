@@ -1,6 +1,7 @@
 """
     Name conversion functions
 """
+from __future__ import annotations
 import re
 
 _CAMEL_TO_SNAKE_RE_1 = re.compile(r'(.)([A-Z][a-z]+)')

@@ -1,6 +1,7 @@
 """
     Generic class utils
 """
+from __future__ import annotations
 import types
 import typing
 
@@ -18,7 +19,7 @@ class GenericArgsBinded:
         return getattr(self, '__orig_class__')
 
 
-_binds_cache: typing.Dict[typing.Type, typing.Type] = {}
+_binds_cache: dict[typing.Type, typing.Type] = {}
 
 T = typing.TypeVar('T')
 def bind_generic_args(cls: typing.Type[T]) -> typing.Type[T]:

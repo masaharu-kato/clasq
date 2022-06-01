@@ -4,14 +4,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod, abstractproperty
 import html
-from typing import Any, Callable, Collection, Dict, Generic, Iterable, Iterator, List, Mapping, Optional, Sequence, Tuple, TypeVar, Union, overload
+from typing import Any, Callable, Collection, Generic, Iterable, Iterator, Mapping, Sequence, TypeVar, overload
 
 T = TypeVar('T')
 
 class ColumnMetadataABC(ABC, Collection[str]):
 
     @abstractproperty
-    def columns(self) -> Tuple[str, ...]:
+    def columns(self) -> tuple[str, ...]:
         """ Get a tuple of all column names
 
         Returns:
@@ -19,7 +19,7 @@ class ColumnMetadataABC(ABC, Collection[str]):
         """
 
     @abstractproperty
-    def _col_to_i(self) -> Dict[str, int]:
+    def _col_to_i(self) -> dict[str, int]:
         """ Get a dictionary from column name to column index """
 
     def iter_columns(self) -> Iterator[str]:
@@ -76,11 +76,11 @@ class ColumnMetadataABC(ABC, Collection[str]):
         """
         return isinstance(column, str) and self.has_column(column)
 
-    def make_html(self, *, name_attr: Optional[str] = None) -> str:
+    def make_html(self, *, name_attr: str | None = None) -> str:
         """ Make a HTML of this column header
 
         Args:
-            name_attr (Optional[str], optional): HTML tag attribute name to output column name. Defaults to None.
+            name_attr (str | None, optional): HTML tag attribute name to output column name. Defaults to None.
 
         Returns:
             str: HTML markup text
@@ -113,10 +113,10 @@ class RowDataABC(Generic[T], Mapping[str, T]):
         """ Get a columns meta data """
 
     @abstractproperty
-    def _row(self) -> Tuple[T, ...]:
+    def _row(self) -> tuple[T, ...]:
         """ Get a raw row tuple """
 
-    def __getitem__(self, val: Union[int, str]) -> T:
+    def __getitem__(self, val: int | str) -> T:
         """ Get a value of specific column
 
         Args:
@@ -140,12 +140,12 @@ class RowDataABC(Generic[T], Mapping[str, T]):
 
     _T = TypeVar('_T')
     @overload
-    def get(self, key: str) -> Optional[T]: ...
+    def get(self, key: str) -> T | None: ...
 
     @overload
-    def get(self, key: str, default: _T) -> Union[T, _T]: ...
+    def get(self, key: str, default: _T) -> T | _T: ...
 
-    def get(self, key: str, default: Optional[_T] = None):
+    def get(self, key: str, default: _T | None = None):
         """ Get a value of specific column with a default value
 
         Args:
@@ -168,19 +168,19 @@ class RowDataABC(Generic[T], Mapping[str, T]):
     def raw_values(self):
         return self._row
 
-    def asdict(self) -> Dict[str, T]:
+    def asdict(self) -> dict[str, T]:
         """ Make a dictionary from column names to cell values of this row
 
         Returns:
-            Dict[str, T]: Dict of (column name -> cell values) of this row
+            dict[str, T]: Dict of (column name -> cell values) of this row
         """
         return dict(self.items())
 
-    def make_html(self, *, name_attr: Optional[str] = None, formatter: Callable[[Any], str] = str) -> str:
+    def make_html(self, *, name_attr: str | None = None, formatter: Callable[[Any], str] = str) -> str:
         """ Make a HTML of this row
 
         Args:
-            name_attr (Optional[str], optional): HTML tag attribute name to output column name. Defaults to None.
+            name_attr (str | None, optional): HTML tag attribute name to output column name. Defaults to None.
             formatter (Callable[[Any], str], optional): Cell value format function. Defaults to str.
 
         Returns:
@@ -214,7 +214,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
     TABLE_REPR_LIMIT = 100
 
     @abstractproperty
-    def rows_values(self) -> Sequence[Tuple[T, ...]]:
+    def rows_values(self) -> Sequence[tuple[T, ...]]:
         """ Get rows data """
 
     @abstractproperty
@@ -222,7 +222,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         """ Get a column metadata """
 
     @abstractmethod
-    def _new_row_data(self, col_meta: ColumnMetadataABC, row: Tuple[T, ...]) -> RowDataABC[T]:
+    def _new_row_data(self, col_meta: ColumnMetadataABC, row: tuple[T, ...]) -> RowDataABC[T]:
         """ Create a new RowDataABC object """
 
     def __iter__(self) -> Iterator[RowDataABC[T]]:
@@ -235,7 +235,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
             yield self._new_row_data(self.col_meta, row)
 
     @property
-    def columns(self) -> Tuple[str, ...]:
+    def columns(self) -> tuple[str, ...]:
         """ Get a tuple of all column names of this table
 
         Returns:
@@ -251,36 +251,36 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         """
         return self.col_meta.iter_columns()
 
-    def iter_rows_values(self) -> Iterator[Tuple[T, ...]]:
+    def iter_rows_values(self) -> Iterator[tuple[T, ...]]:
         """ Iterate values of all rows in this table
 
         Yields:
-            Iterator[Tuple[T, ...]]: Values of rows in this table
+            Iterator[tuple[T, ...]]: Values of rows in this table
         """
         return iter(self.rows_values)
 
-    def iter_rows_dict(self) -> Iterator[Dict[str, T]]:
+    def iter_rows_dict(self) -> Iterator[dict[str, T]]:
         """ Iterate values of all dicts (column name -> cell value) in this table
 
         Yields:
-            Iterator[Tuple[T, ...]]: Dicts of rows in this table
+            Iterator[tuple[T, ...]]: Dicts of rows in this table
         """
         for row in iter(self):
             yield dict(row.items())
 
-    def rows_values_list(self) -> List[Tuple[T, ...]]:
+    def rows_values_list(self) -> list[tuple[T, ...]]:
         """ Get a list of all row values
 
         Returns:
-            List[Tuple[T, ...]]: List of all row values
+            List[tuple[T, ...]]: List of all row values
         """
         return list(self.iter_rows_values())
 
-    def rows_dict_list(self) -> List[Dict[str, T]]:
+    def rows_dict_list(self) -> list[dict[str, T]]:
         """ Get a list of all row dicts (column name -> cell value)
 
         Returns:
-            List[Dict[T]]: List of all row dicts
+            List[dict[str, T]]: List of all row dicts
         """
         return list(self.iter_rows_dict())
 
@@ -303,7 +303,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         """
         return self._new_row_data(self.col_meta, self.row_values(index))
 
-    def row_values(self, index: int) -> Tuple[T, ...]:
+    def row_values(self, index: int) -> tuple[T, ...]:
         return self.rows_values[index]
 
     @overload
@@ -312,7 +312,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
     @overload
     def __getitem__(self, index: slice) -> Sequence[RowDataABC[T]]: ...
 
-    def __getitem__(self, index: Union[int, slice]):
+    def __getitem__(self, index: int | slice):
         """ Get a speicific row data object
             (Synonym of `row` method)
 
@@ -342,11 +342,11 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
             return super().__eq__(val)
         return self.col_meta == val.col_meta and self.rows_values == val.rows_values
 
-    def make_html(self, *, name_attr: Optional[str] = None, formatter: Callable[[Any], str] = str) -> str:
+    def make_html(self, *, name_attr: str | None = None, formatter: Callable[[Any], str] = str) -> str:
         """ Make a HTML of this table
 
         Args:
-            name_attr (Optional[str], optional): HTML tag attribute name to output column name. Defaults to None.
+            name_attr (str | None, optional): HTML tag attribute name to output column name. Defaults to None.
             formatter (Callable[[Any], str], optional): Cell values format function. Defaults to str.
 
         Returns:
@@ -383,14 +383,14 @@ class TableDataABC(FrozenTableDataABC[T], Generic[T]):
     """
 
     @abstractproperty
-    def rows_values_list(self) -> List[Tuple[T, ...]]:
+    def rows_values_list(self) -> list[tuple[T, ...]]:
         """ Extend another rows to the existing rows """
 
-    def append(self, value: Union[Tuple[T, ...], TableDataABC]) -> None:
+    def append(self, value: tuple[T, ...] | TableDataABC) -> None:
         """ Append another TableData
 
         Args:
-            value (Tuple[T, ...] | TableDataABC): row values or TableData to append
+            value (tuple[T, ...] | TableDataABC): row values or TableData to append
 
         Raises:
             ValueError: Columns of tables are different
@@ -406,12 +406,12 @@ class TableDataABC(FrozenTableDataABC[T], Generic[T]):
         
         self.rows_values_list.append(value)
 
-    def __iadd__(self, value: Union[Tuple[T, ...], TableDataABC]) -> TableDataABC:
+    def __iadd__(self, value: tuple[T, ...] | TableDataABC) -> TableDataABC:
         """ Append another TableData
             (Synonym of `append` method)
 
         Args:
-            value (Tuple[T, ...] | TableDataABC): value to append
+            value (tuple[T, ...] | TableDataABC): value to append
 
         Raises:
             ValueError: Columns of tables are different
@@ -422,14 +422,14 @@ class TableDataABC(FrozenTableDataABC[T], Generic[T]):
         self.append(value)
         return self
 
-    def extend(self, rows: Iterable[Tuple[T, ...]]) -> None:
+    def extend(self, rows: Iterable[tuple[T, ...]]) -> None:
         self.rows_values_list.extend(rows)
 
-    def pop(self, index: Optional[int] = None) -> RowDataABC[T]:
+    def pop(self, index: int | None = None) -> RowDataABC[T]:
         _raw_values = self.rows_values_list.pop(index) if index is not None else self.rows_values_list.pop()
         return self._new_row_data(self.col_meta, _raw_values)
     
-    def insert(self, index: int, target: Tuple[T, ...]) -> None:
+    def insert(self, index: int, target: tuple[T, ...]) -> None:
         self.rows_values_list.insert(index, target)
 
     def clear(self) -> None:

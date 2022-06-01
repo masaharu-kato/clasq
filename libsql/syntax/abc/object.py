@@ -1,8 +1,9 @@
 """
     Definition Object class and subclasses
 """
+from __future__ import annotations
 from abc import abstractmethod
-from typing import Hashable, Iterator, TYPE_CHECKING, Union
+from typing import Hashable, Iterator, TYPE_CHECKING
 
 from .query import QueryABC
 
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 
 class ObjectName(QueryABC):
     """ Object name """
-    def __init__(self, val: 'NameLike'):
+    def __init__(self, val: NameLike):
         if isinstance(val, ObjectName):
             self._raw_name = val.raw_name
         elif isinstance(val, bytes):
@@ -26,7 +27,7 @@ class ObjectName(QueryABC):
     def raw_name(self) -> bytes:
         return self._raw_name
 
-    def append_to_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         qd.append_object_name(self.raw_name)
 
     def __bytes__(self) -> bytes:
@@ -47,14 +48,14 @@ class ObjectName(QueryABC):
     def __ne__(self, obj: object) -> bool:
         return not self.__eq__(obj)
 
-    def __add__(self, obj: object) -> 'ObjectName':
+    def __add__(self, obj: object) -> ObjectName:
         if isinstance(obj, ObjectName):
             return ObjectName(self.raw_name + b'.' + obj.raw_name)
         if isinstance(obj, bytes):
             return ObjectName(self.raw_name + obj)
         return ObjectName(str(self) + str(obj))
 
-    def __iadd__(self, obj: object) -> 'ObjectName':
+    def __iadd__(self, obj: object) -> ObjectName:
         if isinstance(obj, ObjectName):
             self._raw_name += b'.' + obj.raw_name
         if isinstance(obj, bytes):
@@ -63,7 +64,7 @@ class ObjectName(QueryABC):
             self._raw_name = (str(self) + str(obj)).encode()
         return self
 
-    def __mod__(self, vals) -> 'ObjectName':
+    def __mod__(self, vals) -> ObjectName:
         if isinstance(vals, (tuple, list)):
             return ObjectName(self.raw_name % (*(bytes(v) for v in vals),))
         return ObjectName(self.raw_name % bytes(vals))
@@ -76,7 +77,7 @@ class ObjectName(QueryABC):
         return 'ObjName(%s)' % str(self)
 
 
-NameLike = Union[bytes, str, ObjectName]
+NameLike = bytes | str | ObjectName
 
 
 
@@ -139,5 +140,5 @@ class Object(ObjectWithNamePropABC):
         """ Get a object name (Override from `ObjectABC`) """
         return self._name
 
-    def append_to_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         qd.append(self.name) # Default Implementation

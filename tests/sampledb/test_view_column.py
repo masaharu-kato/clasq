@@ -2,7 +2,6 @@
     Test View and Column objects
 """
 import itertools
-from typing import List
 import pytest
 
 from libsql.connection import MySQLConnection
@@ -48,7 +47,7 @@ def test_table_get(tablename: str):
 
 
 @pytest.mark.parametrize(('tablename', 'colnames'), TABLE_COLUMN_NAMES)
-def test_table_column_get(tablename: str, colnames: List[str]):
+def test_table_column_get(tablename: str, colnames: list[str]):
     db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
 
     table = db[tablename]
@@ -176,7 +175,7 @@ def test_table_view_from_table_column(tablename: str, colname: str):
 
 
 @pytest.mark.parametrize('tablename, colnames', TABLE_COLUMN_NAMES)
-def test_table_view_from_table_column_select(tablename: str, colnames: List[str]):
+def test_table_view_from_table_column_select(tablename: str, colnames: list[str]):
     db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
 
     table = db[tablename]

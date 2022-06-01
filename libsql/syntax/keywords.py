@@ -1,9 +1,10 @@
 """
     Keywords
 """
+from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 from .abc.query import QueryABC
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 class KeywordABC(QueryABC, Enum):
     """ Keyword abstract class """
 
-    def append_to_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         qd.append_one(self.value)
 
     @classmethod
@@ -33,7 +34,7 @@ class OrderType(KeywordABC):
     DESC = b'DESC'
 
     @classmethod
-    def make(cls, val) -> 'OrderType':
+    def make(cls, val) -> OrderType:
         if val is True:
             return OrderType.ASC
         if val is False:
@@ -49,7 +50,7 @@ class JoinType(KeywordABC):
     CROSS = b'CROSS'
 
     @classmethod
-    def make(cls, val) -> 'JoinType':
+    def make(cls, val) -> JoinType:
         return super()._make(val)
 
 
@@ -60,9 +61,9 @@ class ReferenceOption(KeywordABC):
     NO_ACTION = b'NO_ACTION'
 
     @classmethod
-    def make(cls, val) -> 'ReferenceOption':
+    def make(cls, val) -> ReferenceOption:
         return super()._make(val)
 
-OrderTypeLike = Union[OrderType, bool, bytes, str]
-JoinLike = Union[JoinType, bytes, str]
-RefOptionLike = Union[ReferenceOption, bytes, str]
+OrderTypeLike = OrderType | bool | bytes | str
+JoinLike = JoinType | bytes | str
+RefOptionLike = ReferenceOption | bytes | str

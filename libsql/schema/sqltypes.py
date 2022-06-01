@@ -1,14 +1,12 @@
 """
     Definitions of built-in data types in SQL
 """
+from __future__ import annotations
 import typing
 import datetime
 import decimal
 from .abc import sqltype as sqtabc
 from ..utils.generic_cls import bind_generic_args
-
-if typing.TYPE_CHECKING:
-    from ..syntax.sql_values import SQLValue
 
 L = typing.TypeVar('L', bound=int)
 

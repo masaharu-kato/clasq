@@ -2,7 +2,7 @@
     Table data class
 """
 from __future__ import annotations
-from typing import Dict, Generic, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, overload
+from typing import Dict, Generic, Iterable, Sequence, TypeVar, overload
 
 from .abc.tabledata import ColumnMetadataABC, FrozenTableDataABC, TableDataABC, RowDataABC
 
@@ -13,12 +13,12 @@ class FrozenTableData(FrozenTableDataABC[T], Generic[T]):
 
     TABLE_REPR_LIMIT = 100
 
-    def __init__(self, columns: Union[Iterable[str], 'ColumnMetadata'], rows: List[Tuple[T, ...]]) -> None:
+    def __init__(self, columns: Iterable[str] | ColumnMetadata, rows: list[tuple[T, ...]]) -> None:
         """ Create a table data.
 
         Args:
-            columns (List[str]): List of column names
-            rows (List[list]): List of rows (values of columns)
+            columns (list[str]): List of column names
+            rows (list[list]): List of rows (values of columns)
         """
         self._col_meta = columns if isinstance(columns, ColumnMetadata) else ColumnMetadata(columns)
         
@@ -28,14 +28,14 @@ class FrozenTableData(FrozenTableDataABC[T], Generic[T]):
         self._rows = rows
 
     @property
-    def rows_values(self) -> Sequence[Tuple[T, ...]]:
+    def rows_values(self) -> Sequence[tuple[T, ...]]:
         return self._rows
 
     @property
     def col_meta(self) -> ColumnMetadataABC:
         return self._col_meta
 
-    def _new_row_data(self, col_meta: ColumnMetadataABC, row: Tuple[T, ...]) -> RowDataABC[T]:
+    def _new_row_data(self, col_meta: ColumnMetadataABC, row: tuple[T, ...]) -> RowDataABC[T]:
         return RowData(col_meta, row)
 
     def __add__(self, value: TableDataABC[T]):
@@ -73,7 +73,7 @@ class TableData(FrozenTableData[T], TableDataABC[T], Generic[T]):
     """ Table data class """
 
     @property
-    def rows_values_list(self) -> List[Tuple[T, ...]]:
+    def rows_values_list(self) -> list[tuple[T, ...]]:
         return self._rows
 
 
@@ -82,13 +82,13 @@ class ColumnMetadata(ColumnMetadataABC):
         """ Create a column metadata.
 
         Args:
-            columns (List[str]): List of column names
+            columns (list[str]): List of column names
         """
         self.__cols = tuple(columns)
         self.__col_to_i = {col: i for i, col in enumerate(self.__cols)}
 
     @property
-    def columns(self) -> Tuple[str, ...]:
+    def columns(self) -> tuple[str, ...]:
         """ Get a tuple of all column names
             (Override for `ColumnMetadataABC`)
 
@@ -98,14 +98,14 @@ class ColumnMetadata(ColumnMetadataABC):
         return self.__cols
 
     @property
-    def _col_to_i(self) -> Dict[str, int]:
+    def _col_to_i(self) -> dict[str, int]:
         return self.__col_to_i
 
 
 class RowData(RowDataABC[T], Generic[T]):
 
     @overload
-    def __init__(self, columns: Union[Iterable[str], ColumnMetadataABC], row: Iterable[T]) -> None:
+    def __init__(self, columns: Iterable[str] | ColumnMetadataABC, row: Iterable[T]) -> None:
         """ Create a row data
 
         Args:
@@ -114,7 +114,7 @@ class RowData(RowDataABC[T], Generic[T]):
         """
 
     @overload
-    def __init__(self, row_dict: Dict[str, T], /) -> None:
+    def __init__(self, row_dict: dict[str, T], /) -> None:
         """ Create a row data.
 
         Args:
@@ -122,9 +122,9 @@ class RowData(RowDataABC[T], Generic[T]):
         """
 
     def __init__(self,
-                 columns: Optional[Union[Iterable[str], ColumnMetadataABC, Dict[str, T]]] = None,
-                 row: Optional[Iterable[T]] = None,
-                 row_dict: Optional[Dict[str, T]] = None) -> None:
+                 columns: Iterable[str] | ColumnMetadataABC | dict[str, T] | None = None,
+                 row: Iterable[T] | None = None,
+                 row_dict: dict[str, T] | None = None) -> None:
 
         if row_dict is not None and columns is None and row is None:
             col_meta: ColumnMetadataABC = ColumnMetadata(row_dict.keys())

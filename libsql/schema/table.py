@@ -1,22 +1,20 @@
 """
     Table classes
 """
-from typing import TYPE_CHECKING, Optional
+from __future__ import annotations
 
 from ..syntax.abc.query import iter_objects
 from ..syntax.abc.object import ObjectABC, ObjectName
 from .abc.table import TableArgs, TableABC
 from .column import FrozenOrderedNamedViewColumnSet, TableColumn
 from .view import NamedView, ViewFinal
-
-if TYPE_CHECKING:
-    from .abc.database import DatabaseABC
+from .abc.database import DatabaseABC
 
 # class Table(NamedViewABC, ViewWithColumns, Object): # <-- super() is not working correctly on these base classes
 class Table(TableABC, NamedView, ViewFinal):
     """ Table Expr """
 
-    def __init__(self, database: 'DatabaseABC', args: TableArgs):
+    def __init__(self, database: DatabaseABC, args: TableArgs):
         self.__database = database
         self.__name = ObjectName(args.name)
 
@@ -39,13 +37,13 @@ class Table(TableABC, NamedView, ViewFinal):
         return self.__name
 
     @property
-    def _view_name_or_none(self) -> Optional[ObjectName]:
+    def _view_name_or_none(self) -> ObjectName | None:
         """ Get a view name 
             (Override from `ViewABC`) """
         return self.__name
 
     @property
-    def _database_or_none(self) -> Optional['DatabaseABC']:
+    def _database_or_none(self) -> DatabaseABC | None:
         """ Get a parent Database object 
             (Override from `ViewABC`)
         """
@@ -60,7 +58,7 @@ class Table(TableABC, NamedView, ViewFinal):
         return self.__unique_columns
 
 
-def iter_tables(*exprs: Optional[ObjectABC]):
+def iter_tables(*exprs: ObjectABC | None):
     for e in iter_objects(*exprs):
         if isinstance(e, TableColumn):
             if e.table_or_none is not None:

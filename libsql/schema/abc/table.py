@@ -2,7 +2,7 @@
     Table abstract classes
 """
 from abc import abstractmethod, abstractproperty
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Iterator
 
 from ...syntax.abc.object import ObjectName
 from ...syntax.exprs import OP, Arg, ExprABC, NameLike
@@ -21,9 +21,9 @@ class TableArgs:
     def __init__(self,
         name: NameLike,
         *column_args: ColumnArgs,
-        primary_key: Optional[Tuple[Union[NameLike, TableColumn], ...]] = None,
-        unique: Optional[Tuple[Union[NameLike, TableColumn], ...]] = None,
-        refs: Optional[List[ForeignKeyReference]] = None,
+        primary_key: tuple[NameLike | TableColumn, ...] | None = None,
+        unique: tuple[NameLike | TableColumn, ...] | None = None,
+        refs: list[ForeignKeyReference] | None = None,
         # **options
     ):
         self.name = name
@@ -55,7 +55,7 @@ class TableABC(NamedViewABC):
             assert isinstance(col, TableColumn)
             yield col
 
-    def get_table_column(self, val: Union[TableColumn, NameLike]) -> TableColumn:
+    def get_table_column(self, val: TableColumn | NameLike) -> TableColumn:
         if isinstance(val, TableColumn):
             if val.table_or_none is not self:
                 raise ObjectNotFoundError('Column of the different table.', val)
@@ -66,14 +66,14 @@ class TableABC(NamedViewABC):
         assert isinstance(col := self._base_column_set[key], TableColumn)
         return col
 
-    def append_to_query_data(self, qd: 'QueryData') -> None:
+    def append_to_query_data(self, qd: QueryData) -> None:
         """ Append a query of this table 
             (Override from `QueryABC`)
         """
         qd += self._view_name
 
     @property
-    def _select_from_query_or_none(self) -> Optional[QueryData]:
+    def _select_from_query_or_none(self) -> QueryData | None:
         """ Get a query of this table for SELECT FROM 
             (Override from `BaseViewABC`)
         """
@@ -88,11 +88,11 @@ class TableABC(NamedViewABC):
         # TODO: Upgrade with view methods
         return self.clone(*exprs, **options).result
 
-    def insert(self, data: Optional[Dict[Union[NameLike, TableColumn], ValueType]] = None, **values: ValueType) -> int:
+    def insert(self, data: dict[NameLike | TableColumn, ValueType] | None = None, **values: ValueType) -> int:
         """ Run INSERT query
 
         Args:
-            data (Optional[Union[Dict[ColumnLike, Any], TableData]], optional): Data to insert. Defaults to None.
+            data (Optional[Union[dict[ColumnLike, Any], TableData]], optional): Data to insert. Defaults to None.
 
         Returns:
             int: Last inserted row ID
@@ -115,11 +115,11 @@ class TableABC(NamedViewABC):
         return self._con.last_row_id()
 
     def update(self,
-        data: Optional[Dict[Union[NameLike, TableColumn], ValueType]] = None,
+        data: dict[NameLike | TableColumn, ValueType] | None = None,
         *,
-        where: Optional[ExprABC],
-        orders: Optional[List[TableColumn]] = None,
-        limit: Optional[int] = None,
+        where: ExprABC | None,
+        orders: list[TableColumn] | None = None,
+        limit: int | None = None,
         **values: ValueType,
     ) -> None:
         """ Run UPDATE query """
@@ -132,7 +132,7 @@ class TableABC(NamedViewABC):
             (b'LIMIT', limit) if limit else None,
         )
 
-    def update_data(self, data: TableData[ValueType], keys: List[Union[NameLike, TableColumn]]) -> None:
+    def update_data(self, data: TableData[ValueType], keys: list[NameLike | TableColumn]) -> None:
         """ Run UPDATE query with TableData """
         data_name_and_col = [(c, self._to_column(c)) for c in data.columns if c not in keys]
         key_name_and_col  = [(c, self._to_column(c)) for c in data.columns if c in keys]
@@ -146,9 +146,9 @@ class TableABC(NamedViewABC):
         )
 
     def delete(self, *,
-        where: Optional[ExprABC],
-        orders: Optional[List[TableColumn]] = None,
-        limit: Optional[int] = None,
+        where: ExprABC | None,
+        orders: list[TableColumn] | None = None,
+        limit: int | None = None,
     ) -> None:
         """ Run DELETE query """
         self._con.execute(
@@ -201,7 +201,7 @@ class TableABC(NamedViewABC):
     def __repr__(self) -> str:
         return 'T(%s)' % self.get_name()
         
-    def _proc_colval_args(self, value_dict: Optional[Dict[Union[NameLike, TableColumn], ValueType]], **values: ValueType) -> Dict[TableColumn, ValueType]:
+    def _proc_colval_args(self, value_dict: dict[NameLike | TableColumn, ValueType] | None, **values: ValueType) -> dict[TableColumn, ValueType]:
         return {self.get_table_column(c): v for c, v in [*(value_dict.items() if value_dict else []), *values.items()]}
 
 
