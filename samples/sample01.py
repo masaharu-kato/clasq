@@ -10,7 +10,7 @@ class User:
     birthday: Date
 
 class SampleDB:
-    users: List[User]
+    users: list[User]
 
 
 def main():
