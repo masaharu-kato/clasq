@@ -2,9 +2,9 @@
     Test exprs func
 """
 import pytest
-from libsql.syntax import errors, exprs
-from libsql.syntax.abc import object as object_abc
-from libsql.syntax.query_data import QueryData
+from clasq.syntax import errors, exprs
+from clasq.syntax.abc import object as object_abc
+from clasq.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('funcname, returntype', [
     ('a', None),

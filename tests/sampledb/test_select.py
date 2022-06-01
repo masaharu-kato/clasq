@@ -2,8 +2,8 @@
     Test basic select
 """
 import pytest
-import libsql.connection
-from libsql.syntax.query_data import QueryData
+import clasq.connection
+from clasq.syntax.query_data import QueryData
 
 # # Configure directory
 # DIR_CONF = os.path.abspath(os.path.dirname(__file__) + '/../conf')
@@ -17,7 +17,7 @@ from libsql.syntax.query_data import QueryData
 
 def test_basic_select():
     # Normal selection
-    con = libsql.connection.MySQLConnection(user='testuser', password='testpass', database='testdb')
+    con = clasq.connection.MySQLConnection(user='testuser', password='testpass', database='testdb')
     db = con.db
 
     SELECT_PRODUCTS_SQL = b'SELECT `products`.`id`, `products`.`category_id`, `products`.`name`, `products`.`price` FROM `products`'
@@ -50,7 +50,7 @@ def test_basic_select():
 
 def test_select():
     
-    db = libsql.connection.MySQLConnection(user='testuser', password='testpass', database='testdb').db
+    db = clasq.connection.MySQLConnection(user='testuser', password='testpass', database='testdb').db
     cates, prods, sales = db['categories'], db['products'], db['user_sale_products']
 
     sales_count = sales['count'].sum().as_('sales_count')

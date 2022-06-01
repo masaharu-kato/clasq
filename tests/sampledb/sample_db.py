@@ -5,9 +5,9 @@
 from datetime import datetime
 from typing import Literal as Lt
 
-from libsql.data.database import DatabaseClass
-from libsql.data.table_record import TableClass, ColumnDef
-from libsql.schema.sqltypes import VarChar
+from clasq.data.database import DatabaseClass
+from clasq.data.table_record import TableClass, ColumnDef
+from clasq.schema.sqltypes import VarChar
 
 
 class SampleDB(DatabaseClass):

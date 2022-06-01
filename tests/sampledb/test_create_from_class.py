@@ -5,7 +5,7 @@ from typing import Type
 
 import pytest
 
-from libsql.data.table_record import TableClass
+from clasq.data.table_record import TableClass
 from sample_db import Category, Product, User, UserSale, UserSaleProduct
 
 

@@ -4,8 +4,8 @@
 from typing import Callable
 import pytest
 import datetime
-from libsql.syntax.query_data import QueryData
-from libsql.syntax.exprs import BinaryOp, ExprObject as Obj, FuncCall, NoneExpr
+from clasq.syntax.query_data import QueryData
+from clasq.syntax.exprs import BinaryOp, ExprObject as Obj, FuncCall, NoneExpr
 
 CALC_OP_TERMS = [
     [lambda x, y: x +  y, b'+'  ],

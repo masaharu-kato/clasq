@@ -6,9 +6,9 @@ import datetime
 import decimal
 import pytest
 
-from libsql.schema import sqltypes as sqt
-from libsql.schema.abc.sqltype import SQLTypeABC
-from libsql.utils.generic_cls import bind_generic_args
+from clasq.schema import sqltypes as sqt
+from clasq.schema.abc.sqltype import SQLTypeABC
+from clasq.utils.generic_cls import bind_generic_args
 
 @pytest.mark.parametrize(('cls', 'name', 'val'), [
     (sqt.TinyInt,  b'TINYINT', -123),

@@ -2,12 +2,12 @@
     Test View object
 """
 import pytest
-from libsql.connection import MySQLConnection
-from libsql.schema.column import NamedViewColumnABC, TableColumn
-from libsql.syntax.exprs import Arg
-from libsql.syntax.errors import QueryArgumentError
-from libsql.utils.tabledata import TableData
-from libsql.syntax.keywords import OrderType
+from clasq.connection import MySQLConnection
+from clasq.schema.column import NamedViewColumnABC, TableColumn
+from clasq.syntax.exprs import Arg
+from clasq.syntax.errors import QueryArgumentError
+from clasq.utils.tabledata import TableData
+from clasq.syntax.keywords import OrderType
 
 def test_view_1():
     db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
@@ -197,7 +197,7 @@ def test_view_with_args():
 
 
 # def test_view_4():
-#     db = libsql.mysql.connect(user='testuser', password='testpass', database='testdb')
+#     db = clasq.mysql.connect(user='testuser', password='testpass', database='testdb')
 #     cates, prods, sales = db['categories', 'products', 'user_sale_products']
 
 #     base_view = (prods

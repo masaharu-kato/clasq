@@ -3,7 +3,7 @@
 """
 import pytest
 
-from libsql.utils.ordered_set import FrozenOrderedSet, OrderedSet
+from clasq.utils.ordered_set import FrozenOrderedSet, OrderedSet
 
 ARGS_INIT = [
     [[], []],

@@ -4,10 +4,10 @@
 import itertools
 import pytest
 
-from libsql.connection import MySQLConnection
-from libsql.schema.column import NamedViewColumnABC, TableColumn
-from libsql.syntax.errors import ObjectNotFoundError
-from libsql.syntax.abc.object import ObjectName
+from clasq.connection import MySQLConnection
+from clasq.schema.column import NamedViewColumnABC, TableColumn
+from clasq.syntax.errors import ObjectNotFoundError
+from clasq.syntax.abc.object import ObjectName
 
 TABLE_COLUMN_NAMES = [
     ['products', ['id', 'category_id', 'name', 'price']],

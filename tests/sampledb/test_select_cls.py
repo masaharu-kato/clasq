@@ -2,9 +2,9 @@
     Test basic select (using classes)
 """
 import pytest
-from libsql.connection import MySQLConnection
-from libsql.schema.view import JoinedView
-from libsql.syntax.query_data import QueryData
+from clasq.connection import MySQLConnection
+from clasq.schema.view import JoinedView
+from clasq.syntax.query_data import QueryData
 from sample_db import SampleDB, Category, Product, User, UserSale, UserSaleProduct
 
 # # Configure directory

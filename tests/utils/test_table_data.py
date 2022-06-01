@@ -4,7 +4,7 @@
 from typing import Any
 import pytest
 
-from libsql.utils.tabledata import FrozenTableData, TableData, ColumnMetadata, RowData
+from clasq.utils.tabledata import FrozenTableData, TableData, ColumnMetadata, RowData
 
 @pytest.mark.parametrize('cols', [
     [],

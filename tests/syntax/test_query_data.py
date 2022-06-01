@@ -5,9 +5,9 @@
 from math import ceil, floor, trunc
 import pytest
 
-from libsql.syntax.exprs import ExprObject as Obj
-from libsql.syntax.query_data import QueryData
-from libsql.syntax.values import NULL
+from clasq.syntax.exprs import ExprObject as Obj
+from clasq.syntax.query_data import QueryData
+from clasq.syntax.values import NULL
 
 @pytest.mark.parametrize('term, result', [
     [Obj(b'expr') == NULL , (b'(`expr` = NULL)' , [])],

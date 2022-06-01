@@ -1,13 +1,13 @@
 """
-    Test libsql.schema
+    Test clasq.schema
 """
 import pytest
-from libsql.schema.database import Database
-from libsql.schema.table import TableArgs
-from libsql.schema.column import ColumnArgs
-from libsql.schema.sqltypes import Int, VarChar
-from libsql.syntax.exprs import Object
-from libsql.syntax.query_data import QueryData
+from clasq.schema.database import Database
+from clasq.schema.table import TableArgs
+from clasq.schema.column import ColumnArgs
+from clasq.schema.sqltypes import Int, VarChar
+from clasq.syntax.exprs import Object
+from clasq.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('objname, result', [
     [b'hoGe', b'`hoGe`'],

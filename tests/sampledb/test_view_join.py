@@ -1,11 +1,11 @@
 """
     Test View Joins
 """
-from libsql.connection import MySQLConnection
-from libsql.schema.column import NamedViewColumnABC
-from libsql.schema.view import JoinedView
-from libsql.syntax.exprs import AliasedExpr
-from libsql.syntax.keywords import JoinType
+from clasq.connection import MySQLConnection
+from clasq.schema.column import NamedViewColumnABC
+from clasq.schema.view import JoinedView
+from clasq.syntax.exprs import AliasedExpr
+from clasq.syntax.keywords import JoinType
 
 def test_view_join_1():
     db = MySQLConnection(user='testuser', password='testpass', database='testdb').db

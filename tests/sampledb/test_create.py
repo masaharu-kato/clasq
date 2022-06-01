@@ -1,12 +1,12 @@
 """
     Test View object
 """
-import libsql.connection
-from libsql.schema.column import ColumnArgs
-from libsql.schema.sqltypes import VarChar
+import clasq.connection
+from clasq.schema.column import ColumnArgs
+from clasq.schema.sqltypes import VarChar
 
 def test_create_table():
-    db = libsql.connection.MySQLConnection(user='testuser', password='testpass', database='testdb').db
+    db = clasq.connection.MySQLConnection(user='testuser', password='testpass', database='testdb').db
     
     if (_ext_table := db.get_table_or_none('students')) is not None:
         _ext_table.drop(if_exists=True)
