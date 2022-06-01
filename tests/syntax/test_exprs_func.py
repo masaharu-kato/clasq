@@ -2,7 +2,8 @@
     Test exprs func
 """
 import pytest
-from libsql.syntax import errors, exprs, object_abc
+from libsql.syntax import errors, exprs
+from libsql.syntax.abc import object as object_abc
 from libsql.syntax.query_data import QueryData
 
 @pytest.mark.parametrize('funcname, returntype', [

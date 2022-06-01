@@ -6,9 +6,9 @@ from typing import List
 import pytest
 
 from libsql.connection import MySQLConnection
-from libsql.schema.column import NamedViewColumnABC, TableColumn, NamedViewColumn
+from libsql.schema.column import NamedViewColumnABC, TableColumn
 from libsql.syntax.errors import ObjectNotFoundError
-from libsql.syntax.object_abc import ObjectName
+from libsql.syntax.abc.object import ObjectName
 
 TABLE_COLUMN_NAMES = [
     ['products', ['id', 'category_id', 'name', 'price']],

@@ -7,7 +7,7 @@ import decimal
 import pytest
 
 from libsql.schema import sqltypes as sqt
-from libsql.schema.sqltype_abc import SQLTypeABC
+from libsql.schema.abc.sqltype import SQLTypeABC
 from libsql.utils.generic_cls import bind_generic_args
 
 @pytest.mark.parametrize(('cls', 'name', 'val'), [

@@ -4,7 +4,7 @@
 
 import pytest
 
-from libsql.data.record_abc import RecordABC
+from libsql.data.abc.record import RecordABC
 
 
 
