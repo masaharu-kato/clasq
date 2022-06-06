@@ -21,7 +21,7 @@ class RecordABC:
         _selected_exprs = self._view._selected_exprs
 
         for i, expr in enumerate(_selected_exprs):
-            name = expr.get_name()
+            name = expr._name
 
             _has_kwd_arg = name in kwargs
             _has_pos_arg = i < len(args)
