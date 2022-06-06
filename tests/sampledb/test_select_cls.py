@@ -4,7 +4,7 @@
 import pytest
 from clasq.connection import MySQLConnection
 from clasq.schema.view import JoinedView
-from clasq.syntax.query_data import QueryData
+from clasq.syntax.query import QueryData
 from sample_db import SampleDB, Category, Product, User, UserSale, UserSaleProduct
 
 # # Configure directory

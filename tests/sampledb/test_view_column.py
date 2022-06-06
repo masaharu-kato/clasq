@@ -6,8 +6,8 @@ import pytest
 
 from clasq.connection import MySQLConnection
 from clasq.schema.column import NamedViewColumnABC, TableColumn
-from clasq.syntax.errors import ObjectNotFoundError
 from clasq.syntax.abc.object import ObjectName
+from clasq.errors import ObjectNotFoundError
 
 TABLE_COLUMN_NAMES = [
     ['products', ['id', 'category_id', 'name', 'price']],
@@ -27,7 +27,7 @@ def test_table_get(tablename: str):
 
     table = db[tablename]
 
-    assert str(table.get_name()) == tablename
+    assert str(table._name) == tablename
 
     assert db.get_table(tablename) is table
     assert db.get_table_or_none(tablename) is table
@@ -53,7 +53,7 @@ def test_table_column_get(tablename: str, colnames: list[str]):
     table = db[tablename]
     assert all(isinstance(c, NamedViewColumnABC) for c in table._selected_exprs)
     assert all(isinstance(c, TableColumn) and c.table is table for c in table._selected_exprs)
-    assert [str(c.get_name()) for c in table._selected_exprs] == colnames
+    assert [str(c._name) for c in table._selected_exprs] == colnames
 
     columns = list(table._selected_exprs)
     assert columns == [db[tablename][name] for name in colnames]
@@ -118,11 +118,11 @@ def test_table_view_from_table(tablename, colnames):
     assert all(view._to_selected_column(view[name]) is column for column, name in zip(columns, colnames))
 
     ordered_table = table.order_by(columns[0])
-    assert all(isinstance(c, NamedViewColumnABC) and c.base_view is table for c in ordered_table._selected_exprs)
+    assert all(isinstance(c, NamedViewColumnABC) and c.view is table for c in ordered_table._selected_exprs)
     assert columns == [ordered_table[name] for name in colnames]
 
     ordered_view = view.order_by(columns[0])
-    assert all(isinstance(c, NamedViewColumnABC) and c.base_view is table for c in ordered_view._selected_exprs)
+    assert all(isinstance(c, NamedViewColumnABC) and c.view is table for c in ordered_view._selected_exprs)
     assert columns == [ordered_view[name] for name in colnames]
 
 
@@ -142,7 +142,7 @@ def test_table_view_from_table_column(tablename: str, colname: str):
     assert view.result == table.where(**{colname: 1}).result # type: ignore
 
     otable_a = table.order_by(column)
-    assert all(isinstance(c, NamedViewColumnABC) and c._named_view is table for c in otable_a._selected_exprs)
+    assert all(isinstance(c, NamedViewColumnABC) and c.view is table for c in otable_a._selected_exprs)
     assert otable_a[colname] is column
     assert otable_a.get_selected_column(colname) is column
     assert otable_a._to_column(column) is column
@@ -154,7 +154,7 @@ def test_table_view_from_table_column(tablename: str, colname: str):
     assert otable_a.result       == table.order_by(**{colname: True}).result
 
     otable_d = table.order_by(-column)
-    assert all(isinstance(c, NamedViewColumnABC) and c._named_view is table for c in otable_a._selected_exprs)
+    assert all(isinstance(c, NamedViewColumnABC) and c.view is table for c in otable_a._selected_exprs)
     assert otable_d[colname] is column
     assert otable_d.get_selected_column(colname) is column
     assert otable_d._to_column(column) is column
@@ -166,7 +166,7 @@ def test_table_view_from_table_column(tablename: str, colname: str):
     assert otable_d.result       == table.order_by(**{colname: False}).result
 
     oview = view.order_by(column)
-    assert all(isinstance(c, NamedViewColumnABC) and c._named_view is table for c in oview._selected_exprs)
+    assert all(isinstance(c, NamedViewColumnABC) and c.view is table for c in oview._selected_exprs)
     assert oview[colname] is column
     assert oview._to_column(column) is column
 

@@ -6,11 +6,10 @@ from math import ceil, floor, trunc
 import pytest
 
 from clasq.syntax.exprs import ExprObject as Obj
-from clasq.syntax.query_data import QueryData
-from clasq.syntax.values import NULL
+from clasq.syntax.query import QueryData
 
 @pytest.mark.parametrize('term, result', [
-    [Obj(b'expr') == NULL , (b'(`expr` = NULL)' , [])],
+    [Obj(b'expr') == None , (b'(`expr` = NULL)' , [])],
     [Obj(b'expr') == True , (b'(`expr` = ?)' , [True])],
     [Obj(b'expr') == False, (b'(`expr` = ?)' , [False])],
     [Obj(b'expr') == 1    , (b'(`expr` = ?)' , [1])],
@@ -51,7 +50,7 @@ def test_expr_op(term, result):
 
 @pytest.mark.parametrize('args, result', [
     [(), (b'', [])],
-    [(None,), (b'', [])],
+    [(None,), (b'NULL', [])],
     [(True,), (b'?', [True])],
     [(False,), (b'?', [False])],
     [(1,), (b'?', [1])],

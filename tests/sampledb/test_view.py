@@ -4,10 +4,10 @@
 import pytest
 from clasq.connection import MySQLConnection
 from clasq.schema.column import NamedViewColumnABC, TableColumn
-from clasq.syntax.exprs import Arg
-from clasq.syntax.errors import QueryArgumentError
+from clasq.syntax.exprs import QueryArg
+from clasq.syntax.abc.keywords import OrderType
 from clasq.utils.tabledata import TableData
-from clasq.syntax.keywords import OrderType
+from clasq.errors import QueryArgumentError
 
 def test_view_1():
     db = MySQLConnection(user='testuser', password='testpass', database='testdb').db
@@ -146,7 +146,7 @@ def test_view_with_args():
     view = (prods
         .inner_join(cates.select_column(category_name = cates['name']),
             prods['category_id'] == cates['id'])
-        .where(cates['id'] == Arg(0))
+        .where(cates['id'] == QueryArg(0))
         .order_by(-prods['price'])
     )
 
@@ -163,7 +163,7 @@ def test_view_with_args():
     view2 = (prods
         .inner_join(cates.select_column(category_name = cates['name']),
             prods['category_id'] == cates['id'])
-        .where(cates['name'].like(Arg('cate_name_like')))
+        .where(cates['name'].like(QueryArg('cate_name_like')))
         .order_by(-prods['price'])
     )
 
@@ -177,7 +177,7 @@ def test_view_with_args():
     with pytest.raises(QueryArgumentError):
         view2('%Computer')
 
-    view3 = view2.limit(Arg('limit', default=5))
+    view3 = view2.limit(QueryArg('limit', default=5))
 
     assert len(view3(cate_name_like='%Computer')) == 5
     assert len(view3(cate_name_like='%Computer', limit=3)) == 3
@@ -189,8 +189,8 @@ def test_view_with_args():
         view4 = (prods
             .inner_join(cates.select_column(category_name = cates['name']),
                 prods['category_id'] == cates['id'])
-            .where(name=Arg('name'))
-            .where(category_name=Arg('name', default='Cables'))
+            .where(name=QueryArg('name'))
+            .where(category_name=QueryArg('name', default='Cables'))
             .order_by(-prods['price'])
         )
         view4(name='Cables')

@@ -3,7 +3,7 @@
 """
 import pytest
 import clasq.connection
-from clasq.syntax.query_data import QueryData
+from clasq.syntax.query import QueryData
 
 # # Configure directory
 # DIR_CONF = os.path.abspath(os.path.dirname(__file__) + '/../conf')

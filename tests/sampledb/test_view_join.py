@@ -5,7 +5,7 @@ from clasq.connection import MySQLConnection
 from clasq.schema.column import NamedViewColumnABC
 from clasq.schema.view import JoinedView
 from clasq.syntax.exprs import AliasedExpr
-from clasq.syntax.keywords import JoinType
+from clasq.syntax.abc.keywords import JoinType
 
 def test_view_join_1():
     db = MySQLConnection(user='testuser', password='testpass', database='testdb').db

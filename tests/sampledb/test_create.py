@@ -1,9 +1,11 @@
 """
     Test View object
 """
+from typing import Literal
 import clasq.connection
-from clasq.schema.column import ColumnArgs
-from clasq.schema.sqltypes import VarChar
+from clasq.schema.abc.column import TableColumnArgs as ColArgs
+from clasq.schema.column import PrimaryTableColumn, TableColumn
+from clasq.syntax.data_types import Nullable, VarChar, Int
 
 def test_create_table():
     db = clasq.connection.MySQLConnection(user='testuser', password='testpass', database='testdb').db
@@ -11,10 +13,10 @@ def test_create_table():
     if (_ext_table := db.get_table_or_none('students')) is not None:
         _ext_table.drop(if_exists=True)
 
-    students = db.append_table('students',
-        ColumnArgs('id', int, primary=True),
-        ColumnArgs('name', VarChar[64], nullable=True),
-    )
+    students = db.append_table('students', (
+        ColArgs('id', PrimaryTableColumn[Int]),
+        ColArgs('name', TableColumn[Nullable[VarChar[Literal[64]]]]),
+    ))
     assert 'students' in db
     assert 'id' in db['students']
     assert 'name' in db['students']

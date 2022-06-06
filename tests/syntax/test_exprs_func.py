@@ -2,9 +2,10 @@
     Test exprs func
 """
 import pytest
-from clasq.syntax import errors, exprs
+from clasq import errors
+from clasq.syntax import exprs
 from clasq.syntax.abc import object as object_abc
-from clasq.syntax.query_data import QueryData
+from clasq.syntax.query import QueryData
 
 @pytest.mark.parametrize('funcname, returntype', [
     ('a', None),
@@ -14,7 +15,7 @@ from clasq.syntax.query_data import QueryData
     (b'testib', int),
 ])
 def test_no_args_func(funcname, returntype):
-    func = exprs.NoArgsFunc(funcname, returntype)
+    func = exprs.FuncWithNoArgs(funcname, returntype)
     assert isinstance(func.name, object_abc.ObjectName)
     assert func.name == funcname
     assert func.returntype == returntype
@@ -50,7 +51,7 @@ def test_func(funcname, args):
 
 
 @pytest.mark.parametrize('funcname', ['hoge', 'FUGARE', b'SomeFunc123'])
-@pytest.mark.parametrize('funcargs', [(), (exprs.Expr,), (exprs.Expr, exprs.Expr)])
+@pytest.mark.parametrize('funcargs', [(), (exprs.ExprValue,), (exprs.ExprValue, exprs.ExprValue)])
 @pytest.mark.parametrize('args', [
     (),
     (1,),
@@ -105,11 +106,11 @@ def test_binary_op(funcname, arg1, arg2):
     assert call_noarg is exprs.NoneExpr
 
     call_arg1 = func(arg1)
-    assert isinstance(call_arg1, exprs.Expr)
+    assert isinstance(call_arg1, exprs.ExprValue)
     assert call_arg1.v == arg1
 
     call_arg2 = func.call(arg2)
-    assert isinstance(call_arg2, exprs.Expr)
+    assert isinstance(call_arg2, exprs.ExprValue)
     assert call_arg2.v == arg2
 
     call = func.call(arg1, arg2)

@@ -30,7 +30,7 @@ from sample_db import Category, Product, User, UserSale, UserSaleProduct
         b'CREATE TABLE `users` ('
         b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
         b'`name` VARCHAR(64) NOT NULL, '
-        b'`registered_at` DATETIME DEFAULT NULL)',
+        b'`registered_at` DATETIME)',
         ['id', 'name', 'registered_at'],
         {},
     ),
@@ -38,7 +38,7 @@ from sample_db import Category, Product, User, UserSale, UserSaleProduct
         b'CREATE TABLE `user_sales` ('
         b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
         b'`user_id` INT NOT NULL, '
-        b'`sale_at` DATETIME DEFAULT NULL)',
+        b'`sale_at` DATETIME)',
         ['id', 'user_id', 'sale_at'],
         {},
     ),
@@ -55,16 +55,5 @@ from sample_db import Category, Product, User, UserSale, UserSaleProduct
 ])
 
 def test_create_table_from_class(cls: Type[TableClass], query, columns: list[str], fkeys: dict[str, str]):
-    assert list(str(c.name) for c in cls._entity.iter_table_columns()) == columns
-    assert cls._entity.create_table_query.stmt == query
-
-
-# def main():
-#     category = Category._table_obj
-#     print(list(c.name for c in category.iter_table_columns()))
-#     print(category.create_table_query.stmt)
-
-# if __name__ == '__main__':
-#     main()
-
-
+    assert list(str(c.name) for c in cls._dest_table.iter_table_columns()) == columns
+    assert cls._dest_table.create_table_query.stmt == query

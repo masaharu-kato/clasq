@@ -6,11 +6,10 @@ import datetime
 import decimal
 import pytest
 
-from clasq.schema import sqltypes as sqt
-from clasq.schema.abc.sqltype import SQLTypeABC
-from clasq.utils.generic_cls import bind_generic_args
+from clasq.syntax import data_types as sqt
+from clasq.syntax.abc.data_types import DataTypeABC
 
-@pytest.mark.parametrize(('cls', 'name', 'val'), [
+ALL_CLS_NAME_VALS = [
     (sqt.TinyInt,  b'TINYINT', -123),
     (sqt.SmallInt, b'SMALLINT', -12345),
     (sqt.MediumInt,  b'MEDIUMINT', -123456),
@@ -50,18 +49,36 @@ from clasq.utils.generic_cls import bind_generic_args
     (sqt.TinyText, b'TINYTEXT', 'This is a sample text 67890'),
     (sqt.MediumText, b'MEDIUMTEXT', 'This is a sample text 67890'),
     (sqt.LongText, b'LONGTEXT', 'This is a sample text 67890'),
-])
-def test_sqltype_name(cls: Type[SQLTypeABC], name: bytes, val: Any):
-    cls_with_args = bind_generic_args(cls)
-    assert cls_with_args.sql_type_name == name
-    assert cls_with_args.get_sql_type_name() == name
-    assert cls_with_args.python_type is type(val)
+]
+
+@pytest.mark.parametrize(('cls', 'name', 'val'), ALL_CLS_NAME_VALS)
+def test_sqltype_cls_not_null(cls: type[DataTypeABC], name: bytes, val: Any):
+    assert cls.base_sql == name
+    assert cls.sql == name + b' NOT NULL'
+    assert cls.base_python_type is type(val)
+    assert cls.python_type == type(val)
+
+@pytest.mark.parametrize(('base_cls', 'name', 'val'), ALL_CLS_NAME_VALS)
+def test_sqltype_cls_nullable(base_cls: type[DataTypeABC], name: bytes, val: Any):
+    cls = sqt.Nullable[base_cls]  # type: ignore
+    assert cls.base_sql == name
+    assert cls.sql == name
+    assert cls.base_python_type is type(val)
+    assert cls.python_type == type(val) | None
+
+@pytest.mark.parametrize(('cls', 'name', 'val'), ALL_CLS_NAME_VALS)
+def test_sqltype_inst_not_null(cls: type[DataTypeABC], name: bytes, val: Any):
     inst = cls(val)
-    assert inst.cls.get_sql_type_name() == name
-    assert inst.cls.sql_type_name == name
-    assert inst.cls.python_type is type(val)
+    assert type(inst).sql == name + b' NOT NULL'
+    assert type(inst).python_type is type(val)
     assert inst.orig_value == val
     assert inst.sql_value == val
 
-
-
+@pytest.mark.parametrize(('base_cls', 'name', 'val'), ALL_CLS_NAME_VALS)
+def test_sqltype_inst_nullable(base_cls: type[DataTypeABC], name: bytes, val: Any):
+    cls = sqt.Nullable[base_cls]  # type: ignore
+    inst = cls(val)
+    assert type(inst).sql == name
+    assert type(inst).python_type == type(val) | None
+    assert inst.orig_value == val
+    assert inst.sql_value == val

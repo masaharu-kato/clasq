@@ -2,12 +2,13 @@
     Test clasq.schema
 """
 import pytest
+from clasq.schema.column import TableColumn
 from clasq.schema.database import Database
 from clasq.schema.table import TableArgs
-from clasq.schema.column import ColumnArgs
-from clasq.schema.sqltypes import Int, VarChar
+from clasq.schema.abc.column import TableColumnArgs as ColArgs
+from clasq.syntax.data_types import Int, VarChar
 from clasq.syntax.exprs import Object
-from clasq.syntax.query_data import QueryData
+from clasq.syntax.query import QueryData
 
 @pytest.mark.parametrize('objname, result', [
     [b'hoGe', b'`hoGe`'],
@@ -33,25 +34,25 @@ def test_asobj(objname, result):
 
 def test_table_columns():
 
-    db = Database('mydb',
-        TableArgs('mytable', 
-            ColumnArgs('id', Int),
-            ColumnArgs('mycol2', Int),
-            ColumnArgs('mycol3', VarChar[64]),
-        ),
-        TableArgs('mytable2',
-            ColumnArgs('id', Int),
-            ColumnArgs('mycol4', Int),
-            ColumnArgs('mycol5', VarChar[64]),
-        )
+    db = Database('mydb', (
+        TableArgs('mytable', (
+            ColArgs('id', TableColumn[Int]),
+            ColArgs('mycol2', TableColumn[Int]),
+            ColArgs('mycol3', TableColumn[VarChar[64]]),
+        )),
+        TableArgs('mytable2', (
+            ColArgs('id', TableColumn[Int]),
+            ColArgs('mycol4', TableColumn[Int]),
+            ColArgs('mycol5', TableColumn[VarChar[64]]),
+        )))
     )
 
     assert db.name == b'mydb'
-    assert db['mytable'].get_name() == b'mytable'
+    assert db['mytable']._name == b'mytable'
     assert db['mytable']['mycol2'].name == b'mycol2'
     assert db.get_table(b'mytable')['mycol2'].name == b'mycol2'
     assert db.get_table(b'mytable').get_column(b'mycol2').name == b'mycol2'
     assert db.get_table(b'mytable2').get_column(b'mycol5').name == b'mycol5'
 
-    assert db['mytable'].get_name() == b'mytable'
+    assert db['mytable']._name == b'mytable'
     assert QueryData(db['mytable']['mycol2']) == QueryData(stmt=b'`mytable`.`mycol2`')
