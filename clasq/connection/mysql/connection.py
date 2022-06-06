@@ -11,7 +11,7 @@ from mysql.connector.abstracts import MySQLConnectionAbstract # type: ignore
 # from mysql.connector.pooling import MySQLConnectionPool # type: ignore
 
 from ...syntax.abc.object import ObjectName, NameLike
-from ...syntax.sql_values import SQLValue
+from ...syntax.abc.values import SQLValue
 from ...utils.tabledata import TableData
 from ..prepared_stmt import ConnectionABC, PreparedStatementExecutorABC
 from .prepared_stmt import MySQLPreparedStatementExecutor

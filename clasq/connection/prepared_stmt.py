@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Collection
 
-from ..syntax.sql_values import SQLValue
+from ..syntax.abc.values import SQLValue
 from ..utils.tabledata import TableData
 from .connection import ConnectionABC
 from . import errors

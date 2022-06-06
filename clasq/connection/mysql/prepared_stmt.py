@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Collection
 
 from mysql.connector.constants import ServerFlag # type: ignore
 
-from ...syntax.sql_values import SQLValue
+from ...syntax.abc.values import SQLValue
 from ...utils.tabledata import TableData
 from ..prepared_stmt import PreparedStatementExecutorABC
 

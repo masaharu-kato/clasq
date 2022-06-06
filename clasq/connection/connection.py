@@ -5,11 +5,16 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Collection, Iterable, Iterator
 
+from ..syntax.abc.exprs import SQLValue, QueryLike, QueryArgParams
 from ..syntax.abc.object import NameLike
-from ..syntax.sql_values import SQLValue
+from ..syntax.abc.values import SQLValue
 from ..utils.tabledata import TableData
+from ..schema.abc.table import TableArgs
+from ..schema.abc.column import TableColumnArgs
+from ..schema.column import make_table_column_type
 from ..schema.database import Database
-from ..syntax.query_data import QueryData, QueryLike, ValueType, QueryArgVals
+from ..syntax.abc.query import QueryDataABC
+from ..syntax.query import QueryData
 from . import errors
 
 
@@ -31,7 +36,8 @@ class ConnectionABC:
             self._cnx_options['database'] = database
             self._db = Database(database)
             self._db.connect(self)
-            self._db.fetch_from_db()
+            for table_args in self.iter_tables_args():
+                self._db.append_table(table_args)
 
     @property
     def db(self) -> Database:
@@ -46,7 +52,7 @@ class ConnectionABC:
         else:
             if self._db is None:
                 self._db = db
-                self._use_db(db.get_name())
+                self._use_db(db._name)
             else:
                 if self._db is not db:
                     raise RuntimeError('Database is already set.')
@@ -67,37 +73,43 @@ class ConnectionABC:
     def run_stmt_many_prms(self, stmt: bytes, prms_list: Iterable[Collection[SQLValue]]) -> Iterator[TableData | None]:
         """ Execute a query with multiple lists of params and get result if exists """
 
-    def query(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> TableData:
+    def query(self, *exprs: QueryLike | None, prms: Collection[SQLValue] = ()) -> TableData:
         if (result := self.run(*exprs, prms)) is None:
             raise errors.NoResultsError('No results.')
         return result
 
-    def query_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> Iterator[TableData]:
+    def query_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgParams]) -> Iterator[TableData]:
         for result in self.run_many(*exprs, data=data):
             if result is None:
                 raise errors.NoResultsError('No results.')
             yield result
 
-    def execute(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> None:
+    def execute(self, *exprs: QueryLike | None, prms: Collection[SQLValue] = ()) -> None:
         if self.run(*exprs, prms=prms) is not None:
             raise errors.ResultExistsError('Result exists.')
 
-    def execute_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> None:
+    def execute_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgParams]) -> None:
         for _result in self.run_many(*exprs, data=data):
             if _result is not None:
                 raise errors.ResultExistsError('Result exists.')
 
-    def run(self, *exprs: QueryLike | None, prms: Collection[ValueType] | None = None) -> TableData | None:
+    def run(self, *exprs: QueryLike | None, prms: Collection[SQLValue] | None = None) -> TableData | None:
         """ Run with optional single parameters """
         # Make QueryData
-        qd = exprs[0] if len(exprs) == 1 and isinstance(exprs[0], QueryData) and not prms else QueryData(*exprs, prms=prms)
+        if len(exprs) == 1 and isinstance(exprs[0], QueryDataABC) and not prms:
+            qd = exprs[0]
+        else:
+            qd = QueryData(*exprs, prms=prms)
         # Run and handle result
         return self.run_stmt_prms(qd.stmt, qd.prms)
 
-    def run_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> Iterator[TableData | None]:
+    def run_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgParams]) -> Iterator[TableData | None]:
         """ Run with multiple list of parameters """
         # Make QueryData
-        qd = exprs[0] if len(exprs) == 1 and isinstance(exprs[0], QueryData) and not data else QueryData(*exprs)
+        if len(exprs) == 1 and isinstance(exprs[0], QueryDataABC) and not data:
+            qd = exprs[0]
+        else:
+            qd = QueryData(*exprs)
         # Make argument values iterator
         iter_QueryArgVals = data.iter_rows_dict() if isinstance(data, TableData) else data
         # Run and handle result
@@ -111,6 +123,26 @@ class ConnectionABC:
     @abstractmethod
     def last_row_id(self) -> int:
         """ Get a last inserted row id """
+
+    def iter_tables_args(self) -> Iterator[TableArgs]:
+        """ Fetch tables of this database from the connection """
+        for tabledata in self.query(b'SHOW', b'TABLES'):
+            table_name = str(tabledata[0]).encode()
+            yield TableArgs(table_name, tuple(
+                TableColumnArgs(
+                    name = coldata['Field'],
+                    column_type = make_table_column_type(
+                        data_type_sql=coldata['Type'],
+                        nullable=coldata['Null'] == 'YES',
+                        is_unique=coldata['Key'] == 'UNI',
+                        is_primary=coldata['Key'] == 'PRI',
+                        is_auto_increment='auto_increment' in coldata['Extra'],
+                    ),
+                    default = coldata['Default'],
+                )
+                for coldata in self.query(b'SHOW', b'COLUMNS', b'FROM', table_name)
+            ))
+
 
     # @property
     # def last_qd(self) -> QueryData | None:
