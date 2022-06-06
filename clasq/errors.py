@@ -57,3 +57,9 @@ class QueryTypeError(QueryError, TypeError):
 class QueryArgumentError(QueryError):
     """ Query Argument Error """
 
+
+class ReferenceError(Exception):
+    """ Reference Error """
+
+class ReferenceResolveError(ReferenceError):
+    """ Reference Resolve Error """
