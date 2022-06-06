@@ -3,24 +3,25 @@
 """
 from __future__ import annotations
 
-from ..syntax.keywords import ReferenceOption
-from ..syntax.exprs import Object, NameLike
-from ..syntax.query_data import QueryData
-from .column import TableColumn
+from ...syntax.abc.object import NameLike, ObjectName
+from ...syntax.abc.query import QueryABC, QueryDataABC
+from ...syntax.abc.keywords import ReferenceOption
+from .table import TableColumnABC
 
-class ForeignKeyReference(Object):
+
+class ForeignKeyReference(QueryABC):
     """ Foreign Key Reference """
 
     def __init__(self,
-        orig_column: TableColumn | tuple[TableColumn, ...],
-        ref_column : TableColumn | tuple[TableColumn, ...],
+        orig_column: TableColumnABC | tuple[TableColumnABC, ...],
+        ref_column : TableColumnABC | tuple[TableColumnABC, ...],
         *,
         on_delete: ReferenceOption | None = None,
         on_update: ReferenceOption | None = None,
-        name: NameLike | None = None
-    ):
-        super().__init__(name or b'')
-        
+        name: NameLike = None,
+    ):  
+        self.__name = ObjectName(name) if name is not None else None
+
         _orig_columns = orig_column if isinstance(orig_column, (tuple, list)) else [orig_column]
         _ref_columns  = ref_column  if isinstance(ref_column , (tuple, list)) else [ref_column]
         assert len(_orig_columns) and _orig_columns[0].table is not None
@@ -44,11 +45,15 @@ class ForeignKeyReference(Object):
     def on_update(self):
         return self._on_update
 
-    def append_to_query_data(self, qd: QueryData) -> None:
+    @property
+    def _name_or_none(self) -> ObjectName | None:
+        return self.__name
+
+    def _append_to_query_data(self, qd: QueryDataABC) -> None:
         """ Append this to query data"""
         qd.append(
-            b'FOREIGN', b'KEY', self.name, b'(', [super(Object, c) for c in self._orig_columns], b')',
-            b'REFERENCES', self._ref_table, b'(', [super(Object, c) for c in self._ref_columns], b')',
-            (b'ON', b'DELETE', self._on_delete) if self._on_delete else None,
-            (b'ON', b'UPDATE', self._on_update) if self._on_update else None,
+            b'FOREIGN', b'KEY', self._name_or_none or (), b'(', [c._name for c in self._orig_columns], b')',
+            b'REFERENCES', self._ref_table, b'(', [c._name for c in self._ref_columns], b')',
+            (b'ON', b'DELETE', self._on_delete) if self._on_delete else (),
+            (b'ON', b'UPDATE', self._on_update) if self._on_update else (),
         )
