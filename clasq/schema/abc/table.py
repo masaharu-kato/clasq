@@ -1,76 +1,73 @@
 """
     Table abstract classes
 """
-from abc import abstractmethod, abstractproperty
-from typing import Iterator
+from __future__ import annotations
+from abc import abstractmethod
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Collection, Iterator
 
+from ...syntax.abc.query import QueryDataABC
 from ...syntax.abc.object import ObjectName
-from ...syntax.exprs import OP, Arg, ExprABC, NameLike
-from ...syntax.values import ValueType
-from ...syntax.query_data import QueryData
-from ...syntax.errors import ObjectNotFoundError
+from ...syntax.abc.values import SQLValue
+from ...syntax.exprs import ExprABC, NameLike, QueryArg, OPs
+from ...syntax.query import QueryData
+from ...errors import ObjectNotFoundError
 from ...utils.tabledata import TableData
-from ..column import TableColumn, ColumnArgs
-from ..fkey_ref import ForeignKeyReference
 from .view import NamedViewABC, ViewReferenceABC
+from .column import TableColumnABC, TableColumnArgs
+
+if TYPE_CHECKING:
+    from .fkey_ref import ForeignKeyReference
 
 
+@dataclass
 class TableArgs:
     """ Table Expr """
-
-    def __init__(self,
-        name: NameLike,
-        *column_args: ColumnArgs,
-        primary_key: tuple[NameLike | TableColumn, ...] | None = None,
-        unique: tuple[NameLike | TableColumn, ...] | None = None,
-        refs: list[ForeignKeyReference] | None = None,
-        # **options
-    ):
-        self.name = name
-        self.column_args = column_args
-        self.primary_key = primary_key
-        self.unique = unique
-        self.refs = refs
+    name: NameLike
+    column_args: Collection[TableColumnArgs]
+    primary_key: tuple[NameLike | TableColumnABC, ...] | None = None
+    unique: tuple[NameLike | TableColumnABC, ...] | None = None
+    refs: list[ForeignKeyReference] | None = None
 
 
 class TableABC(NamedViewABC):
     """ Table Expr """
     
-    @abstractproperty
-    def _primary_keys(self):
-        """ Get a primary key """
+    # @abstractproperty
+    # def _primary_keys(self):
+    #     """ Get a primary key """
 
-    @abstractproperty
-    def _unique_columns(self):
-        """ Get a unique columns """
+    # @abstractproperty
+    # def _unique_columns(self):
+    #     """ Get a unique columns """
 
     def _refresh_select_from_query(self) -> None:
         pass  # Do nothing
 
-    def iter_table_columns(self) -> Iterator[TableColumn]:
+    def iter_table_columns(self) -> Iterator[TableColumnABC]:
         """ Iterate table columns
             (Override from `TableABC`)
         """
         for col in self._base_column_set:
-            assert isinstance(col, TableColumn)
+            assert isinstance(col, TableColumnABC)
             yield col
 
-    def get_table_column(self, val: TableColumn | NameLike) -> TableColumn:
-        if isinstance(val, TableColumn):
-            if val.table_or_none is not self:
+    def get_table_column(self, val: TableColumnABC | NameLike) -> TableColumnABC:
+        if isinstance(val, TableColumnABC):
+            if val.table is not self:
                 raise ObjectNotFoundError('Column of the different table.', val)
             return val
         key = ObjectName(val)
         if key not in self._base_column_set:
             raise ObjectNotFoundError('Column not found.', key)
-        assert isinstance(col := self._base_column_set[key], TableColumn)
+        assert isinstance(col := self._base_column_set[key], TableColumnABC)
         return col
 
-    def append_to_query_data(self, qd: QueryData) -> None:
+    def _append_to_query_data(self, qd: QueryDataABC) -> None:
         """ Append a query of this table 
             (Override from `QueryABC`)
         """
-        qd += self._view_name
+        qd.append(self._view_name)
 
     @property
     def _select_from_query_or_none(self) -> QueryData | None:
@@ -88,7 +85,7 @@ class TableABC(NamedViewABC):
         # TODO: Upgrade with view methods
         return self.clone(*exprs, **options).result
 
-    def insert(self, data: dict[NameLike | TableColumn, ValueType] | None = None, **values: ValueType) -> int:
+    def insert(self, data: dict[NameLike | TableColumnABC, SQLValue] | None = None, **values: SQLValue) -> int:
         """ Run INSERT query
 
         Args:
@@ -104,35 +101,35 @@ class TableABC(NamedViewABC):
         )
         return self._con.last_row_id()
 
-    def insert_data(self, data: TableData[ValueType]) -> int:
+    def insert_data(self, data: TableData[SQLValue]) -> int:
         """ Run INSERT with TableData """
         name_and_col = [(name, self._to_column(name)) for name in data.columns]
         self._con.execute_many(
             b'INSERT', b'INTO', self, b'(', [col for _, col in name_and_col], b')',
-            b'VALUES', b'(', [Arg(name) for name, _ in name_and_col],  b')',
+            b'VALUES', b'(', [QueryArg(name) for name, _ in name_and_col],  b')',
             data=data
         )
         return self._con.last_row_id()
 
     def update(self,
-        data: dict[NameLike | TableColumn, ValueType] | None = None,
+        data: dict[NameLike | TableColumnABC, SQLValue] | None = None,
         *,
         where: ExprABC | None,
-        orders: list[TableColumn] | None = None,
+        orders: list[TableColumnABC] | None = None,
         limit: int | None = None,
-        **values: ValueType,
+        **values: SQLValue,
     ) -> None:
         """ Run UPDATE query """
 
         column_values = self._proc_colval_args(data, **values)
         self._con.execute(
             b'UPDATE', self, b'SET', [(c, b'=', v) for c, v in column_values.items()],
-            (b'WHERE', where) if where else None,
-            (b'ORDER', b'BY', [c.ordered_query for c in orders]) if orders else None,
-            (b'LIMIT', limit) if limit else None,
+            (b'WHERE', where) if where else (),
+            (b'ORDER', b'BY', [c._ordered_query for c in orders]) if orders else (),
+            (b'LIMIT', limit) if limit else (),
         )
 
-    def update_data(self, data: TableData[ValueType], keys: list[NameLike | TableColumn]) -> None:
+    def update_data(self, data: TableData[SQLValue], keys: list[NameLike | TableColumnABC]) -> None:
         """ Run UPDATE query with TableData """
         data_name_and_col = [(c, self._to_column(c)) for c in data.columns if c not in keys]
         key_name_and_col  = [(c, self._to_column(c)) for c in data.columns if c in keys]
@@ -140,30 +137,30 @@ class TableABC(NamedViewABC):
             raise ValueError('Invalid key values.')
         
         self._con.execute_many(
-            b'UPDATE', self, b'SET', [(col, b'=', Arg(name)) for name, col in data_name_and_col],
-            b'WHERE', OP.AND(col == Arg(name) for name, col in key_name_and_col),
+            b'UPDATE', self, b'SET', [(col, b'=', QueryArg(name)) for name, col in data_name_and_col],
+            b'WHERE', OPs.AND(col == QueryArg(name) for name, col in key_name_and_col),
             data=data
         )
 
     def delete(self, *,
         where: ExprABC | None,
-        orders: list[TableColumn] | None = None,
+        orders: list[TableColumnABC] | None = None,
         limit: int | None = None,
     ) -> None:
         """ Run DELETE query """
         self._con.execute(
             b'DELETE', b'FROM', self,
-            (b'WHERE', where) if where else None,
-            (b'ORDER', b'BY', [c.ordered_query for c in orders]) if orders else None,
-            (b'LIMIT', limit) if limit else None,
+            (b'WHERE', where) if where else (),
+            (b'ORDER', b'BY', [c._ordered_query for c in orders]) if orders else (),
+            (b'LIMIT', limit) if limit else (),
         )
 
-    def delete_data(self, data: TableData[ValueType]) -> int:
+    def delete_data(self, data: TableData[SQLValue]) -> int:
         """ Run DELETE with TableData """
         name_and_col = [(name, self._to_column(name)) for name in data.columns]
         self._con.execute_many(
             b'DELETE', b'FROM', self,
-            b'WHERE', OP.AND(col == Arg(name) for name, col in name_and_col),
+            b'WHERE', OPs.AND(col == QueryArg(name) for name, col in name_and_col),
             data=data
         )
         return self._con.last_row_id()
@@ -175,16 +172,16 @@ class TableABC(NamedViewABC):
     def drop(self, *, temporary=False, if_exists=False) -> None:
         """ Run DROP TABLE query """
         self.db.execute(
-            b'DROP', b'TEMPORARY' if temporary else None, b'TABLE',
-            (b'IF', b'EXISTS') if if_exists else None, self)
+            b'DROP', b'TEMPORARY' if temporary else (), b'TABLE',
+            (b'IF', b'EXISTS') if if_exists else (), self)
         # self._exists_on_db = False
         self.db.remove_table(self)
 
     def get_create_table_query(self, *, temporary=False, if_not_exists=False) -> QueryData:
         return QueryData(
-            b'CREATE', b'TEMPORARY' if temporary else None, b'TABLE',
-            b'IF NOT EXISTS' if if_not_exists else None,
-            self, b'(', [c.query_for_create_table for c in self.iter_table_columns()], b')'
+            b'CREATE', b'TEMPORARY' if temporary else (), b'TABLE',
+            (b'IF', b'NOT', b'EXISTS') if if_not_exists else (),
+            self, b'(', [c._query_for_create_table for c in self.iter_table_columns()], b')'
         )
     
     @property
@@ -197,11 +194,18 @@ class TableABC(NamedViewABC):
             self.drop(temporary=temporary, if_exists=True)
         self.db.execute(self.get_create_table_query(temporary=temporary, if_not_exists=if_not_exists))
         # TODO: Fetch
+    
+    @property
+    def python_class_source(self) -> str:
+        res = 'class %s(TableClass, db=%s):\n' % (self._name, self.db._name)
+        for column in self.iter_table_columns():
+            res += '%s: %s\n' % (column.name, column._data_type.annotation)
+        return res
 
     def __repr__(self) -> str:
-        return 'T(%s)' % self.get_name()
+        return 'T(%s)' % self._name
         
-    def _proc_colval_args(self, value_dict: dict[NameLike | TableColumn, ValueType] | None, **values: ValueType) -> dict[TableColumn, ValueType]:
+    def _proc_colval_args(self, value_dict: dict[NameLike | TableColumnABC, SQLValue] | None, **values: SQLValue) -> dict[TableColumnABC, SQLValue]:
         return {self.get_table_column(c): v for c, v in [*(value_dict.items() if value_dict else []), *values.items()]}
 
 
@@ -209,32 +213,39 @@ class TableReferenceABC(ViewReferenceABC, TableABC):
     """ Table Reference abstract class """
     
     @abstractmethod
-    def get_entity(self) -> TableABC:
+    def _get_dest_table(self) -> TableABC:
         """ Get a entity table object
             (Abstract property)
         """
         raise NotImplementedError()
-    
+
+    @abstractmethod
+    def _get_name(self) -> ObjectName:
+        """ Get a table name to reference
+            (Abstract property)
+        """
+        
     @property
-    def _entity(self):
+    def _dest_table(self):
         """ Get a entity table object """
-        return self.get_entity()
+        return self._get_dest_table()
 
     @property
     def _target_view(self):
         """ Override for `ViewWithTargetABC` """
-        return self._entity
+        return self._dest_table
 
-    def get_name(self):
+    @property
+    def _name(self):
         """ Override for `ObjectABC` """
-        return self._entity.get_name()
+        return self._get_name()
 
     @property
     def _primary_keys(self):
         """ Override for `TableABC` """
-        return self._entity._primary_keys
+        return self._dest_table._primary_keys
 
     @property
     def _unique_columns(self):
         """ Override for `TableABC` """
-        return self._entity._unique_columns
+        return self._dest_table._unique_columns

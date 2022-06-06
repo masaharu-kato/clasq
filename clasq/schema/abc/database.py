@@ -7,17 +7,17 @@ from typing import TYPE_CHECKING, Collection, Iterable, Iterator, cast, overload
 
 
 from ...syntax.abc.object import NameLike, ObjectABC, ObjectName
+from ...syntax.abc.values import SQLValue
+from ...syntax.abc.exprs import QueryLike, QueryArgParams
 from ...syntax.exprs import Object
-from ...syntax.query_data import QueryLike, QueryArgVals
-from ...syntax.values import ValueType
-from ...syntax.errors import NotaSelfObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError
+from ...errors import NotaSelfObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError
 from ...utils.tabledata import TableData
-from ..column import ColumnArgs
-from ..sqltypes import AnySQLType
 from .table import TableABC, TableArgs
+from .column import TableColumnArgs
 
 if TYPE_CHECKING:
     from ...connection import ConnectionABC
+    from ...data.database import DatabaseClass
     
 
 class DatabaseABC(ObjectABC):
@@ -57,6 +57,10 @@ class DatabaseABC(ObjectABC):
     def _collate(self):
         """ Get a collation for this database """
         raise NotImplementedError()
+
+    @abstractproperty
+    def _class_or_none(self) -> type[DatabaseClass] | None:
+        """ Get a DatabaseClass of this databse if exists """
 
     @property
     def _database(self) -> DatabaseABC:
@@ -144,7 +148,7 @@ class DatabaseABC(ObjectABC):
     def append_table(self, table_obj: TableABC, /) -> TableABC: ...
 
     @overload
-    def append_table(self, name: NameLike, /, *column_args: ColumnArgs, **options) -> TableABC: ...
+    def append_table(self, name: NameLike, /, *column_args: TableColumnArgs, **options) -> TableABC: ...
 
     @overload
     def append_table(self, table_arg: TableArgs, /) -> TableABC: ...
@@ -166,7 +170,7 @@ class DatabaseABC(ObjectABC):
             table_arg = TableArgs(arg1, *cols, **kwargs)
         table = self._new_table(table_arg)
 
-        table_name = table.get_name()
+        table_name = table._name
         if table_name in self._table_dict:
             raise ObjectNameAlreadyExistsError('Table name object already exists.', table_name)
 
@@ -176,32 +180,23 @@ class DatabaseABC(ObjectABC):
     def append_table_object(self, table: TableABC):
         if table._database is not self:
             raise NotaSelfObjectError('Not a table of this database.', table)
-        table_name = table.get_name()
+        table_name = table._name
         if table_name in self._table_dict:
             raise ObjectNameAlreadyExistsError('Table name object already exists.', table)
         self._table_dict[table_name] = table
         return self._table_dict[table_name]
 
     def remove_table(self, table: TableABC) -> None:
-        table_name = self._to_table(table).get_name()
+        table_name = self._to_table(table)._name
         del self._table_dict[table_name]
-
-    def fetch_from_db(self) -> None:
-        """ Fetch tables of this database from the connection """
-        for tabledata in self.query(b'SHOW', b'TABLES'):
-            table_name = str(tabledata[0]).encode()
-            self.append_table(TableArgs(table_name, *(
-                ColumnArgs(coldata['Field'], AnySQLType)  # TODO: Fix type
-                for coldata in self.query(b'SHOW', b'COLUMNS', b'FROM', table_name)
-            )))
 
     def _create_database_query(self, *, if_not_exists=False) -> tuple:
         return (
             b'CREATE', b'DATABASE',
-            (b'IF', b'NOT', b'EXISTS') if if_not_exists else None,
+            (b'IF', b'NOT', b'EXISTS') if if_not_exists else (),
             self,
-            (b'CHARACTER', b'SET', Object(self._charset)) if self._charset else None,
-            (b'COLLATE', Object(self._collate)) if self._collate else None,
+            (b'CHARACTER', b'SET', Object(self._charset)) if self._charset else (),
+            (b'COLLATE', Object(self._collate)) if self._collate else (),
         )
 
     def drop(self, *, if_exists=False) -> None:
@@ -209,7 +204,7 @@ class DatabaseABC(ObjectABC):
         if_exists = if_exists # or (not self.exists)
         self.execute(
             b'DROP', b'DATABASE',
-            (b'IF', b'EXISTS') if if_exists else None, self)
+            (b'IF', b'EXISTS') if if_exists else (), self)
         # self._exists = False
 
     def create(self, *, if_not_exists=False, drop_if_exists=False) -> None:
@@ -219,16 +214,16 @@ class DatabaseABC(ObjectABC):
         self.execute(*self._create_database_query(if_not_exists=if_not_exists))
         # self._exists = True
 
-    def query(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> TableData:
+    def query(self, *exprs: QueryLike | None, prms: Collection[SQLValue] = ()) -> TableData:
         return self._con.query(*exprs, prms=prms)
 
-    def query_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> Iterator[TableData]:
+    def query_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgParams]) -> Iterator[TableData]:
         return self._con.query_many(*exprs, data=data)
 
-    def execute(self, *exprs: QueryLike | None, prms: Collection[ValueType] = ()) -> None:
+    def execute(self, *exprs: QueryLike | None, prms: Collection[SQLValue] = ()) -> None:
         return self._con.execute(*exprs, prms=prms)
 
-    def execute_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgVals]) -> None:
+    def execute_many(self, *exprs: QueryLike | None, data: TableData | Iterable[QueryArgParams]) -> None:
         return self._con.execute_many(*exprs, data=data)
 
     def commit(self) -> None:
@@ -244,8 +239,9 @@ class DatabaseReferenceABC(DatabaseABC):
         """ Get a database object """
         raise NotImplementedError()
 
-    def get_name(self):
-        return self._entity.get_name()
+    @property
+    def _name(self):
+        return self._entity._name
     
     @property
     def _entity(self) -> DatabaseABC:

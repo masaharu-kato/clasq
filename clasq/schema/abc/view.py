@@ -4,13 +4,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod, abstractproperty
 import itertools
-from typing import TYPE_CHECKING, Iterable, overload
+from typing import TYPE_CHECKING, Iterable, TypeAlias, overload
 
+from ...syntax.abc.exprs import ExprLike
+from ...syntax.abc.keywords import JoinType, JoinLike, OrderTypeLike
 from ...syntax.abc.object import NameLike, ObjectABC, ObjectName
-from ...syntax.query_data import QueryData
-from ...syntax.exprs import AliasedExpr, ExprABC, ExprLike, ExprObjectABC, ExprObjectSet, FrozenExprObjectSet, FrozenOrderedExprObjectSet, NoneExpr, OP
-from ...syntax.keywords import JoinType, JoinLike, OrderTypeLike
-from ...syntax.errors import NotaSelfObjectError, ObjectArgTypeError, ObjectNotFoundError, ObjectNotSetError
+from ...syntax.query import QueryData
+from ...syntax.exprs import AliasedExpr, ExprABC, ExprObjectABC, ExprObjectSet, FrozenExprObjectSet, FrozenOrderedExprObjectSet, NoneExpr, OPs
+from ...errors import NotaSelfObjectError, ObjectArgTypeError, ObjectNotFoundError, ObjectNotSetError
 from ...utils.tabledata import TableData
 from ..column import FrozenOrderedNamedViewColumnSet, NamedViewColumn, NamedViewColumnABC
 from .column import ColumnABC
@@ -21,9 +22,9 @@ if TYPE_CHECKING:
     from ..view import JoinedView, ViewWithArgs
 
 _ColumnWithAlias = tuple[ColumnABC | NameLike, NameLike]
-ColumnArgTypes = ExprObjectSet | FrozenExprObjectSet | ExprObjectABC | NameLike | _ColumnWithAlias
+ColumnArgTypes: TypeAlias = ExprObjectSet | FrozenExprObjectSet | ExprObjectABC | NameLike | _ColumnWithAlias
 _OrderedColumnWithAlias = tuple[NameLike | ExprObjectABC, OrderTypeLike]
-OrderedColumnArgTypes = NameLike | ExprObjectABC | _OrderedColumnWithAlias
+OrderedColumnArgTypes: TypeAlias = NameLike | ExprObjectABC | _OrderedColumnWithAlias
 
 class ViewABC(ABC):
     """ View Expr """
@@ -283,7 +284,7 @@ class ViewABC(ABC):
         #   search from the exprs in self selected expression set
         else:
             for sel_expr in self._selected_exprs:
-                if isinstance(sel_expr, AliasedExpr) and val is sel_expr.expr:
+                if isinstance(sel_expr, AliasedExpr) and val is sel_expr._expr:
                     return sel_expr
 
         raise ObjectNotFoundError(
@@ -334,7 +335,7 @@ class ViewABC(ABC):
         #   search from the exprs in self selected expression set
         else:
             for sel_expr in self._selected_exprs:
-                if isinstance(sel_expr, AliasedExpr) and val is sel_expr.expr:
+                if isinstance(sel_expr, AliasedExpr) and val is sel_expr._expr:
                     return sel_expr
 
         raise ObjectNotFoundError(
@@ -458,7 +459,7 @@ class ViewABC(ABC):
         Returns:
             ViewABC: New View object with WHERE conditions
         """
-        return self.clone(where=OP.AND(
+        return self.clone(where=OPs.AND(
             *exprs,
             *(self.get_column(c) == v for c, v in coleqs.items()))
         )
@@ -729,6 +730,9 @@ class ViewABC(ABC):
             return self.result == value
         return super().__eq__(value)
 
+    def __hash__(self):
+        return super().__hash__()
+
     def _check_eq(self, view: ViewABC) -> bool:
         return (self._base_view == view._base_view
             and self._selected_exprs == view._selected_exprs
@@ -743,7 +747,7 @@ class ViewABC(ABC):
         if_exists = if_exists or (not self._exists_on_db)
         return self.db.execute(
             b'DROP', b'VIEW',
-            b'IF NOT EXISTS' if if_exists else None, self)
+            b'IF NOT EXISTS' if if_exists else (), self)
 
     def create(self, *, if_not_exists=False, drop_if_exists=False) -> None:
         """ Create this View on the database """
@@ -751,7 +755,7 @@ class ViewABC(ABC):
         #     self.drop(if_exists=True)
         # self.db.execute(
         #     b'CREATE', b'VIEW',
-        #     b'IF NOT EXISTS' if if_not_exists else None,
+        #     b'IF NOT EXISTS' if if_not_exists else (),
         #     self, b'(', [c.q_create() for c in self.iter_named_exprs()], b')'
         # )
         # self._exists_on_db = True

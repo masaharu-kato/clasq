@@ -2,47 +2,40 @@
     Column classes
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from ..syntax.abc.object import NameLike, Object, ObjectABC, ObjectName
-from ..syntax.exprs import ExprABC
-from ..syntax.keywords import OrderType, ReferenceOption
 from ..syntax.abc.query import iter_objects
-from ..syntax.query_data import QueryData, QueryLike
+from ..syntax.query import QueryLike
+from ..syntax.abc.data_types import DataTypeABC
+from ..syntax.data_types import Nullable
+from ..syntax.sql_parse import data_type_from_sql
 from ..utils.keyset import FrozenOrderedKeySetABC
-from .abc.column import NamedViewColumnABC, TableColumnABC
-from .abc.sqltype import SQLTypeABC
-from .sqltypes import make_sql_type
-
+from ..errors import ObjectNotFoundError, ReferenceResolveError
+from .abc.column import NamedViewColumnABC, TableColumnABC, TableColumnReferenceABC, TypedNamedViewColumnABC, TypedTableColumnABC
 
 if TYPE_CHECKING:
-    from .view import BaseViewABC, NamedViewABC
-    from .table import Table
-    from .fkey_ref import ForeignKeyReference
-    from .database import Database
+    from .abc.view import NamedViewABC
+    from .abc.table import TableABC
 
 
-class NamedViewColumn(NamedViewColumnABC, Object):
+DT = TypeVar('DT', bound=DataTypeABC)
+class NamedViewColumn(TypedNamedViewColumnABC[DT], Object, Generic[DT]):
     """ View Column expression """
 
-    def __init__(self, named_view: NamedViewABC, name: NameLike, sql_type: Type) -> None:
+    def __init__(self, named_view: NamedViewABC, name: NameLike) -> None:
         super().__init__(name)
         self.__named_view = named_view
-        self.__sql_type = make_sql_type(sql_type)
 
     @property
-    def _named_view(self) -> NamedViewABC:
+    def view(self) -> NamedViewABC:
         """ Get a belonging NamedView object 
-            (Overridef from `NamedViewColumnABC`
+            (Overridef from `NamedViewColumnABC`)
         """
         return self.__named_view
 
     @property
-    def _sql_type(self) -> Type[SQLTypeABC]:
-        return self.__sql_type
-
-    @property
-    def select_column_query(self) -> QueryLike:
+    def _select_column_query(self) -> QueryLike:
         """ Get a query for SELECT column """
         return self
 
@@ -60,139 +53,91 @@ class FrozenOrderedNamedViewColumnSet(FrozenOrderedKeySetABC[ObjectName, NamedVi
         return self._key(obj) if isinstance(obj, NamedViewColumnABC) else None
 
 
-class TableColumnRef:
-    def __init__(self,
-        database: Database,
-        table_like: NameLike | Table,
-        column_name: NameLike
-    ) -> None:
-        self.database = database
-        self.table_like = table_like
-        self.column_name = column_name
-
-    def resolve(self) -> TableColumn:
-        return self.database._to_table(self.table_like).get_table_column(self.column_name)
-
-
-class ColumnArgs:
-    def __init__(self,
-        name: NameLike,
-        sql_type: Type,
-        *,
-        nullable: bool = True,
-        default = None, 
-        unique: bool = False,
-        primary: bool = False,
-        auto_increment: bool = False,
-        ref_column: TableColumnRef | TableColumn | None = None,
-        ref_on_delete: ReferenceOption | None = None,
-        ref_on_update: ReferenceOption | None = None,
-        ref_index_name: NameLike | None = None
-    ):
-        self.name = name
-        self.sql_type = sql_type
-        self.nullable = nullable
-        self.default = default
-        self.unique = unique
-        self.primary = primary
-        self.auto_increment = auto_increment
-        self.ref_column = ref_column
-        self.ref_on_delete = ref_on_delete
-        self.ref_on_update = ref_on_update
-        self.ref_index_name = ref_index_name
-
-
-class TableColumn(TableColumnABC, Object):
+class TableColumn(TypedTableColumnABC[DT], Object, Generic[DT]):
     """ Table Column expression """
 
-    def __init__(self, table: Table, args: ColumnArgs):
-        self._table = table
-        super().__init__(args.name)
-
-        self.__sql_type = make_sql_type(args.sql_type)
-        self.__nullable = args.nullable and not args.primary
+    def __init__(self, table: TableABC, name: NameLike, *, default: DataTypeABC | None):
         self.__table = table
-        self.__default_value = args.default
-        self.__is_unique = args.unique
-        self.__is_primary = args.primary
-        self.__is_auto_increment = args.auto_increment
-        self.__reference: ForeignKeyReference | None =  None
-
-        if args.ref_column is not None:
-            self._reference = ForeignKeyReference(
-                self,
-                args.ref_column.resolve() if isinstance(args.ref_column, TableColumnRef) else args.ref_column,
-                on_update=args.ref_on_update,
-                on_delete=args.ref_on_delete,
-                name=args.ref_index_name,
-            )
+        super().__init__(name)
+        self.__default_value = default
 
     @property
-    def _named_view(self) -> NamedViewABC:
-        """ Get a belonging BaseView object 
-            (Overridef from `NamedViewColumnABC`
+    def table(self):
+        """ Get a parent Table object
+            (Override for `TableColumnABC`)
         """
         return self.__table
-
-    @property
-    def _sql_type(self) -> Type[SQLTypeABC]:
-        return self.__sql_type
-
-    @property
-    def is_nullable(self) -> bool:
-        return self.__nullable
-
-    @property
-    def order_type(self) -> OrderType:
-        return OrderType.ASC
-
-    @property
-    def original_column(self) -> ExprABC:
-        return self
-
-    @property
-    def base_view(self) -> BaseViewABC:
-        return self.__table
-
-    @property
-    def table_or_none(self):
-        return self.__table
-
+        
     @property
     def default_value(self):
+        """ Get a parent Table object
+            (Override for `TableColumnABC`)
+        """
         return self.__default_value
 
-    # @property
-    # def comment(self):
-    #     return self._comment
-
-    @property
-    def is_unique(self):
-        return self.__is_unique
-
-    @property
-    def is_primary(self):
-        return self.__is_primary
-
-    @property
-    def is_auto_increment(self):
-        return self.__is_auto_increment
-
-    @property
-    def query_for_create_table(self) -> QueryData:
-        return QueryData(
-            self.name, b' ',
-            self._sql_type.sql_type_name,
-            (b'NOT', b'NULL') if not self.is_nullable else None,
-            (b'DEFAULT', self.default_value) if self.default_value else None,
-            b'UNIQUE' if self.is_unique else None,
-            (b'PRIMARY', b'KEY') if self.is_primary else None,
-            b'AUTO_INCREMENT' if self.is_auto_increment else None,
-            # self._reference,
-        )
-
     def __repr__(self):
-        return 'TC(%s->%s)' % (repr(self.base_view), self.name)
+        return 'TC(%s->%s)' % (repr(self.table), self.name)
+
+
+class UniqueTableColumn(TableColumn[DT], Generic[DT]):
+    def is_unique(self):
+        return True
+        
+class PrimaryTableColumn(UniqueTableColumn[DT], Generic[DT]):
+    def is_primary(self):
+        return True
+        
+class AutoIncrementPrimaryTableColumn(PrimaryTableColumn[DT], Generic[DT]):
+    def is_auto_increment(self):
+        return True
+
+
+class TableColumnReference(TableColumnReferenceABC):
+    """ Reference of Table Column """
+    def __init__(self, table: TableABC, column_name: NameLike) -> None:
+        super().__init__()
+        self.__table = table
+        self.__column_name = ObjectName(column_name)
+        self.__dest_column: TableColumnABC | None = None
+
+    @property
+    def table_or_none(self) -> TableABC | None:
+        return self.__table
+
+    @property
+    def _name(self) -> ObjectName:
+        return self.__column_name
+
+    def _dest_table_column(self) -> TableColumnABC:
+        """ Get a destination Table Column 
+            (Override for `TableColumnReferenceABC`)
+        """
+        if self.__dest_column is None:
+            try:
+                self.__dest_column = self.__table.get_table_column(self.__column_name)
+            except ObjectNotFoundError as e:
+                raise ReferenceResolveError(
+                    'Failed to resolve reference.', self.__table, self.__column_name) from e
+        return self.__dest_column
+
+
+def make_table_column_type(
+    data_type_sql: str, *,
+    nullable: bool,
+    is_unique: bool,
+    is_primary: bool,
+    is_auto_increment: bool,
+) -> type[TableColumnABC]:
+    data_type = data_type_from_sql(data_type_sql)
+    if nullable:
+        data_type = Nullable[data_type]  # type: ignore
+    if is_unique or is_primary:
+        if is_primary:
+            if is_auto_increment:
+                return AutoIncrementPrimaryTableColumn[data_type]  # type: ignore
+            return PrimaryTableColumn[data_type]  # type: ignore
+        return UniqueTableColumn[data_type]  # type: ignore
+    return TableColumn[data_type]  # type: ignore
 
 
 def iter_columns(*exprs: ObjectABC | None):

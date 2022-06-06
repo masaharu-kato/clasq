@@ -4,17 +4,19 @@
 from __future__ import annotations
 from typing import Iterable, Iterator
 
+
 from ..schema.abc.column import NamedViewColumnABC
+from ..syntax.abc.exprs import ExprABC, ExprLike, ExprObjectABC, OrderedExprObjectABC
+from ..syntax.abc.keywords import JoinType, JoinLike, OrderType
+from ..syntax.abc.values import SQLValue
 from ..syntax.abc.object import NameLike, ObjectName
-from ..syntax.query_data import QueryData
-from ..syntax.exprs import AliasedExpr, ExprABC, ExprLike, ExprObjectABC, ExprObjectSet, FrozenExprObjectSet, FrozenOrderedExprObjectSet, NoneExpr, OrderedExprObject, OrderedExprObjectSet
-from ..syntax.keywords import JoinType, JoinLike, OrderType
-from ..syntax.values import ValueType
-from ..syntax.errors import ObjectArgTypeError, ObjectArgValueError, ObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError, ObjectNotSetError
+from ..syntax.abc.query import QueryDataABC
+from ..syntax.query import QueryData
+from ..syntax.exprs import AliasedExpr, ExprObjectSet, FrozenExprObjectSet, FrozenOrderedExprObjectSet, NoneExpr, OrderedExprObjectSet
 from ..utils.tabledata import TableData
+from ..errors import ObjectArgTypeError, ObjectArgValueError, ObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError, ObjectNotSetError
 from .abc.view import CustomViewABC, NamedViewABC, ViewABC, BaseViewABC, ViewWithColumnsABC, ColumnArgTypes, OrderedColumnArgTypes, ViewWithTargetABC
 from .column import FrozenOrderedNamedViewColumnSet, NamedViewColumn
-from .sqltypes import AnySQLType
  
 
 class ViewWithColumns(ViewWithColumnsABC):
@@ -56,13 +58,13 @@ class ViewFinal(ViewABC):
         self._base_view._refresh_select_from_query()
         return QueryData(
             b'SELECT',
-            [c.select_column_query for c in self._selected_exprs],
+            [c._select_column_query for c in self._selected_exprs],
             b'FROM', self._base_view._select_from_query,
-            (b'WHERE', self._where_expr) if self._where_expr is not NoneExpr else None,
-            (b'GROUP', b'BY', [*self._groups]) if self._groups else None,
-            (b'ORDER', b'BY', [c.ordered_query for c in self._orders]) if self._orders else None,
-            (b'LIMIT', self._limit_value) if self._limit_value else None,
-            (b'OFFSET', self._offset_value) if self._offset_value else None,
+            (b'WHERE', self._where_expr) if self._where_expr is not NoneExpr else (),
+            (b'GROUP', b'BY', [*self._groups]) if self._groups else (),
+            (b'ORDER', b'BY', [c._ordered_query for c in self._orders]) if self._orders else (),
+            (b'LIMIT', self._limit_value) if self._limit_value else (),
+            (b'OFFSET', self._offset_value) if self._offset_value else (),
         )
 
     def _refresh_select_query(self) -> None:
@@ -141,7 +143,7 @@ class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
         for expr in exprs2:
             if expr in _selected_exprs:
                 continue
-            if (expr_name := expr.get_name()) in _selected_exprs:
+            if (expr_name := expr._name) in _selected_exprs:
                 new_name = alias_format % expr_name
                 _selected_exprs.add(AliasedExpr(expr, new_name))
             else:
@@ -193,7 +195,7 @@ class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
             b'(', target_from_query, (
                 self._join_type, b'JOIN',
                 self._view_to_join._base_view._select_from_query,
-                (b'ON', on_expr) if on_expr is not NoneExpr else None
+                (b'ON', on_expr) if on_expr is not NoneExpr else ()
             ), b')'
         )
 
@@ -211,15 +213,15 @@ class SubqueryView(NamedView):
     def __init__(self, target_view: ViewABC) -> None:
         self.__target_view = target_view
         super().__init__(FrozenOrderedNamedViewColumnSet(
-            NamedViewColumn(self, col.get_name(), AnySQLType) # TODO: Fix type
+            NamedViewColumn[col._data_type](self, col._name)  # type: ignore
             for col in target_view._selected_exprs))
 
     @property
     def _target_view(self) -> ViewABC:
         return self.__target_view
 
-    def append_to_query_data(self, qd: QueryData) -> None:
-        qd += self._view_name
+    def _append_to_query_data(self, qd: QueryDataABC) -> None:
+        qd.append(self._view_name)
 
     def _refresh_select_from_query(self) -> None:
         return self._target_view._refresh_select_query()
@@ -236,7 +238,7 @@ class SubqueryView(NamedView):
 
 class ViewWithArgs(ViewWithTarget, ViewFinal):
     """ Table View with arguments """
-    def __init__(self, target_view: ViewABC, *argvals: ValueType, **kwargvals: ValueType):
+    def __init__(self, target_view: ViewABC, *argvals: SQLValue, **kwargvals: SQLValue):
         super().__init__(target_view)
         self.__argvals = tuple(argvals)
         self.__kwargvals = tuple(kwargvals.items())
@@ -272,7 +274,7 @@ class CustomView(CustomViewABC, ViewFinal):
         orders   : Iterable[OrderedColumnArgTypes] = (),
         limit    : ExprLike | None = None,
         offset   : ExprLike | None = None,
-        outer_orders   : Iterable[OrderedExprObject] | None = None,
+        outer_orders   : Iterable[OrderedExprObjectABC] | None = None,
         **options,
     ):
         super().__init__(base_view)
@@ -281,7 +283,7 @@ class CustomView(CustomViewABC, ViewFinal):
         assert isinstance(where, ExprABC)
         assert all(isinstance(c, (bytes, str, ObjectName, ExprObjectABC)) for c in groups)
         assert all(isinstance(c, (bytes, str, ObjectName, ExprObjectABC, tuple)) for c in orders)
-        assert outer_orders is None or all(isinstance(c, OrderedExprObject) for c in outer_orders)
+        assert outer_orders is None or all(isinstance(c, OrderedExprObjectABC) for c in outer_orders)
 
         self.__selected_exprs = self._process_select_column_args(*column_likes)
         if not self._selected_exprs:
@@ -336,19 +338,19 @@ class CustomView(CustomViewABC, ViewFinal):
 
             # Register the ViewColumn object to this view.
             #   If there is a same name one, raise exception.
-            if (expr_name := new_expr.get_name()) in _selected_exprs:
+            if (expr_name := new_expr._name) in _selected_exprs:
                 raise ObjectNameAlreadyExistsError('Name already exists.', expr_name)
             _selected_exprs.add(new_expr)
 
         return FrozenOrderedExprObjectSet(_selected_exprs)
 
 
-    def _process_order_args(self, *column_orders: OrderedColumnArgTypes) -> Iterator[OrderedExprObject]:
+    def _process_order_args(self, *column_orders: OrderedColumnArgTypes) -> Iterator[OrderedExprObjectABC]:
         
         for col_order in column_orders:
             if isinstance(col_order, tuple) and len(col_order) == 2:
                 expr, otype = col_order
-                yield self._base_view._to_column(expr).ordered(otype)
+                yield self._base_view._to_column(expr)._ordered(otype)
             
             elif isinstance(col_order, (bytes, str, ObjectName)):
                 _name = ObjectName(col_order)
@@ -357,14 +359,14 @@ class CustomView(CustomViewABC, ViewFinal):
                     OrderType.DESC if _name.raw_name[0:1] == b'-' else None)
                 if _otype is not None:
                     _name_entity = _name.raw_name[1:]
-                    yield self._base_view.get_column(_name_entity).ordered(_otype)
+                    yield self._base_view.get_column(_name_entity)._ordered(_otype)
                 else:
-                    yield self._base_view.get_column(_name).ordered(OrderType.ASC)
+                    yield self._base_view.get_column(_name)._ordered(OrderType.ASC)
             elif isinstance(col_order, ExprObjectABC):
-                if isinstance(col_order, OrderedExprObject):
+                if isinstance(col_order, OrderedExprObjectABC):
                     yield col_order
                 else:
-                    yield col_order.ordered(OrderType.ASC)
+                    yield col_order._ordered(OrderType.ASC)
             else:
                 raise ObjectArgTypeError('Invalid type.', col_order)
 
