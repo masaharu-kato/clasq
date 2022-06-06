@@ -3,31 +3,32 @@
 """
 from __future__ import annotations
 import datetime
-from .exprs import ExprABC as Ext, Func, NoArgsFunc, OP, BasicFunc
-from .sql_values import DateLike, TimeLike
+
+from .abc.values import DateLike, TimeLike
+from .exprs import ExprABC as Ext, Func, FuncWithNoArgs, OPs, BasicFuncs
 
 class FunctionsABC():
     """ Functions ABC """
 
 class Flow(FunctionsABC):
-    CASE = OP.CASE, 
+    CASE = OPs.CASE, 
     IF = Func(b'IF', [Ext, Ext, Ext])
     IFNULL = Func(b'IFNULL', [Ext, Ext])
     NULLIF = Func(b'NULLIF', [Ext, Ext])
 
 class Math(FunctionsABC):
-    ADD      = OP.ADD
-    SUB      = OP.SUB
-    MINUS    = OP.MINUS
-    MUL      = OP.MUL
-    DIV      = OP.DIV
-    MOD_OP   = OP.MOD
-    MOD_OP_  = OP.MOD_
-    ABS      = BasicFunc.ABS
+    ADD      = OPs.ADD
+    SUB      = OPs.SUB
+    MINUS    = OPs.MINUS
+    MUL      = OPs.MUL
+    DIV      = OPs.DIV
+    MOD_OP   = OPs.MOD
+    MOD_OP_  = OPs.MOD_
+    ABS      = BasicFuncs.ABS
     ACOS     = Func(b'ACOS'   , [float], float)
     ATAN     = Func(b'ATAN'   , [float, (float, float)], float)
     ATAN2    = Func(b'ATAN2'  , [float, float], float)
-    CEIL     = BasicFunc.CEIL
+    CEIL     = BasicFuncs.CEIL
     CEILING  = Func(b'CEILING', [float], float)
     CONV     = Func(b'CONV'   , [(Ext, int, int)], float)
     COS      = Func(b'COS'    , [float], float)
@@ -35,7 +36,7 @@ class Math(FunctionsABC):
     CRC32    = Func(b'CRC32'  , [float], float)
     DEGREES  = Func(b'DEGREES', [float], float)
     EXP      = Func(b'EXP'    , [float], float)
-    FLOOR    = BasicFunc.FLOOR
+    FLOOR    = BasicFuncs.FLOOR
     LN       = Func(b'LN'     , [float], float)
     LOG      = Func(b'LOG'    , [float, (float, float)], float)
     LOG10    = Func(b'LOG10'  , [float], float)
@@ -46,12 +47,12 @@ class Math(FunctionsABC):
     POWER    = Func(b'POWER'  , [float, float], float)
     RADIANS  = Func(b'RADIANS', [float], float)
     RAND     = Func(b'RAND'   , [(), int], float)
-    ROUND    = BasicFunc.ROUND,
+    ROUND    = BasicFuncs.ROUND,
     SIGN     = Func(b'SIGN'   , [float], int)
     SIN      = Func(b'SIN'    , [float], float)
     SQRT     = Func(b'SQRT'   , [float], float)
     TAN      = Func(b'TAN'    , [float], float)
-    TRUNCATE = BasicFunc.TRUNCATE
+    TRUNCATE = BasicFuncs.TRUNCATE
 
 class DateTime(FunctionsABC):
     ADDDATE         = Func(b'ADDDATE')
@@ -59,10 +60,10 @@ class DateTime(FunctionsABC):
     CONVERT_TZ      = Func(b'CONVERT_TZ')
     CURDATE         = Func(b'CURDATE', [], datetime.date)
     CURRENT_DATE    = Func(b'CURRENT_DATE', [], datetime.date)
-    CURRENT_DATE_   = NoArgsFunc(b'CURRENT_DATE', datetime.date)
+    CURRENT_DATE_   = FuncWithNoArgs(b'CURRENT_DATE', datetime.date)
     CURTIME         = Func(b'CURTIME', [], datetime.time)
     CURRENT_TIME    = Func(b'CURRENT_TIME', [], datetime.time)
-    CURRENT_TIME_   = NoArgsFunc(b'CURRENT_TIME', datetime.time)
+    CURRENT_TIME_   = FuncWithNoArgs(b'CURRENT_TIME', datetime.time)
     CURRENT_TIMESTAMP = Func(b'CURRENT_TIMESTAMP', [], datetime.time)
     DATE            = Func(b'DATE', [Ext], datetime.date)
     DATEDIFF        = Func(b'DATEDIFF', [(Ext, Ext)], int)
@@ -148,7 +149,7 @@ class String(FunctionsABC):
     LEAST = Func(b'LEAST')
     LEFT = Func(b'LEFT')
     LENGTH = Func(b'LENGTH')
-    LIKE = OP.LIKE
+    LIKE = OPs.LIKE
     LOAD_FILE = Func(b'LOAD_FILE')
     LOCATE = Func(b'LOCATE')
     LOWER = Func(b'LOWER')
@@ -166,8 +167,8 @@ class String(FunctionsABC):
     POSITION = Func(b'POSITION')
     QUOTE = Func(b'QUOTE')
     RANK = Func(b'RANK')
-    REGEXP = OP.REGEXP
-    RLIKE = OP.RLIKE
+    REGEXP = OPs.REGEXP
+    RLIKE = OPs.RLIKE
     REGEXP_INSTR = Func(b'REGEXP_INSTR')
     REGEXP_LIKE = Func(b'REGEXP_LIKE')
     REGEXP_REPLACE = Func(b'REGEXP_REPLACE')
@@ -205,12 +206,12 @@ class XML(FunctionsABC):
     UpdateXML = Func(b'UpdateXML', [(str, str, str)], Ext)
 
 class Bit(FunctionsABC):
-    AND_OP  = OP.BIT_AND_OP
-    OR_OP   = OP.BIT_OR_OP
-    XOR_OP  = OP.BIT_XOR_OP
-    INV     = OP.BIT_INV
-    RSHIFT  = OP.BIT_RSHIFT
-    LSHIFT  = OP.BIT_LSHIFT
+    AND_OP  = OPs.BIT_AND_OP
+    OR_OP   = OPs.BIT_OR_OP
+    XOR_OP  = OPs.BIT_XOR_OP
+    INV     = OPs.BIT_INV
+    RSHIFT  = OPs.BIT_RSHIFT
+    LSHIFT  = OPs.BIT_LSHIFT
     AND     = Func(b'BIT_AND')
     COUNT   = Func(b'BIT_COUNT')
     LENGTH  = Func(b'BIT_LENGTH')
@@ -246,20 +247,20 @@ class Info(FunctionsABC):
     CONNECTION_ID = Func(b'CONNECTION_ID')
     CURRENT_ROLE = Func(b'CURRENT_ROLE')
     CURRENT_USER = Func(b'CURRENT_USER')
-    CURRENT_USER_ = NoArgsFunc(b'CURRENT_USER')
+    CURRENT_USER_ = FuncWithNoArgs(b'CURRENT_USER')
 
 class Agg(FunctionsABC):
-    AVG = BasicFunc.AVG
-    COUNT = BasicFunc.COUNT
+    AVG = BasicFuncs.AVG
+    COUNT = BasicFuncs.COUNT
     GROUP_CONCAT = Func(b'GROUP_CONCAT')
-    MAX = BasicFunc.MAX
-    MIN = BasicFunc.MIN
+    MAX = BasicFuncs.MAX
+    MIN = BasicFuncs.MIN
     STD = Func(b'STD')
-    STDDEV = BasicFunc.STDDEV
+    STDDEV = BasicFuncs.STDDEV
     STDDEV_POP = Func(b'STDDEV_POP')
     STDDEV_SAMP = Func(b'STDDEV_SAMP')
-    SUM = BasicFunc.SUM
-    VARIANCE = BasicFunc.VARIANCE
+    SUM = BasicFuncs.SUM
+    VARIANCE = BasicFuncs.VARIANCE
     VAR_POP = Func(b'VAR_POP')
     VAR_SAMP = Func(b'VAR_SAMP')
 

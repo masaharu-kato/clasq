@@ -3,12 +3,9 @@
 """
 from __future__ import annotations
 from abc import abstractmethod
-from typing import Hashable, Iterator, TYPE_CHECKING
+from typing import Hashable, Iterator
 
-from .query import QueryABC
-
-if TYPE_CHECKING:
-    from ..query_data import QueryData
+from .query import QueryABC, QueryDataABC
 
 
 class ObjectName(QueryABC):
@@ -27,7 +24,7 @@ class ObjectName(QueryABC):
     def raw_name(self) -> bytes:
         return self._raw_name
 
-    def append_to_query_data(self, qd: QueryData) -> None:
+    def _append_to_query_data(self, qd: QueryDataABC) -> None:
         qd.append_object_name(self.raw_name)
 
     def __bytes__(self) -> bytes:
@@ -84,13 +81,14 @@ NameLike = bytes | str | ObjectName
 class ObjectABC(QueryABC, Hashable):
     """ Object abstract class """
 
+    @property
     @abstractmethod
-    def get_name(self) -> ObjectName:
+    def _name(self) -> ObjectName:
         """ Get a object name """
         raise NotImplementedError()
         
     def get_raw_name(self):
-        return self.get_name().raw_name
+        return self._name.raw_name
 
     def __bytes__(self):
         return bytes(self.name)
@@ -98,15 +96,15 @@ class ObjectABC(QueryABC, Hashable):
     def __str__(self):
         return str(self.name)
 
-    def iter_objects(self) -> Iterator['ObjectABC']:
+    def _iter_objects(self) -> Iterator[ObjectABC]:
         yield self # Default implementation
 
     def __eq__(self, val) -> bool:
         try:
             if isinstance(val, ObjectABC):
-                return type(self) == type(val) and self.get_name() == val.get_name() # Default Implementation
+                return type(self) == type(val) and self._name == val._name # Default Implementation
             # raise TypeError('Invalid type value', self, val)
-        except TypeError:
+        except (TypeError, NotImplementedError):
             pass
         return super().__eq__(val)
 
@@ -114,7 +112,14 @@ class ObjectABC(QueryABC, Hashable):
         return not self.__eq__(val)
 
     def __hash__(self):
-        return hash(self.__class__, self.get_raw_name())
+        try:
+            _name = self._name
+        # `self._name` may reads uninitialized properties or attributes
+        except (NotImplementedError, AttributeError):
+            _name = None
+        if _name is not None:
+            return hash((self.__class__, _name.raw_name))
+        return super().__hash__()
 
 
 class ObjectWithNamePropABC(ObjectABC):
@@ -123,10 +128,10 @@ class ObjectWithNamePropABC(ObjectABC):
     @property
     def name(self) -> ObjectName:
         """ Get a object name """
-        return self.get_name()
+        return self._name
 
     @property
-    def raw_name(self) -> ObjectName:
+    def raw_name(self):
         """ Get a object name """
         return self.get_raw_name()
 
@@ -134,11 +139,19 @@ class ObjectWithNamePropABC(ObjectABC):
 class Object(ObjectWithNamePropABC):
     """ Column expression """
     def __init__(self, name: NameLike):
-        self._name = ObjectName(name)
+        self.__name = ObjectName(name)
 
-    def get_name(self) -> ObjectName:
+    @property
+    def _name(self) -> ObjectName:
         """ Get a object name (Override from `ObjectABC`) """
-        return self._name
+        return self.__name
 
-    def append_to_query_data(self, qd: QueryData) -> None:
+    def _append_to_query_data(self, qd: QueryDataABC) -> None:
         qd.append(self.name) # Default Implementation
+        
+    def __repr__(self) -> str:
+        try:
+            _name = self._name
+        except (AttributeError, NotImplementedError):
+            _name = '<unnamed>'
+        return '%s(%s)' % (type(self).__name__, _name)

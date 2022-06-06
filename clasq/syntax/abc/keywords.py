@@ -2,20 +2,19 @@
     Keywords
 """
 from __future__ import annotations
+from abc import ABCMeta
+from enum import Enum, EnumMeta
 
-from enum import Enum
-from typing import TYPE_CHECKING
-
-from .abc.query import QueryABC
-
-if TYPE_CHECKING:
-    from .query_data import QueryData
+from .query import QueryABC, QueryDataABC
 
 
-class KeywordABC(QueryABC, Enum):
+class ABCEnumMeta(EnumMeta, ABCMeta):
+    """ EnumMeta + ABCMeta """
+
+class KeywordABC(QueryABC, Enum, metaclass=ABCEnumMeta):
     """ Keyword abstract class """
 
-    def append_to_query_data(self, qd: QueryData) -> None:
+    def _append_to_query_data(self, qd: QueryDataABC) -> None:
         qd.append_one(self.value)
 
     @classmethod
