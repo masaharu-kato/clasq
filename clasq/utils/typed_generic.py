@@ -2,6 +2,7 @@
     Generic class utils
 """
 from __future__ import annotations
+from abc import ABCMeta
 # import enum
 import types
 import typing
@@ -16,7 +17,6 @@ class TypedGenericMeta(type):
     
     def __new__(cls, name: str, bases: tuple, attrs: dict):
         """ New class """
-
         origin: type[TypedGenericMeta] | None = attrs.get('__generic_origin')
         if origin is None:
             # Read the typing generic parameter names (TypeVar objects)
@@ -29,15 +29,16 @@ class TypedGenericMeta(type):
             arg_index_from_key = {key: i for i, key in enumerate(argkeys)}
             if not len(argkeys) == len(arg_index_from_key):
                 raise RuntimeError('Duplicate generic parameter names.')
-            cls._generic_argkeys = argkeys
-            cls._generic_arg_index_from_key = arg_index_from_key
+            attrs['_generic_argkeys'] = argkeys
+            attrs['_generic_arg_index_from_key'] = arg_index_from_key
 
             # Init a new class cache
-            cls.__generic_cls_cache: dict[tuple, type[TypedGenericMeta]] = {}
+            generic_cls_cache: dict[tuple, type[TypedGenericMeta]] = {}
+            attrs['_generic_cls_cache'] = generic_cls_cache
 
         else:
-            cls._generic_argkeys = origin._generic_argkeys
-            cls._generic_arg_index_from_key = origin._generic_arg_index_from_key
+            attrs['_generic_argkeys'] = origin._generic_argkeys
+            attrs['_generic_arg_index_from_key'] = origin._generic_arg_index_from_key
 
         return type.__new__(cls, name, bases, attrs)
 
@@ -61,8 +62,15 @@ class TypedGenericMeta(type):
 
     def _generic_arg(cls, _val: typing.TypeVar) -> typing.Any:
         if isinstance(_val, typing.TypeVar):
-            return cls._generic_argvals[cls._generic_arg_index_from_key[_val.__name__]]
+            return cls._generic_arg_of_index(cls._generic_arg_index_from_key[_val.__name__])
         raise TypeError('Invalid type of value.')
+
+    def _generic_arg_of_index(cls, i: int) -> typing.Any:
+        val = cls._generic_argvals[i]
+        if typing.get_origin(val) is typing.Literal:
+            _vals = typing.get_args(val)
+            return _vals[0] if len(_vals) == 1 else _vals
+        return val
 
     def __rmatmul__(cls, _val):
         if isinstance(_val, typing.TypeVar):
@@ -71,43 +79,78 @@ class TypedGenericMeta(type):
 
     def __getitem__(cls, _val):
         argvals = _val if isinstance(_val, tuple) else (_val, )
+        contains_typevars = any(isinstance(v, typing.TypeVar) for v in argvals)
         _typing_generic = cls.__class_getitem__(argvals)
+        if contains_typevars:
+            return _typing_generic
+
         if not len(cls._generic_argkeys) == len(argvals):
-            raise RuntimeError('Invalid number of generic arguments.')
+            raise RuntimeError('Invalid number of generic arguments.', cls._generic_argkeys, argvals)
 
-        argdict = dict(zip(cls._generic_argkeys, argvals))
-        print(cls, '__getitem__ called.', argdict, _typing_generic)
+        # argdict = dict(zip(cls._generic_argkeys, argvals))
+        # print(cls, '__getitem__ called.', argdict, _typing_generic)
+        cls_name = '%s[%s]' % (cls.__name__, ', '.join(map(str, argvals)))
 
-        if not argvals in cls.__generic_cls_cache:
-            cls.__generic_cls_cache[argvals] = types.new_class(
-                repr(_typing_generic),
+        if not argvals in cls._generic_cls_cache:
+            cls._generic_cls_cache[argvals] = types.new_class(
+                cls_name, #  repr(_typing_generic),
                 (cls, ),
                 {},
                 lambda ns: cls.__bind_generics(ns, _typing_generic, argvals)
             )
-        return cls.__generic_cls_cache[argvals]
+        return cls._generic_cls_cache[argvals]
 
     def __bind_generics(cls, ns: dict, _typing_generic: type, argvals: tuple):
         ns['__typing_generic'] = _typing_generic
         ns['__generic_origin'] = cls # typing.get_origin(_typing_generic)
         ns['__generic_argvals'] = argvals # typing.get_args(_typing_generic)
 
+    def __repr__(self):
+        return '<class %s>' % self.__name__
+
+
+class TypedGenericABCMeta(TypedGenericMeta, ABCMeta):
+    """ """
+
+
+class OptionalTypedGenericMeta(TypedGenericMeta):
+        
+    @property
+    def _generic_argvals(cls) -> tuple:
+        try:
+            return super()._generic_argvals
+        except GenericArgumentsNotSpecifiedError:
+            pass
+        return ()
+
+    def _generic_arg_of_index(cls, i: int) -> typing.Any:
+        try:
+            return super()._generic_arg_of_index(i)
+        except IndexError:
+            pass
+        return None
+
+
+class OptionalTypedGenericABCMeta(OptionalTypedGenericMeta, TypedGenericABCMeta):
+    """ """
 
 T = typing.TypeVar('T')
-class TypedGeneric(typing.Generic[T], metaclass=TypedGenericMeta):
-    """ Typed Generic """
-    
+
+class TypedGenericABC(typing.Generic[T], metaclass=TypedGenericABCMeta):
+    """ Typed Generic ABC """    
     def __rmatmul__(self, _val):
         if isinstance(_val, typing.TypeVar):
             return type(self)._generic_arg(_val)
         return NotImplemented
-            
 
-    # def __class_getitem__(cls, *args, **kwargs):
-    #     print(cls, '__class_getitem__ called.')
-    #     return super().__class_getitem__(*args, **kwargs)
-
-
+class TypedGeneric(TypedGenericABC[T], typing.Generic[T], metaclass=TypedGenericMeta):
+    """ Typed Generic """
+    
+class OptionalTypedGenericABC(TypedGenericABC[T], typing.Generic[T], metaclass=OptionalTypedGenericABCMeta):
+    """ Optional Typed Generic ABC """
+    
+class OptionalTypedGeneric(OptionalTypedGenericABC[T], typing.Generic[T], metaclass=OptionalTypedGenericMeta):
+    """ Optional Typed Generic ABC """
 
 # # GenericParamType = typing.Literal | type
 # # GenericLiteralType = None | bool | int | str | bytes | enum.Enum
