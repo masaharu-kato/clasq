@@ -3,226 +3,204 @@
 """
 from __future__ import annotations
 import typing
-import datetime
-import decimal
-from .abc import sqltype as sqtabc
-from ..utils.generic_cls import bind_generic_args
+from .abc import data_types as dabc
 
 L = typing.TypeVar('L', bound=int)
 
-class TinyInt(sqtabc.IntegerABC):
+class TinyInt(dabc.IntegerABC):
     """ TINY INT type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'TINYINT'
     @classmethod
-    def get_min_value(cls) -> int:
+    def get_v_limit_min(cls) -> int:
         return -2**7
     @classmethod
-    def get_max_value(cls) -> int:
+    def get_v_limit_max(cls) -> int:
         return 2**7-1
     
-class SmallInt(sqtabc.IntegerABC):
+class SmallInt(dabc.IntegerABC):
     """ SMALLINT type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'SMALLINT'
     @classmethod
-    def get_min_value(cls) -> int:
+    def get_v_limit_min(cls) -> int:
         return -2**15
     @classmethod
-    def get_max_value(cls) -> int:
+    def get_v_limit_max(cls) -> int:
         return 2**15-1
     
-class MediumInt(sqtabc.IntegerABC):
+class MediumInt(dabc.IntegerABC):
     """ MEDIUMINT type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'MEDIUMINT'
     @classmethod
-    def get_min_value(cls) -> int:
+    def get_v_limit_min(cls) -> int:
         return -2**23
     @classmethod
-    def get_max_value(cls) -> int:
+    def get_v_limit_max(cls) -> int:
         return 2**23-1
     
-class Int(sqtabc.IntegerABC):
+class Int(dabc.IntegerABC):
     """ INT type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'INT'
     @classmethod
-    def get_min_value(cls) -> int:
+    def get_v_limit_min(cls) -> int:
         return -2**31
     @classmethod
-    def get_max_value(cls) -> int:
+    def get_v_limit_max(cls) -> int:
         return 2**31-1
 
-class BigInt(sqtabc.IntegerABC):
+class BigInt(dabc.IntegerABC):
     """ BIGINT type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'BIGINT'
     @classmethod
-    def get_min_value(cls) -> int:
+    def get_v_limit_min(cls) -> int:
         return -2**63
     @classmethod
-    def get_max_value(cls) -> int:
+    def get_v_limit_max(cls) -> int:
         return 2**63-1
 
-class UnsignedTinyInt(sqtabc.UnsignedIntegerABC):
+class UnsignedTinyInt(dabc.UnsignedIntegerABC):
     """ Unsigned TINYINT type """
     @classmethod
-    def get_signed_type(cls) -> typing.Type[sqtabc.IntegerABC]:
+    def get_signed_type(cls) -> typing.Type[dabc.IntegerABC]:
         return TinyInt
     
-class UnsignedSmallInt(sqtabc.UnsignedIntegerABC):
+class UnsignedSmallInt(dabc.UnsignedIntegerABC):
     """ Unsigned SMALLINT type """
     @classmethod
-    def get_signed_type(cls) -> typing.Type[sqtabc.IntegerABC]:
+    def get_signed_type(cls) -> typing.Type[dabc.IntegerABC]:
         return SmallInt
     
-class UnsignedMediumInt(sqtabc.UnsignedIntegerABC):
+class UnsignedMediumInt(dabc.UnsignedIntegerABC):
     """ Unsigned MEDIUMINT type """
     @classmethod
-    def get_signed_type(cls) -> typing.Type[sqtabc.IntegerABC]:
+    def get_signed_type(cls) -> typing.Type[dabc.IntegerABC]:
         return MediumInt
 
-class UnsignedInt(sqtabc.UnsignedIntegerABC):
+class UnsignedInt(dabc.UnsignedIntegerABC):
     """ Unsigned INT type """
     @classmethod
-    def get_signed_type(cls) -> typing.Type[sqtabc.IntegerABC]:
+    def get_signed_type(cls) -> typing.Type[dabc.IntegerABC]:
         return Int
 
-class UnsignedBigInt(sqtabc.UnsignedIntegerABC):
+class UnsignedBigInt(dabc.UnsignedIntegerABC):
     """ Unsigned BIGINT type """
     @classmethod
-    def get_signed_type(cls) -> typing.Type[sqtabc.IntegerABC]:
+    def get_signed_type(cls) -> typing.Type[dabc.IntegerABC]:
         return BigInt
 
-class Float(sqtabc.FloatABC):
+class Float(dabc.FloatABC):
     """ Float type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'FLOAT'
 
-class Double(sqtabc.FloatABC):
+class Double(dabc.FloatABC):
     """ Double type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'DOUBLE'
 
 PREC = typing.TypeVar('PREC', bound=int)
 SCALE = typing.TypeVar('SCALE', bound=int)
-class Decimal(sqtabc.DecimalABC[PREC, SCALE], typing.Generic[PREC, SCALE]):
+class Decimal(dabc.DecimalABC[PREC, SCALE], typing.Generic[PREC, SCALE]):
     """ Fixed Decimal types """
     @classmethod
-    def get_python_type(cls):
-        return decimal.Decimal
-
-    @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'DECIMAL'
 
 
-class Bit(sqtabc.BitABC[L], typing.Generic[L]):
+class Bit(dabc.BitABC[L], typing.Generic[L]):
     """ Bit type """
     @classmethod
-    def get_python_type(cls):
-        return int
-
-    @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'BIT'
 
-class DateTime(sqtabc.DateTimeABC):
+class DateTime(dabc.DateTimeABC):
     """ DateTime type """
     @classmethod
-    def get_python_type(cls) -> typing.Type:
-        return datetime.datetime
-
-    @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'DATETIME'
 
-class Date(sqtabc.DateTimeABC):
+class Date(dabc.DateABC):
     """ Date type """
     @classmethod
-    def get_python_type(cls) -> typing.Type:
-        return datetime.date
-
-    @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'DATE'
 
-class Time(sqtabc.DateTimeABC):
+class Time(dabc.TimeABC):
     """ Time type """
     @classmethod
-    def get_python_type(cls) -> typing.Type:
-        return datetime.time
-
-    @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'TIME'
 
-class Char(sqtabc.CharABC[L], typing.Generic[L]):
+class Char(dabc.StringWithLengthABC[L], typing.Generic[L]):
     """ CHAR string type """
     @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'CHAR'
 
-class VarChar(sqtabc.CharABC[L], typing.Generic[L]):
+class VarChar(dabc.StringWithLengthABC[L], typing.Generic[L]):
     """ VARCHAR string type """
     @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'VARCHAR'
 
-class Binary(sqtabc.BinaryABC[L], typing.Generic[L]):
+class Binary(dabc.BinaryWithLengthABC[L], typing.Generic[L]):
     """ CHAR string type """
     @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'BINARY'
 
-class VarBinary(sqtabc.BinaryABC[L], typing.Generic[L]):
+class VarBinary(dabc.BinaryWithLengthABC[L], typing.Generic[L]):
     """ VARCHAR string type """
     @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'VARBINARY'
 
-class Blob(sqtabc.BlobABC, sqtabc.StringWithOptionalLengthABC[L], typing.Generic[L]):
+class Blob(dabc.BinaryWithOptionalLengthABC[L], typing.Generic[L]):
     """ BLOB type """
     @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'BLOB'
 
     @classmethod
-    def get_default_length(cls) -> int:
+    @property
+    def default_length(cls) -> int:
         return 2**16-1
 
-class TinyBlob(sqtabc.BlobABC):
+class TinyBlob(dabc.BinaryABC):
     """ Tiny blob type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'TINYBLOB'
 
     @classmethod
     def get_max_length(cls) -> int:
         return 2**8-1
 
-class MediumBlob(sqtabc.BlobABC):
+class MediumBlob(dabc.BinaryABC):
     """ Medium blob type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'MEDIUMBLOB'
 
     @classmethod
     def get_max_length(cls) -> int:
         return 2**24-1
 
-class LongBlob(sqtabc.BlobABC):
+class LongBlob(dabc.BinaryABC):
     """ Long blob type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'LONGBLOB'
 
     @classmethod
@@ -230,52 +208,50 @@ class LongBlob(sqtabc.BlobABC):
         return 2**32-1
 
 
-class Text(sqtabc.TextABC, sqtabc.StringWithOptionalLengthABC[L], typing.Generic[L]):
+class Text(dabc.StringWithOptionalLengthABC[L], typing.Generic[L]):
     """ TEXT type """
     @classmethod
-    def get_base_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'TEXT'
 
     @classmethod
-    def get_default_length(cls) -> int:
+    @property
+    def default_length(cls) -> int:
         return 2**16-1
 
-class TinyText(sqtabc.TextABC):
+class TinyText(dabc.StringABC):
     """ Tiny text type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'TINYTEXT'
 
     @classmethod
     def get_max_length(cls) -> int:
         return 2**8-1
 
-class MediumText(sqtabc.TextABC):
+class MediumText(dabc.StringABC):
     """ Medium text type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'MEDIUMTEXT'
 
     @classmethod
     def get_max_length(cls) -> int:
         return 2**24-1
 
-class LongText(sqtabc.TextABC):
+class LongText(dabc.StringABC):
     """ Long Text type """
     @classmethod
-    def get_sql_type_name(cls) -> bytes:
+    def get_sql_base_name(cls) -> bytes:
         return b'LONGTEXT'
 
     @classmethod
     def get_max_length(cls) -> int:
         return 2**32-1
 
-
-class AnySQLType(sqtabc.SQLTypeABC):
-    """ Any SQL Type """
-    @classmethod
-    def get_sql_type_name(cls) -> bytes:
-        raise RuntimeError('Cannot get a type name of `AnySQLType`.')
+SQT = typing.TypeVar('SQT', bound=dabc.DataTypeABC)
+class Nullable(dabc.NullableABC[SQT], typing.Generic[SQT]):
+    """ Nullable type """
 
 
 # class Enum(sqtabc.StringABC, SQLTypeWithValues):
@@ -346,33 +322,6 @@ class Numeric(Decimal):
 class Real(Double):
     """ Real type (alias of Double) """
 
-
-T = typing.TypeVar('T')
-class Nullable(typing.Generic[T]):
-    """ SQL optional type """
-    @property
-    def is_nullable(self) -> bool:
-        return True
-
-class NotNull(typing.Generic[T]):
-    """ SQL NOT NULL type """
-    @property
-    def is_nullable(self) -> bool:
-        return False
-
-class Unique(typing.Generic[T]):
-    """ SQL Unique type """
-    @property
-    def is_unique(self) -> bool:
-        return True
-
-class PrimaryKey(typing.Generic[T]):
-    """ SQL Primary Key type """
-    @property
-    def is_primary(self) -> bool:
-        return True
-
-
 # class ForeignTableKey(sqtabc.Final, SQLTypeWithType[T], typing.Generic[T]):
 #     """ Foreign table key (Primary key) """
 
@@ -404,48 +353,17 @@ class PrimaryKey(typing.Generic[T]):
 
 # SQLType = typing.Union[TypedTableColumnABC, typing.Type]
 
-def make_sql_type(typelike: typing.Type) -> typing.Type[sqtabc.SQLTypeABC]:
+ALL_TYPES: list[type[dabc.DataTypeABC]] = [
+    TinyInt, SmallInt, MediumInt, Int, BigInt,
+    UnsignedTinyInt, UnsignedSmallInt, UnsignedMediumInt, UnsignedInt, UnsignedBigInt,
+    Float, Double, Decimal, Bit,
+    DateTime, Date, Time,
+    Char, VarChar, Binary, VarBinary,
+    Text, TinyText, MediumText, LongText,
+    Blob, TinyBlob, MediumBlob, LongBlob,
+    Bool, Boolean, CharacterVarying, Fixed,
+    Float4, Float8, INT1, INT2, INT3, INT4, INT8,
+    LongVarBinary, LongVarchar, Long, MiddleInt, Numeric, Real,
+]
 
-    _origin = typing.get_origin(typelike) or typelike
-
-    if isinstance(_origin, type) and issubclass(_origin, sqtabc.SQLTypeABC):
-        _ret = bind_generic_args(typelike)
-        assert issubclass(_ret, sqtabc.SQLTypeABC)
-        return _ret
-
-    # if isinstance(typelike, str):
-    #     if not typelike:
-    #         return Text
-    #     try:0
-    #         return VarChar.with_length(int(typelike))
-    #     except ValueError:
-    #         pass
-    
-    # elif isinstance(typelike, bytes):
-    #     if not typelike:
-    #         return Blob
-    #     try:
-    #         return VarBinary.with_length(int(typelike))
-    #     except ValueError:
-    #         pass
-    
-    # else:
-
-    if typelike is datetime.datetime:
-        return DateTime
-    if typelike is datetime.date:
-        return Date
-    if typelike is datetime.time:
-        return Time
-    if typelike is str:
-        return Text
-    if typelike is bytes:
-        return Blob
-    if typelike is float:
-        return Double
-    if typelike is int:
-        return Int
-    if typelike is bool:
-        return Bool
-
-    raise RuntimeError('Invalid type for SQL type.', typelike)
+__all__ = [cls.__name__ for cls in ALL_TYPES]
