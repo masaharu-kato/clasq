@@ -7,7 +7,7 @@ from typing import get_type_hints
 from ..schema.abc.table import TableABC, TableReferenceABC, TableArgs
 from ..schema.abc.column import TableColumnABC, TableColumnArgs
 from ..schema.table import Table
-from ..schema.column import TableColumn, AutoIncrementPrimaryTableColumn
+from ..schema.column import TableColumn
 from ..syntax.abc.object import NameLike, ObjectName
 from ..syntax.data_types import Int
 from ..syntax.sql_parse import make_sql_type
@@ -24,14 +24,11 @@ class _TableClassMeta(type, TableReferenceABC):
 class TableClassABC(RecordABC):
     """ Table Class ABC """
 
-
 class TableClass(TableClassABC, metaclass=_TableClassMeta):
     """ Table class """
 
     __table_name: ObjectName
     __table_obj: TableABC
-
-    id: AutoIncrementPrimaryTableColumn[Int]    
 
     @classmethod
     def _get_entity(cls) -> TableABC:
@@ -110,3 +107,17 @@ class TableClass(TableClassABC, metaclass=_TableClassMeta):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
+
+# class AbstractTableClass(TableClass, db=None):
+#     """ Abstract table class, not a final table class """
+    
+#     def __init_subclass__(cls, *, db: type[DatabaseClass], name: NameLike | None = None) -> None:
+#         if cls is not AbstractTableClass and AbstractTableClass not in cls.__bases__:
+#             return super().__init_subclass__(db=db, name=name)
+
+
+# class TableClassWithID(AbstractTableClass, db=None):
+#     """ Table class with `id` column"""
+
+#     id: AutoIncrementPrimaryTableColumn[Int]    
+
