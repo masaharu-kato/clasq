@@ -6,6 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Collection, Iterator
 
+
 from ...syntax.abc.query import QueryDataABC
 from ...syntax.abc.object import ObjectName
 from ...syntax.abc.values import SQLValue
@@ -13,6 +14,7 @@ from ...syntax.exprs import ExprABC, NameLike, QueryArg, OPs
 from ...syntax.query import QueryData
 from ...errors import ObjectNotFoundError
 from ...utils.tabledata import TableData
+from ...utils.name_conversion import snake_to_camel
 from .view import NamedViewABC, ViewReferenceABC
 from .column import TableColumnABC, TableColumnArgs
 
@@ -197,9 +199,10 @@ class TableABC(NamedViewABC):
     
     @property
     def python_class_source(self) -> str:
-        res = 'class %s(TableClass, db=%s):\n' % (self._name, self.db._name)
+        db_cls_name = self.db._class_or_none.__name__ if self.db._class_or_none is not None else snake_to_camel(str(self.db._name))
+        res = "class %s(TableClass, db=%s, name='%s'):\n" % (snake_to_camel(str(self._name)), db_cls_name, self._name)
         for column in self.iter_table_columns():
-            res += '%s: %s\n' % (column.name, column._data_type.annotation)
+            res += '    %s: %s\n' % (column.name, type(column).__name__)
         return res
 
     def __repr__(self) -> str:
