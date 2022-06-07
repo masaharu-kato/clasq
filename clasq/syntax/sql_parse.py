@@ -8,7 +8,7 @@ import typing
 from .abc.data_types import DataTypeABC
 from . import data_types as dt
 
-DATA_TYPE_FROM_SQL_BASE_NAME: dict[str, type[DataTypeABC]] = {}
+DATA_TYPE_FROM_SQL_BASE_NAME: dict[bytes, type[DataTypeABC]] = {}
 for cls in dt.ALL_TYPES:
     name = cls.get_sql_base_name()
     if name not in DATA_TYPE_FROM_SQL_BASE_NAME:
@@ -21,15 +21,17 @@ def data_type_from_sql(sql: str) -> type[DataTypeABC]:
     if m := __RE_SQL_TYPE.fullmatch(sql):
         base_name = m['base'].encode('ascii').upper()
         try:
-            base_type = DATA_TYPE_FROM_SQL_BASE_NAME[base_name]
+            base_type = DATA_TYPE_FROM_SQL_BASE_NAME[base_name]  # type: ignore
         except KeyError as e:
             raise ValueError('Unknown sql type base name', base_name) from e
         params = tuple(__parse_sql_arg(s) for s in m['args'].split(',')) if m['args'] else ()
         literals = tuple(typing.Literal[v] for v in params) # type: ignore
-        if not params or not isinstance(base_type, typing.Generic):
-            return base_type  
-        else:
-            return base_type[literals] 
+        if params:
+            try:
+                return base_type[literals] 
+            except TypeError:  # Not a generic type, invalid arguments etc.
+                pass
+        return base_type  
     raise ValueError('Invalid syntax of SQL.', sql)
 
 
