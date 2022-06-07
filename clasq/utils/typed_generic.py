@@ -2,7 +2,7 @@
     Generic class utils
 """
 from __future__ import annotations
-from abc import ABCMeta
+from abc import ABC, ABCMeta
 # import enum
 import types
 import typing
@@ -37,8 +37,8 @@ class TypedGenericMeta(type):
             attrs['_generic_cls_cache'] = generic_cls_cache
 
         else:
-            attrs['_generic_argkeys'] = origin._generic_argkeys
-            attrs['_generic_arg_index_from_key'] = origin._generic_arg_index_from_key
+            attrs['_generic_argkeys'] = getattr(origin, '_generic_argkeys')
+            attrs['_generic_arg_index_from_key'] = getattr(origin, '_generic_arg_index_from_key')
 
         return type.__new__(cls, name, bases, attrs)
 
@@ -62,7 +62,7 @@ class TypedGenericMeta(type):
 
     def _generic_arg(cls, _val: typing.TypeVar) -> typing.Any:
         if isinstance(_val, typing.TypeVar):
-            return cls._generic_arg_of_index(cls._generic_arg_index_from_key[_val.__name__])
+            return cls._generic_arg_of_index(getattr(cls, '_generic_arg_index_from_key')[_val.__name__])
         raise TypeError('Invalid type of value.')
 
     def _generic_arg_of_index(cls, i: int) -> typing.Any:
@@ -89,7 +89,7 @@ class TypedGenericMeta(type):
 
         # argdict = dict(zip(cls._generic_argkeys, argvals))
         # print(cls, '__getitem__ called.', argdict, _typing_generic)
-        cls_name = '%s[%s]' % (cls.__name__, ', '.join(map(str, argvals)))
+        cls_name = '%s[%s]' % (cls.__name__, ', '.join((_to_name(c) for c in argvals)))
 
         if not argvals in cls._generic_cls_cache:
             cls._generic_cls_cache[argvals] = types.new_class(
@@ -107,6 +107,16 @@ class TypedGenericMeta(type):
 
     def __repr__(self):
         return '<class %s>' % self.__name__
+
+def _to_name(cls: type) -> str:
+    """ Convert type to name """
+    if origin := typing.get_origin(cls):
+        return '%s[%s]' % (_to_name(origin), ', '.join(_to_name(v) for v in typing.get_args(cls)))
+
+    if hasattr(cls, '__name__'):
+        return getattr(cls, '__name__')
+
+    return str(cls)
 
 
 class TypedGenericABCMeta(TypedGenericMeta, ABCMeta):
@@ -136,20 +146,24 @@ class OptionalTypedGenericABCMeta(OptionalTypedGenericMeta, TypedGenericABCMeta)
 
 T = typing.TypeVar('T')
 
-class TypedGenericABC(typing.Generic[T], metaclass=TypedGenericABCMeta):
+class TypedGenericABC(ABC, typing.Generic[T], metaclass=TypedGenericABCMeta):
     """ Typed Generic ABC """    
     def __rmatmul__(self, _val):
         if isinstance(_val, typing.TypeVar):
             return type(self)._generic_arg(_val)
         return NotImplemented
 
-class TypedGeneric(TypedGenericABC[T], typing.Generic[T], metaclass=TypedGenericMeta):
+class TypedGeneric(typing.Generic[T], metaclass=TypedGenericMeta):
     """ Typed Generic """
+    def __rmatmul__(self, _val):
+        if isinstance(_val, typing.TypeVar):
+            return type(self)._generic_arg(_val)
+        return NotImplemented
     
 class OptionalTypedGenericABC(TypedGenericABC[T], typing.Generic[T], metaclass=OptionalTypedGenericABCMeta):
     """ Optional Typed Generic ABC """
     
-class OptionalTypedGeneric(OptionalTypedGenericABC[T], typing.Generic[T], metaclass=OptionalTypedGenericMeta):
+class OptionalTypedGeneric(TypedGeneric[T], typing.Generic[T], metaclass=OptionalTypedGenericMeta):
     """ Optional Typed Generic ABC """
 
 # # GenericParamType = typing.Literal | type
