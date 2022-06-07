@@ -5,13 +5,13 @@ from __future__ import annotations
 from abc import abstractmethod, abstractproperty
 from typing import TYPE_CHECKING, Collection, Iterable, Iterator, cast, overload
 
-
 from ...syntax.abc.object import NameLike, ObjectABC, ObjectName
 from ...syntax.abc.values import SQLValue
 from ...syntax.abc.exprs import QueryLike, QueryArgParams
 from ...syntax.exprs import Object
 from ...errors import NotaSelfObjectError, ObjectNameAlreadyExistsError, ObjectNotFoundError
 from ...utils.tabledata import TableData
+from ...utils.name_conversion import snake_to_camel
 from .table import TableABC, TableArgs
 from .column import TableColumnArgs
 
@@ -229,6 +229,14 @@ class DatabaseABC(ObjectABC):
     def commit(self) -> None:
         return self._con.commit()
 
+    @property
+    def python_class_source(self) -> str:
+        clsname = self._class_or_none.__name__ if self._class_or_none is not None else snake_to_camel(str(self._name))
+        code = "class %s(DatabaseClass):\n    _db_name = '%s'\n\n" % (clsname, self._name)
+        for table in self.all_tables:
+            code += table.python_class_source
+            code += '\n'
+        return code
 
 
 class DatabaseReferenceABC(DatabaseABC):
