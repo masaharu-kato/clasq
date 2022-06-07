@@ -12,7 +12,7 @@ from sample_db import Category, Product, User, UserSale, UserSaleProduct
 @pytest.mark.parametrize(('cls', 'query', 'columns', 'fkeys'), [
     (Category, 
         b'CREATE TABLE `categories` ('
-        b'`id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT, '
+        b'`id` INT NOT NULL PRIMARY KEY, '
         b'`name` VARCHAR(64) NOT NULL)',
         ['id', 'name'],
         {},
