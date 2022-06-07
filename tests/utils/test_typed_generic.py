@@ -190,13 +190,13 @@ def test_typed_generic_multiple_classes(base_generic_type: type[TypedGenericABC]
     assert cls5._generic_argvals == (bytes,)
     assert cls6._generic_argvals == (Literal[40],)
 
-    assert T@cls3 is str
-    assert T@cls2 is float
-    assert L@cls2 == 10
-    assert L@cls4 == 64
-    assert T@cls5 is bytes
-    assert T@cls1 is int
-    assert L@cls6 == 40
+    assert T@cls3 is str    # type: ignore
+    assert T@cls2 is float  # type: ignore
+    assert L@cls2 == 10     # type: ignore
+    assert L@cls4 == 64     # type: ignore
+    assert T@cls5 is bytes  # type: ignore
+    assert T@cls1 is int    # type: ignore
+    assert L@cls6 == 40     # type: ignore
 
     inst1 = MyClassBase[int]()
     inst2 = MySpecialBaz[float, Literal[10]]()
