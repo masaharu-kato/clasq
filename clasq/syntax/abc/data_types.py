@@ -2,11 +2,12 @@
     Basic classes definitions for built-in data types in SQL
 """
 from __future__ import annotations
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 import datetime
 import decimal
 import typing
 
+from ...utils.annotate import annotate_python_type
 from ...utils.typed_generic import OptionalTypedGenericABCMeta, TypedGeneric, TypedGenericABCMeta
 from .values import SQLValue
 
@@ -54,7 +55,7 @@ class _DataTypeABCMeta(TypedGenericABCMeta):
 
     @property
     def annotation(cls) -> str:
-        return cls.python_type.__name__
+        return annotate_python_type(cls.python_type)
  
     def convert_value_for_sql(cls, v: typing.Any) -> SQLValue:
         """ Convert a value for SQL """
@@ -135,19 +136,13 @@ class _WithParamsABCMeta(_DataTypeABCMeta):
             return b'%s(%s)' % (super().base_sql, ', '.join(map(str, params)).encode())
         return super().base_sql
 
-    @property
-    def annotation(cls) -> str:
-        if params := cls._generic_argvals:
-            return '%s[%s]' % (super().annotation + ', '.join(map(cls.__to_annotation, params)))
-        return super().annotation
-
-    @staticmethod
-    def __to_annotation(val) -> str:
-        if isinstance(val, type):
-            if issubclass(val, DataTypeABC):
-                return val.annotation
-            return val.__name__
-        return 'Literal[%s]' % repr(val)  # TODO: more imp
+    # @staticmethod
+    # def __to_annotation(val) -> str:
+    #     if isinstance(val, type):
+    #         if issubclass(val, DataTypeABC):
+    #             return val.annotation
+    #         return val.__name__
+    #     return 'Literal[%s]' % repr(val)  # TODO: more imp
 
 class _NumericABCMeta(_DataTypeABCMeta):
     """ Numeric type ABC Metaclass """
