@@ -90,6 +90,18 @@ class NamedViewColumnABC(ColumnABC, ObjectWithNamePropABC):
 class TypedNamedViewColumnABC(NamedViewColumnABC, TypedColumnABC[DT], Generic[DT]):
     """ Column object which belonging to the BaseView object """
 
+    def joined(self) -> DT:
+        """ Join the foreign key reference table `DT` """
+        raise NotImplementedError()
+
+    def left_join(self) -> DT | None:
+        """ """
+        raise NotImplementedError()
+
+    def join_from(self, column: NamedViewColumnABC):
+        """ Join from the column """
+        raise NotImplementedError()
+
 
 class NamedViewColumnReferenceABC(ColumnReferenceABC, NamedViewColumnABC):
     """ Reference of Column object which belonging to the BaseView object """

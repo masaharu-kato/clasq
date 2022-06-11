@@ -14,7 +14,7 @@ from ...syntax.exprs import AliasedExpr, ExprABC, ExprObjectABC, ExprObjectSet, 
 from ...errors import NotaSelfObjectError, ObjectArgTypeError, ObjectNotFoundError, ObjectNotSetError
 from ...utils.tabledata import TableData
 from ..column import FrozenOrderedNamedViewColumnSet, NamedViewColumn, NamedViewColumnABC
-from .column import ColumnABC
+from .column import ColumnABC, TableColumnABC
 
 if TYPE_CHECKING:
     from .database import DatabaseABC
@@ -551,9 +551,15 @@ class ViewABC(ABC):
     # def single(self) -> SingleView:
     #     """ Make a View object with a single result """
     #     return SingleView(self)
-
+    
     @abstractmethod
-    def join(self, join_type: JoinLike, view: ViewABC, expr: ExprABC) -> JoinedView:
+    def _join(self, join_type: JoinLike, target: ViewABC | TableColumnABC, expr: ExprABC | None) -> JoinedView:
+        """ Make a Joined View
+            (Protected abstract method)
+        """
+        raise NotImplementedError()
+
+    def join(self, target: ViewABC | TableColumnABC, expr: ExprABC | None = None, *, join_type: JoinLike = JoinType.INNER) -> JoinedView:
         """ Make a Joined View
 
         Args:
@@ -571,9 +577,9 @@ class ViewABC(ABC):
         Returns:
             JoinedView: New Joined View object
         """
-        raise NotImplementedError()
+        return self._join(join_type, target, expr)
 
-    def inner_join(self, view: ViewABC, expr: ExprABC) -> JoinedView:
+    def inner_join(self, target: ViewABC | TableColumnABC, expr: ExprABC | None = None) -> JoinedView:
         """ Make a INNER Joined View
 
         Args:
@@ -587,9 +593,9 @@ class ViewABC(ABC):
         Returns:
             JoinedView: New Joined View object
         """
-        return self.join(JoinType.INNER, view, expr)
+        return self.join(target, expr, join_type=JoinType.INNER)
 
-    def left_join(self, view: ViewABC, expr: ExprABC) -> ViewABC:
+    def left_join(self, target: ViewABC | TableColumnABC, expr: ExprABC | None = None) -> ViewABC:
         """ Make a LEFT Joined View
 
         Args:
@@ -604,19 +610,19 @@ class ViewABC(ABC):
             JoinedView: New Joined View object
         """
         """ Make a LEFT Joined View """
-        return self.join(JoinType.LEFT, view, expr)
+        return self.join(target, expr, join_type=JoinType.LEFT)
 
-    def right_join(self, view: ViewABC, expr: ExprABC) -> JoinedView:
+    def right_join(self, target: ViewABC | TableColumnABC, expr: ExprABC | None = None) -> JoinedView:
         """ Make a RIGHT Joined View """
-        return self.join(JoinType.RIGHT, view, expr)
+        return self.join(target, expr, join_type=JoinType.RIGHT)
 
-    def outer_join(self, view: ViewABC, expr: ExprABC) -> JoinedView:
+    def outer_join(self, target: ViewABC | TableColumnABC, expr: ExprABC | None = None) -> JoinedView:
         """ Make a OUTER Joined View """
-        return self.join(JoinType.OUTER, view, expr)
+        return self.join(target, expr, join_type=JoinType.OUTER)
 
-    def cross_join(self, view: ViewABC, expr: ExprABC) -> JoinedView:
+    def cross_join(self, target: ViewABC | TableColumnABC) -> JoinedView:
         """ Make a CROSS Joined View """
-        return self.join(JoinType.CROSS, view, expr)
+        return self.join(target, join_type=JoinType.CROSS)
 
     @overload
     def __getitem__(self, val: int | slice | ExprABC | tuple[ExprABC, ...]) -> ViewABC: ...
@@ -715,6 +721,11 @@ class ViewABC(ABC):
         self.prepare_result()
         assert self._result_or_none is not None
         return self._result_or_none
+
+    @property
+    def one(self):
+        """ Get a single result """
+        raise NotImplementedError()
 
     def __iter__(self):
         return iter(self.result)
@@ -960,8 +971,8 @@ class ViewReferenceABC(ViewWithTargetABC):
     def _view_name_or_none(self) -> ObjectName | None:
         return self._target_view._view_name_or_none
         
-    def join(self, join_type: JoinLike, view: ViewABC, expr: ExprABC) -> JoinedView:
-        return self._target_view.join(join_type, view, expr)
+    def _join(self, join_type: JoinLike, view: ViewABC | TableColumnABC, expr: ExprABC | None) -> JoinedView:
+        return self._target_view._join(join_type, view, expr)
 
     def _new_view(self, *args, **kwargs) -> ViewABC:
         return self._target_view._new_view(*args, **kwargs)

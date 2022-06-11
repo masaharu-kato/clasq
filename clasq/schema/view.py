@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Iterable, Iterator
 
 
-from ..schema.abc.column import NamedViewColumnABC
+from ..schema.abc.column import NamedViewColumnABC, TableColumnABC
 from ..syntax.abc.exprs import ExprABC, ExprLike, ExprObjectABC, OrderedExprObjectABC
 from ..syntax.abc.keywords import JoinType, JoinLike, OrderType
 from ..syntax.abc.values import SQLValue
@@ -86,8 +86,11 @@ class ViewFinal(ViewABC):
     def _result_or_none(self) -> TableData | None:
         return self.__result
 
-    def join(self, join_type: JoinLike, view: ViewABC, expr: ExprABC) -> JoinedView:
-        return JoinedView(self, JoinType.make(join_type), view, expr)
+    def _join(self, join_type: JoinLike, dest: ViewABC | TableColumnABC, expr: ExprABC | None) -> JoinedView:
+        if isinstance(dest, TableColumnABC) or expr is None:
+            raise NotImplementedError()
+        dest_view = dest
+        return JoinedView(origin_view=self, join_type=JoinType.make(join_type), dest_view=dest_view, expr=expr)
         
     def with_args(self, *argvals, **kwargvals) -> ViewWithArgs:
         return ViewWithArgs(self, *argvals, **kwargvals)
@@ -110,26 +113,26 @@ class ViewWithTarget(ViewWithTargetABC):
 
 class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
     """ Table View """
-    def __init__(self, dest_view: ViewABC, join_type: JoinLike, join_view: ViewABC, expr: ExprABC):
+    def __init__(self, *, join_type: JoinLike, origin_view: ViewABC, dest_view: ViewABC, expr: ExprABC):
 
         # Check if a subquery is required for view to join
-        if join_view._limit_value or join_view._offset_value:
+        if dest_view._limit_value or dest_view._offset_value:
             raise ObjectArgValueError('Cannot join a `join_view` because it needs subquery.'
-                'Make a SubqueryView from `join_view` and specify it.', join_view)
+                'Make a SubqueryView from `join_view` and specify it.', dest_view)
 
-        self.__target_view = dest_view
+        self.__origin_view = origin_view
         self.__join_type = JoinType.make(join_type)
-        self.__view_to_join = join_view
+        self.__view_to_join = dest_view
         self.__expr_for_join = expr
 
-        if duplicate_columns := dest_view._base_column_set & join_view._base_column_set:
+        if duplicate_columns := origin_view._base_column_set & dest_view._base_column_set:
             raise ObjectError('Duplicate column names:', duplicate_columns)
 
-        super().__init__(dest_view._base_column_set | join_view._base_column_set)
+        super().__init__(origin_view._base_column_set | dest_view._base_column_set)
 
         self.__selected_exprs = self._merge_selected_exprs(
-            dest_view._selected_exprs, join_view._selected_exprs,
-            alias_format=join_view._column_alias_format)
+            origin_view._selected_exprs, dest_view._selected_exprs,
+            alias_format=dest_view._column_alias_format)
 
         self.__select_from_query: QueryData | None = None
 
@@ -154,7 +157,7 @@ class JoinedView(ViewWithColumns, ViewWithTargetABC, ViewFinal):
     @property
     def _target_view(self) -> ViewABC:
         """ Get a destination View """
-        return self.__target_view
+        return self.__origin_view
 
     @property
     def _selected_exprs(self) -> FrozenOrderedExprObjectSet:
@@ -318,7 +321,7 @@ class CustomView(CustomViewABC, ViewFinal):
             if isinstance(column_like, ExprObjectABC):
                 new_expr = column_like
 
-            # Tuple of ((column name | column), alias name):
+            # tuple of ((column name | column), alias name):
             #   Make a AliasedExpr object
             elif (isinstance(column_like, tuple) and len(column_like) == 2):
                 expr, name = column_like
