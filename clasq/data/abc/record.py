@@ -2,7 +2,7 @@
     Table Record classes
 """
 from __future__ import annotations
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Generic, Mapping, TypeVar
 
 if TYPE_CHECKING:
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ...syntax.exprs import ExprObjectABC
 
 
-class RecordABC:
+class RecordABC(ABC):
     """ Record ABC """
 
     def __init__(self, *args, **kwargs) -> None:
