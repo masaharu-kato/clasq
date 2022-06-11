@@ -1,5 +1,5 @@
 """
-    List based on class variables
+    list based on class variables
 """
 
 from typing import Generic, TypeVar

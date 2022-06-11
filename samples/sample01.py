@@ -3,7 +3,6 @@
 """
 
 from datetime import date as Date
-from typing import List
 
 class User:
     name: str

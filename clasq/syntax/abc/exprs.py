@@ -23,12 +23,12 @@ class ExprABC(ABC):
         return AnyDataType
     
     @abstractmethod
-    def _call_func(self, funcname, *args):
+    def _call_func(self, funcname, *args) -> ExprABC:
         """ Call function """
         raise NotImplementedError()
         
     @abstractmethod
-    def _call_op(self, opname, *args):
+    def _call_op(self, opname, *args) -> ExprABC:
         """ Call operator with arguments """
         raise NotImplementedError()
 

@@ -4,7 +4,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod, abstractproperty
 import html
-from typing import Any, Callable, Collection, Generic, Iterable, Iterator, Mapping, Sequence, TypeVar, overload
+from typing import Any, Callable, Collection, Generic, Iterable, Iterator, Mapping, MutableSequence, Sequence, TypeVar, overload
 
 T = TypeVar('T')
 
@@ -15,7 +15,7 @@ class ColumnMetadataABC(ABC, Collection[str]):
         """ Get a tuple of all column names
 
         Returns:
-            Tuple[str]: Tuple of all column names
+            tuple[str]: tuple of all column names
         """
 
     @abstractproperty
@@ -172,7 +172,7 @@ class RowDataABC(Generic[T], Mapping[str, T]):
         """ Make a dictionary from column names to cell values of this row
 
         Returns:
-            dict[str, T]: Dict of (column name -> cell values) of this row
+            dict[str, T]: dict of (column name -> cell values) of this row
         """
         return dict(self.items())
 
@@ -239,7 +239,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         """ Get a tuple of all column names of this table
 
         Returns:
-            Tuple[str]: All column names of this table
+            tuple[str]: All column names of this table
         """
         return self.col_meta.columns
 
@@ -272,7 +272,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         """ Get a list of all row values
 
         Returns:
-            List[tuple[T, ...]]: List of all row values
+            list[tuple[T, ...]]: list of all row values
         """
         return list(self.iter_rows_values())
 
@@ -280,7 +280,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         """ Get a list of all row dicts (column name -> cell value)
 
         Returns:
-            List[dict[str, T]]: List of all row dicts
+            list[dict[str, T]]: list of all row dicts
         """
         return list(self.iter_rows_dict())
 
@@ -377,7 +377,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         return self.make_html()
 
 
-class TableDataABC(FrozenTableDataABC[T], Generic[T]):
+class TableDataABC(FrozenTableDataABC[T], MutableSequence[RowDataABC[T]], Generic[T]):
     """ Table Data abstract class 
         (Writable)
     """
@@ -386,11 +386,11 @@ class TableDataABC(FrozenTableDataABC[T], Generic[T]):
     def rows_values_list(self) -> list[tuple[T, ...]]:
         """ Extend another rows to the existing rows """
 
-    def append(self, value: tuple[T, ...] | TableDataABC) -> None:
+    def append(self, value: tuple[T, ...] | RowDataABC[T] | TableDataABC) -> None:
         """ Append another TableData
 
         Args:
-            value (tuple[T, ...] | TableDataABC): row values or TableData to append
+            value (tuple[T, ...] | RowDataABC[T] | TableDataABC): row values or TableData to append
 
         Raises:
             ValueError: Columns of tables are different
@@ -401,10 +401,13 @@ class TableDataABC(FrozenTableDataABC[T], Generic[T]):
                 raise ValueError('Cannot combine table data with different columns.')
             return self.extend(table_data.rows_values)
 
+        if isinstance(value, RowDataABC):
+            return self.rows_values_list.append(value.raw_values)
+
         if len(value) != len(self.col_meta):
             raise ValueError('Cannot combine table data with different columns.')
         
-        self.rows_values_list.append(value)
+        return self.rows_values_list.append(value)
 
     def __iadd__(self, value: tuple[T, ...] | TableDataABC) -> TableDataABC:
         """ Append another TableData

@@ -22,7 +22,7 @@ class ConnectionABC:
     """ Database connection ABC """
 
     def __init__(self, database: str | Database | None = None,
-                #  database_class: Optional[Type[DatabaseClass]] = None,
+                #  database_class: Type[DatabaseClass] | None = None,
                  init_db=True, **other_cnx_options) -> None:
         """ Init """
         self._cnx_options = {**other_cnx_options}

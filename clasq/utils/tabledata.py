@@ -2,7 +2,7 @@
     Table data class
 """
 from __future__ import annotations
-from typing import Dict, Generic, Iterable, Sequence, TypeVar, overload
+from typing import Callable, Generic, Iterable, Sequence, TypeVar, overload
 
 from .abc.tabledata import ColumnMetadataABC, FrozenTableDataABC, TableDataABC, RowDataABC
 
@@ -13,12 +13,18 @@ class FrozenTableData(FrozenTableDataABC[T], Generic[T]):
 
     TABLE_REPR_LIMIT = 100
 
-    def __init__(self, columns: Iterable[str] | ColumnMetadata, rows: list[tuple[T, ...]]) -> None:
+    def __init__(self,
+        columns: Iterable[str] | ColumnMetadata,
+        rows: Iterable[tuple[T, ...]],
+        *,
+        _unpack: bool = False,
+        **col_funcs: Callable,
+    ) -> None:
         """ Create a table data.
 
         Args:
-            columns (list[str]): List of column names
-            rows (list[list]): List of rows (values of columns)
+            columns (list[str]): list of column names
+            rows (list[list]): list of rows (values of columns)
         """
         self._col_meta = columns if isinstance(columns, ColumnMetadata) else ColumnMetadata(columns)
         
@@ -82,7 +88,7 @@ class ColumnMetadata(ColumnMetadataABC):
         """ Create a column metadata.
 
         Args:
-            columns (list[str]): List of column names
+            columns (list[str]): list of column names
         """
         self.__cols = tuple(columns)
         self.__col_to_i = {col: i for i, col in enumerate(self.__cols)}
@@ -93,7 +99,7 @@ class ColumnMetadata(ColumnMetadataABC):
             (Override for `ColumnMetadataABC`)
 
         Returns:
-            Tuple[str]: Tuple of all column names
+            tuple[str]: tuple of all column names
         """
         return self.__cols
 

@@ -22,7 +22,7 @@ class QueryData(QueryDataABC):
     def __init__(self,
         *vals: QueryLike | None,
         stmt: bytes | None = None,
-        # args: Optional[Collection[QueryArgABC]] = None,
+        # args: Collection[QueryArgABC] | None = None,
         prms: Collection[SQLValue | QueryArgABC] = None,
     ):
         """ Create a QueryData instance
@@ -30,8 +30,8 @@ class QueryData(QueryDataABC):
         Args:
             vals: Keywords, expressions or values for append to the SQL statement.
             stmt (bytes | None, optional): Initial SQL statement bytes. Defaults to None.
-            args (Optional[list[QueryArgABC]], optional): Initial list of query arguments (placeholders). Defaults to None.
-            prms (Optional[list[QueryParamOrArg]], optional): Initial list of parameter values. Defaults to None.
+            args (list[QueryArgABC] | None, optional): Initial list of query arguments (placeholders). Defaults to None.
+            prms (list[QueryParamOrArg] | None, optional): Initial list of parameter values. Defaults to None.
         """
         self._stmt = stmt if stmt is not None else b''
         # self._argdict = {arg.name: arg for arg in args} if args is not None else {} 
