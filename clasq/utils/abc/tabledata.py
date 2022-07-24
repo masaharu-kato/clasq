@@ -377,7 +377,7 @@ class FrozenTableDataABC(ABC, Sequence[RowDataABC[T]], Generic[T]):
         return self.make_html()
 
 
-class TableDataABC(FrozenTableDataABC[T], MutableSequence[RowDataABC[T]], Generic[T]):
+class TableDataABC(MutableSequence[RowDataABC[T]], FrozenTableDataABC[T], Generic[T]):
     """ Table Data abstract class 
         (Writable)
     """
@@ -385,6 +385,31 @@ class TableDataABC(FrozenTableDataABC[T], MutableSequence[RowDataABC[T]], Generi
     @abstractproperty
     def rows_values_list(self) -> list[tuple[T, ...]]:
         """ Extend another rows to the existing rows """
+
+    @overload
+    def __getitem__(self, index: int) -> RowDataABC[T]: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> MutableSequence[RowDataABC[T]]: ...
+
+    def __getitem__(self, index: int | slice):
+        return super().__getitem__(index)
+
+    @overload
+    def __setitem__(self, index: int, value: tuple[T, ...] | RowDataABC[T]) -> None: ...
+
+    @overload
+    def __setitem__(self, index: slice, value: Iterable[tuple[T, ...] | RowDataABC[T]]) -> None: ...
+
+    def __setitem__(self, index: int | slice, value) -> None:
+        if isinstance(index, int):
+            return self.rows_values_list.__setitem__(index, _to_row_values(value))
+        if isinstance(index, slice):
+            return self.rows_values_list.__setitem__(index, map(_to_row_values, value))
+        raise TypeError('Invalid arguments type.')
+
+    def __delitem__(self, index: int | slice) -> None:
+        return self.rows_values_list.__delitem__(index)
 
     def append(self, value: tuple[T, ...] | RowDataABC[T] | TableDataABC) -> None:
         """ Append another TableData
@@ -409,37 +434,41 @@ class TableDataABC(FrozenTableDataABC[T], MutableSequence[RowDataABC[T]], Generi
         
         return self.rows_values_list.append(value)
 
-    def __iadd__(self, value: tuple[T, ...] | TableDataABC) -> TableDataABC:
+    # def __iadd__(self: TypeshedSelf, values: Iterable[_T]) -> TypeshedSelf:
+    #     return super().__iadd__(values)
+
+    def __iadd__(self, value: tuple[T, ...] | Iterable[RowDataABC[T]] | RowDataABC[T] | TableDataABC):
         """ Append another TableData
             (Synonym of `append` method)
-
-        Args:
-            value (tuple[T, ...] | TableDataABC): value to append
-
-        Raises:
-            ValueError: Columns of tables are different
-            TypeError: Type of value is invalid
         """
-        if not isinstance(value, (TableDataABC, RowDataABC)):
-            return NotImplemented
-        self.append(value)
+        if isinstance(value, (tuple, RowDataABC, TableDataABC)):
+            self.append(value)
+        else:
+            self.extend(value)
         return self
 
-    def extend(self, rows: Iterable[tuple[T, ...]]) -> None:
-        self.rows_values_list.extend(rows)
+    # def extend(self, values: Iterable[_T]) -> None:
+    #     return super().extend(values)
+
+    def extend(self, rows: Iterable[tuple[T, ...] | RowDataABC[T]]) -> None:
+        self.rows_values_list.extend(map(_to_row_values, rows))
 
     def pop(self, index: int | None = None) -> RowDataABC[T]:
         _raw_values = self.rows_values_list.pop(index) if index is not None else self.rows_values_list.pop()
         return self._new_row_data(self.col_meta, _raw_values)
+
+    # def insert(self, index: int, value: _T) -> None:
+    #     return super().insert(index, value)
     
-    def insert(self, index: int, target: tuple[T, ...]) -> None:
-        self.rows_values_list.insert(index, target)
+    def insert(self, index: int, target: tuple[T, ...] | RowDataABC[T]) -> None:
+        self.rows_values_list.insert(index, _to_row_values(target))
 
     def clear(self) -> None:
         self.rows_values_list.clear()
 
 
-
+def _to_row_values(row: tuple[T, ...] | RowDataABC[T]) -> tuple[T, ...]:
+    return row.raw_values if isinstance(row, RowDataABC) else row
 
 def _escape_attr(val):
     return html.escape(val, quote=True)
