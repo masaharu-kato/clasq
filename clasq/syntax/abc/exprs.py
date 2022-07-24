@@ -430,6 +430,10 @@ class OrderedExprObjectABC(ExprObjectABC):
         """ Get a object name (Override from `ObjectABC`) """
         return self._non_ordered._name
 
+    # def _set_name(self, name: NameLike | None) -> None:
+    #     """ Set a object name (Override from `ObjectABC`) """
+    #     return self._non_ordered._set_name(name)
+
     def _iter_objects(self) -> Iterator[ObjectABC]:
         return self._non_ordered._iter_objects()
 

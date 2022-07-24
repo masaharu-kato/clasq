@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Hashable, Iterator
 
+from ...errors import ObjectNotSetError
 from .query import QueryABC, QueryDataABC
 
 
@@ -87,14 +88,19 @@ class ObjectABC(QueryABC, Hashable):
         """ Get a object name """
         raise NotImplementedError()
         
+    # @abstractmethod
+    # def _set_name(self, name: NameLike | None) -> None:
+    #     """ Set a object name """
+    #     raise NotImplementedError()
+        
     def get_raw_name(self):
         return self._name.raw_name
 
     def __bytes__(self):
-        return bytes(self.name)
+        return bytes(self._name)
 
     def __str__(self):
-        return str(self.name)
+        return str(self._name)
 
     def _iter_objects(self) -> Iterator[ObjectABC]:
         yield self # Default implementation
@@ -104,7 +110,7 @@ class ObjectABC(QueryABC, Hashable):
             if isinstance(val, ObjectABC):
                 return type(self) == type(val) and self._name == val._name # Default Implementation
             # raise TypeError('Invalid type value', self, val)
-        except (TypeError, NotImplementedError):
+        except (TypeError, NotImplementedError, ObjectNotSetError):
             pass
         return super().__eq__(val)
 
@@ -115,7 +121,7 @@ class ObjectABC(QueryABC, Hashable):
         try:
             _name = self._name
         # `self._name` may reads uninitialized properties or attributes
-        except (NotImplementedError, AttributeError):
+        except (NotImplementedError, AttributeError, ObjectNotSetError):
             _name = None
         if _name is not None:
             return hash((self.__class__, _name.raw_name))
@@ -141,17 +147,25 @@ class Object(ObjectWithNamePropABC):
     def __init__(self, name: NameLike):
         self.__name = ObjectName(name)
 
+    # def __init__(self, name: NameLike | None):
+    #     self.__name = ObjectName(name) if name is not None else None
+
     @property
     def _name(self) -> ObjectName:
         """ Get a object name (Override from `ObjectABC`) """
+        # if self.__name is None:
+        #     raise ObjectNotSetError('Name is not set.')
         return self.__name
+
+    # def _set_name(self, name: NameLike | None) -> None:
+    #     self.__name = ObjectName(name) if name is not None else None
 
     def _append_to_query_data(self, qd: QueryDataABC) -> None:
         qd.append(self.name) # Default Implementation
         
     def __repr__(self) -> str:
         try:
-            _name = self._name
+            _name = str(self._name)
         except (AttributeError, NotImplementedError):
             _name = '<unnamed>'
         return '%s(%s)' % (type(self).__name__, _name)

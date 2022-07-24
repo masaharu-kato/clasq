@@ -144,8 +144,8 @@ class DatabaseABC(ObjectABC):
         """ Make a new table """
         raise NotImplementedError()
 
-    @overload
-    def append_table(self, table_obj: TableABC, /) -> TableABC: ...
+    # @overload
+    # def append_table(self, table_obj: TableABC, /) -> TableABC: ...
 
     @overload
     def append_table(self, name: NameLike, /, *column_args: TableColumnArgs, **options) -> TableABC: ...
@@ -156,13 +156,13 @@ class DatabaseABC(ObjectABC):
     def append_table(self, arg1, /, *cols, **kwargs) -> TableABC:
         """ Append a new table to this Database """
 
-        try:
-            is_table_abc = isinstance(arg1, TableABC)
-        except TypeError:
-            is_table_abc = False
+        # try:
+        #     is_table_abc = isinstance(arg1, TableABC)
+        # except TypeError:
+        #     is_table_abc = False
 
-        if is_table_abc:
-            return self.append_table_object(cast(TableABC, arg1))
+        # if is_table_abc:
+        #     return self.append_table_object(cast(TableABC, arg1))
             
         if isinstance(arg1, TableArgs):
             table_arg = arg1
@@ -186,7 +186,7 @@ class DatabaseABC(ObjectABC):
         self._table_dict[table_name] = table
         return self._table_dict[table_name]
 
-    def remove_table(self, table: TableABC) -> None:
+    def remove_table_object(self, table: TableABC) -> None:
         table_name = self._to_table(table)._name
         del self._table_dict[table_name]
 

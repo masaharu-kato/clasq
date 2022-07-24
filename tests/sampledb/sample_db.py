@@ -9,34 +9,39 @@ from clasq.schema.column import AutoIncrementPrimaryTableColumn, PrimaryTableCol
 from clasq.syntax.data_types import DateTime, Int, Nullable, VarChar
 
 
-class SampleDB(DatabaseClass):
-    """ Sample DB """
-    _db_name = 'testdb'
-
-
-class Category(TableClass, db=SampleDB, name='categories'):
+class Category(TableClass):
     id: PrimaryTableColumn[Int]
     name: TableColumn[VarChar[Lt[64]]]
 
-class Product(TableClass, db=SampleDB, name='products'):
+class Product(TableClass):
     id: AutoIncrementPrimaryTableColumn[Int]
     category: Category
     name: TableColumn[VarChar[Lt[128]]]
     price: TableColumn[Int]
 
-class User(TableClass, db=SampleDB, name='users'):
+class User(TableClass):
     id: AutoIncrementPrimaryTableColumn[Int]
     name: TableColumn[VarChar[Lt[64]]]
     registered_at: TableColumn[Nullable[DateTime]]
 
-class UserSale(TableClass, db=SampleDB, name='user_sales'):
+class UserSale(TableClass):
     id: AutoIncrementPrimaryTableColumn[Int]
     user: User
     sale_at: TableColumn[Nullable[DateTime]]
 
-class UserSaleProduct(TableClass, db=SampleDB, name='user_sale_products'):
+class UserSaleProduct(TableClass):
     id: AutoIncrementPrimaryTableColumn[Int]
     user_sale: UserSale
     product: Product
     price: TableColumn[Int]
     count: TableColumn[Int]
+
+
+class SampleDB(DatabaseClass):
+    """ Sample DB """
+    _db_name = 'testdb'
+    categories: Category
+    products: Product
+    users: User
+    user_sales: UserSale
+    user_sale_products: UserSaleProduct

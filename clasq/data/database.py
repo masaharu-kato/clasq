@@ -2,11 +2,15 @@
     Database data class
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_type_hints
 
 from ..schema.abc.database import DatabaseReferenceABC
 from ..schema.database import Database
+from ..schema.abc.table import TableArgs
+from ..schema.table import Table
 from ..utils.name_conversion import camel_to_snake
+
+from .table_record import TableClass
 
 if TYPE_CHECKING:
     from ..syntax.abc.object import NameLike
@@ -48,6 +52,17 @@ class DatabaseClass(metaclass=_DatabaseClassMeta):
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         cls.__db_obj = Database(name=cls._get_db_name(), charset=cls._get_db_charset(), collate=cls._get_db_collate())
+
+        for hint_name, type_hint in get_type_hints(cls).items():
+            if hint_name[0:1] == '_':
+                continue
+
+            if not (isinstance(type_hint, type) and issubclass(type_hint, TableClass)):
+                raise TypeError('Invalid table object type.')
+                
+            col_args = type_hint._read_column_args()
+            type_hint._set_table_object(Table(cls.__db_obj, TableArgs(hint_name, col_args)))
+
 
     # @classmethod
     # def get_schema_object(cls) -> Database:

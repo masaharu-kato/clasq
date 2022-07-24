@@ -2,11 +2,8 @@
     Table classes
 """
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Collection
 
 from clasq.errors import ObjectNotFoundError, ReferenceResolveError
-from clasq.schema.abc.column import TableColumnABC
 
 from ..syntax.abc.query import iter_objects
 from ..syntax.abc.object import NameLike, ObjectABC, ObjectName
@@ -19,9 +16,14 @@ from .abc.database import DatabaseABC
 class Table(TableABC, NamedView, ViewFinal):
     """ Table Expr """
 
+    # def __init__(self, database: DatabaseABC | None, args: TableArgs):
     def __init__(self, database: DatabaseABC, args: TableArgs):
+        # self.__database: DatabaseABC | None = None 
         self.__database = database
-        self.__name = ObjectName(args.name)
+        self.__name = ObjectName(args.name) # if args.name is not None else None
+        
+        # self._set_database(database)
+        # self.__database.append_table_object(self)
 
         # if self.__name in database:
         #     raise ObjectNameAlreadyExistsError('Table name already exists.', self.__name)
@@ -41,7 +43,14 @@ class Table(TableABC, NamedView, ViewFinal):
     def _name(self) -> ObjectName:
         """ Get a view name 
             (Override from `ObjectABC`) """
+        # if self.__name is None:
+        #     raise ObjectNotSetError('Table name is not set.')
         return self.__name
+
+    # def _set_name(self, name: NameLike | None) -> None:
+    #     """ Set a view name 
+    #         (Override from `ObjectABC`) """
+    #     self.__name = ObjectName(name) if name is not None else None
 
     @property
     def _view_name_or_none(self) -> ObjectName | None:
@@ -55,6 +64,16 @@ class Table(TableABC, NamedView, ViewFinal):
             (Override from `ViewABC`)
         """
         return self.__database
+
+    # def _set_database(self, database: DatabaseABC | None) -> None:
+    #     """ Set a database 
+    #         (Override from `TableABC`)
+    #     """
+    #     if self.__database is not None:
+    #         self.__database.remove_table_object(self)
+    #     self.__database = database
+    #     if self.__database is not None:
+    #         self.__database.append_table_object(self)
 
     # @property
     # def _primary_keys(self):

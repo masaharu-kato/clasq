@@ -2,23 +2,28 @@
     Table Record classes
 """
 from __future__ import annotations
+from abc import ABCMeta, abstractmethod
 from typing import get_type_hints
 
-from ..schema.abc.table import TableABC, TableReferenceABC, TableArgs
+from ..errors import ObjectNotSetError
+from ..schema.abc.table import TableABC, TableReferenceABC
 from ..schema.abc.column import TableColumnABC, TableColumnArgs
-from ..schema.table import Table
 from ..schema.column import TableColumn
-from ..syntax.abc.object import NameLike, ObjectName
 from ..syntax.data_types import Int
 from ..syntax.sql_parse import make_sql_type
-from ..utils.name_conversion import camel_to_snake
+from ..syntax.abc.object import ObjectName
 
 from .abc.record import RecordABC
-from .database import DatabaseClass
 
 
-class _TableClassMeta(type, TableReferenceABC):
+class _TableClassMeta(ABCMeta, TableReferenceABC):
     """ Table Metaclass """
+    
+    @abstractmethod
+    def _set_table_object(cls, table_obj: TableABC) -> None: ...
+        
+    @abstractmethod
+    def _read_column_args(cls) -> list[TableColumnArgs]: ...
     
 
 class TableClassABC(RecordABC):
@@ -27,36 +32,45 @@ class TableClassABC(RecordABC):
 class TableClass(TableClassABC, metaclass=_TableClassMeta):
     """ Table class """
 
-    __table_name: ObjectName
-    __table_obj: TableABC
+    __table_obj: TableABC | None = None
 
     @classmethod
     def _get_entity(cls) -> TableABC:
+        if cls.__table_obj is None:
+            raise ObjectNotSetError('Table object is not set.')
         return cls.__table_obj
 
     @classmethod
     def _get_dest_table(cls) -> TableABC:
-        """ Override for TableReferenceABC """
+        """ Override for `TableReferenceABC` """
         return cls._get_entity()
 
     @classmethod
     def _get_name(cls) -> ObjectName:
-        return cls.__table_name
+        """ Override for `TableReferenceABC` """
+        return cls._get_entity()._name
 
-    def __init_subclass__(cls, *, db: type[DatabaseClass], name: NameLike | None = None) -> None:
-        
+    def __new__(cls, *args, **kwargs):
         if cls is TableClass:
-            raise RuntimeError('TableClass is not specialized.')
+            raise RuntimeError('Cannot instantiate a TableClass directly.')
+        return super().__new__()
 
-        super().__init_subclass__()
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__()
 
-        db_obj = db.get_entity()
+    @classmethod
+    def _set_table_object(cls, table_obj: TableABC) -> None:
+        """ Set a table object for this table class
+            (Called by Database class definition)
+        """
+        cls.__table_obj = table_obj
+        for column in cls.__table_obj.iter_table_columns():
+            setattr(cls, str(column.name), column)
+
+    @classmethod
+    def _read_column_args(cls) -> list[TableColumnArgs]:
+        """ Read column arguments from type hints in the class definition """
         
-        if name is not None:
-            cls.__table_name = ObjectName(name)
-        if cls.__table_name is None:
-            cls.__table_name = ObjectName(camel_to_snake(cls.__name__))
-
         col_args: list[TableColumnArgs] = []
 
         for hint_name, type_hint in get_type_hints(cls).items():
@@ -69,7 +83,7 @@ class TableClass(TableClassABC, metaclass=_TableClassMeta):
             col_type: type[TableColumnABC]
 
             if not isinstance(type_hint, type):
-                raise TypeError('Type hint must be a type.', type_hint)
+                raise TypeError(f'Type hint must be a type.', hint_name, type_hint)
 
             if issubclass(type_hint, TableColumnABC):
                 col_name = hint_name
@@ -93,20 +107,7 @@ class TableClass(TableClassABC, metaclass=_TableClassMeta):
 
             col_args.append(TableColumnArgs(col_name, col_type, default=default_value))
 
-        cls.__table_obj = Table(db_obj, TableArgs(cls._get_name(), col_args))
-        
-        db_obj.append_table(cls.__table_obj)
-
-        for column in cls.__table_obj.iter_table_columns():
-            setattr(cls, str(column.name), column)
-
-    def __new__(cls, *args, **kwargs):
-        if cls is TableClass:
-            raise RuntimeError('Cannot instantiate a TableClass directly.')
-        return super().__new__()
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__()
+        return col_args
 
 # class AbstractTableClass(TableClass, db=None):
 #     """ Abstract table class, not a final table class """

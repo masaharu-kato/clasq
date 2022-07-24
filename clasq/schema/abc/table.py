@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 @dataclass
 class TableArgs:
     """ Table Expr """
-    name: NameLike
+    name: NameLike # | None
     column_args: Collection[TableColumnArgs]
     primary_key: tuple[NameLike | TableColumnABC, ...] | None = None
     unique: tuple[NameLike | TableColumnABC, ...] | None = None
@@ -42,6 +42,11 @@ class TableABC(NamedViewABC):
     # @abstractproperty
     # def _unique_columns(self):
     #     """ Get a unique columns """
+
+    # @abstractmethod
+    # def _set_database(self, database: DatabaseABC | None) -> None:
+    #     """ Set a database """
+    #     raise NotImplementedError()
 
     def _refresh_select_from_query(self) -> None:
         pass  # Do nothing
@@ -177,7 +182,7 @@ class TableABC(NamedViewABC):
             b'DROP', b'TEMPORARY' if temporary else (), b'TABLE',
             (b'IF', b'EXISTS') if if_exists else (), self)
         # self._exists_on_db = False
-        self.db.remove_table(self)
+        self.db.remove_table_object(self)
 
     def get_create_table_query(self, *, temporary=False, if_not_exists=False) -> QueryData:
         return QueryData(
@@ -227,6 +232,7 @@ class TableReferenceABC(ViewReferenceABC, TableABC):
         """ Get a table name to reference
             (Abstract property)
         """
+        raise NotImplementedError()
         
     @property
     def _dest_table(self):
